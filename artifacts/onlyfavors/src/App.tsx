@@ -574,6 +574,125 @@ function CheckoutModal({ clientSecret, amountCents, label, onSuccess, onClose }:
   );
 }
 
+// ---------------------------------------------------------------------------
+// Boundary Receipt — mutual consent before payment
+// ---------------------------------------------------------------------------
+
+const DEFAULT_BOUNDARIES = [
+  'All time together is strictly platonic — no physical contact beyond a polite greeting',
+  'Meetings happen only at the agreed SafeSpot — never a private address',
+  'Either party may end the favor at any time without explanation or penalty',
+  'No recording, photographing, or identifying the companion without explicit consent',
+  'Both parties treat each other with full dignity and respect throughout',
+];
+
+function BoundaryReceipt({
+  companion, booking, safeSpotName, onAgree,
+}: {
+  companion: Companion;
+  booking: Booking;
+  safeSpotName: string;
+  onAgree: (timestamp: string) => void;
+}) {
+  const [agreed, setAgreed] = useState(false);
+  const boundaries = companion.boundaries?.length ? companion.boundaries : DEFAULT_BOUNDARIES;
+  const firstName = companion.displayName.split(' ')[0];
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-2xl px-5 py-14 lg:px-8 lg:py-20">
+        {/* Title */}
+        <div className="flex items-center gap-4">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#ead0dd] text-[#7f2e62]">
+            <FileText className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Required before payment</p>
+            <h1 className="font-serif text-3xl leading-none text-[#48213d]">Boundary Receipt</h1>
+          </div>
+        </div>
+        <p className="mt-5 text-sm leading-7 text-[#725e69]">
+          Read the agreements below. By signing, you confirm you understand how this time works and that you will respect every boundary.
+          A timestamped receipt is attached to your booking and visible to both parties.
+        </p>
+
+        {/* Booking summary */}
+        <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-4 rounded-[20px] border border-[#dfd2c9] bg-white p-6">
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">Companion</p>
+            <p className="mt-1.5 font-semibold text-[#48213d]">{companion.displayName}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">Activity</p>
+            <p className="mt-1.5 font-semibold text-[#48213d]">{booking.activity}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">Date &amp; time</p>
+            <p className="mt-1.5 font-semibold text-[#48213d]">{booking.date} · {booking.startTime}</p>
+          </div>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">SafeSpot</p>
+            <p className="mt-1.5 font-semibold text-[#48213d]">{safeSpotName}</p>
+          </div>
+        </div>
+
+        {/* Mutual boundaries */}
+        <div className="mt-5 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Mutual agreements</p>
+          <ul className="mt-5 space-y-4">
+            {boundaries.map((b, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm leading-5 text-[#654c5f]">
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-mono text-[9px] font-bold text-[#7f2e62]">
+                  {i + 1}
+                </span>
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Platform protections */}
+        <div className="mt-5 rounded-[20px] bg-[#e8f0e8] p-6">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-[#477254]">Platform protections active on this booking</p>
+          <div className="mt-4 space-y-2.5">
+            {[
+              'Companion\'s location is approximate — never a precise address',
+              'Payment is held until companion confirms SafeSpot check-in',
+              'Trust Circle contacts notified when the favor begins',
+              'Either party can reach the OnlyFavors safety team at any time',
+            ].map((p) => (
+              <p key={p} className="flex items-start gap-2 text-xs leading-5 text-[#31533f]">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" />{p}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        {/* Agreement checkbox + CTA */}
+        <div className="mt-8 rounded-[20px] border border-[#dfd2c9] bg-white p-6">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded accent-[#7f2e62]" data-testid="checkbox-boundary-agree" />
+            <span className="text-sm leading-6 text-[#654c5f]">
+              I have read and agree to every point above. I understand that OnlyFavors connections are strictly platonic,
+              and I commit to treating {firstName} with full respect for our entire time together.
+            </span>
+          </label>
+          <button type="button" disabled={!agreed}
+            onClick={() => onAgree(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}
+            className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e] disabled:cursor-not-allowed disabled:opacity-40"
+            data-testid="button-boundary-continue">
+            Sign receipt and continue <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <p className="mt-5 text-center font-mono text-[10px] text-[#a38c95]">
+          RECEIPT FOR BOOKING {booking.id.slice(-8).toUpperCase()} · PENDING SIGNATURE
+        </p>
+      </main>
+    </Shell>
+  );
+}
+
 function Book() {
   const search = new URLSearchParams(window.location.search); const companionId = search.get('companion') || '';
   const [, navigate] = useLocation();
@@ -584,6 +703,8 @@ function Book() {
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutLabel, setCheckoutLabel] = useState('');
   const [checkoutAmount, setCheckoutAmount] = useState(0);
+  const [receiptAgreed, setReceiptAgreed] = useState(false);
+  const [receiptTimestamp, setReceiptTimestamp] = useState<string | null>(null);
   const mutation = useCreateBookingIntent();
   const depositMutation = useAuthorizeDeposit();
   const authorizeMutation = useAuthorizeFullPayment();
@@ -595,6 +716,15 @@ function Book() {
   const openFullPayment = () => { if (!created) return; authorizeMutation.mutate({ id: created.id }, { onSuccess: (r) => { setCheckoutLabel('Full payment'); setCheckoutAmount(created.totalCents); setCheckoutSecret(r.clientSecret); } }); };
   if (companionQuery.isLoading) return <Shell><main className="mx-auto max-w-5xl px-5 py-16"><LoadingState label="Opening booking details" /></main></Shell>;
   if (!companionId || companionQuery.isError || !companion) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><EmptyState icon={CalendarDays} title="Start with a companion." body="Choose an approved companion first, then come back here to plan your time together." action={<Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-[#fff5eb]" data-testid="link-book-explore">Explore companions <ArrowRight className="h-4 w-4" /></Link>} /></main></Shell>;
+  const selectedSpotName = (spotsQuery.data as SafeSpot[] | undefined)?.find((s) => s.id === spot)?.name ?? 'SafeSpot venue';
+  if (created && !receiptAgreed) return (
+    <BoundaryReceipt
+      companion={companion}
+      booking={created}
+      safeSpotName={selectedSpotName}
+      onAgree={(ts) => { setReceiptAgreed(true); setReceiptTimestamp(ts); }}
+    />
+  );
   if (created) return (
     <Shell>
       {checkoutSecret && (
@@ -652,7 +782,14 @@ function Book() {
               <p className="text-xs text-[#a64742]">Could not start payment. Please try again.</p>
             )}
           </div>
-          <p className="mt-5 font-mono text-[10px] text-[#688370]">REQUEST {created.id} · {created.status.toUpperCase()}</p>
+          <div className="mt-5 space-y-1">
+            <p className="font-mono text-[10px] text-[#688370]">REQUEST {created.id} · {created.status.toUpperCase()}</p>
+            {receiptTimestamp && (
+              <p className="flex items-center gap-1.5 font-mono text-[10px] text-[#477254]">
+                <Check className="h-3 w-3" />Boundary Receipt signed at {receiptTimestamp}
+              </p>
+            )}
+          </div>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href={`/booking/${created.id}`} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#31533f] px-5 text-sm font-bold text-white" data-testid="link-book-status">View booking status <ArrowRight className="h-4 w-4" /></Link>
             <Link href="/safety" className="inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#477254]" data-testid="link-book-safety"><ShieldCheck className="h-4 w-4" />Review safety plan</Link>
