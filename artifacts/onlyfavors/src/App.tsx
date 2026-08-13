@@ -2040,6 +2040,172 @@ function CompanionReviews({ companionId }: { companionId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Companion earnings dashboard
+// ---------------------------------------------------------------------------
+
+type EarningsMonth = { month: string; label: string; earningsCents: number; bookingCount: number };
+type EarningsTxn = {
+  id: string; bookingId: string; date: string; activity: string;
+  durationHours: number; grossCents: number; commissionCents: number; netCents: number;
+  status: 'paid' | 'pending' | 'processing';
+};
+type EarningsData = {
+  lifetimeCents: number; thisMonthCents: number; pendingCents: number; thisYearCents: number;
+  monthlyBreakdown: EarningsMonth[]; recentTransactions: EarningsTxn[]; totalBookings: number;
+};
+
+function useCompanionEarnings() {
+  return useQuery<EarningsData>({
+    queryKey: ['companion-earnings'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/earnings');
+      if (!res.ok) throw new Error('Could not load earnings');
+      return res.json();
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  paid: 'bg-[#e8f0e8] text-[#477254]',
+  processing: 'bg-[#fdf3e3] text-[#bf8750]',
+  pending: 'bg-[#f5ede6] text-[#806c76]',
+};
+
+function EarningsStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+      <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">{label}</p>
+      <p className="mt-4 font-serif text-4xl text-[#48213d]">{value}</p>
+      {sub && <p className="mt-1 text-[10px] text-[#9b858e]">{sub}</p>}
+    </div>
+  );
+}
+
+function EarningsBarChart({ months }: { months: EarningsMonth[] }) {
+  const max = Math.max(...months.map((m) => m.earningsCents), 1);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const BAR_MAX_PX = 120; // chart area height minus label space
+  return (
+    <div className="flex h-40 items-end gap-2">
+      {months.map((m) => {
+        const barPx = Math.max((m.earningsCents / max) * BAR_MAX_PX, 4);
+        const isCurrent = m.month === currentMonth;
+        return (
+          <div key={m.month} className="group relative flex flex-1 flex-col items-center gap-1.5">
+            {/* Tooltip */}
+            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#3d2038] px-2.5 py-1.5 text-center opacity-0 shadow transition group-hover:opacity-100">
+              <p className="text-[10px] font-bold text-white">{money(m.earningsCents)}</p>
+              <p className="text-[9px] text-[#ddc4d0]">{m.bookingCount} bookings</p>
+            </div>
+            {/* Bar */}
+            <div
+              className={`w-full rounded-t-[6px] transition-all ${isCurrent ? 'bg-[#9d557e]' : 'bg-[#ead0dd] group-hover:bg-[#c695ae]'}`}
+              style={{ height: `${barPx}px` }}
+            />
+            <span className={`font-mono text-[9px] ${isCurrent ? 'font-bold text-[#7f2e62]' : 'text-[#9b858e]'}`}>{m.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompanionEarnings() {
+  const { data, isLoading, isError, refetch } = useCompanionEarnings();
+
+  if (isLoading) return (
+    <Shell>
+      <main className="mx-auto max-w-5xl px-5 py-16 lg:px-8"><LoadingState /></main>
+    </Shell>
+  );
+  if (isError || !data) return (
+    <Shell>
+      <main className="mx-auto max-w-5xl px-5 py-16 lg:px-8">
+        <ErrorState onRetry={() => refetch()} />
+      </main>
+    </Shell>
+  );
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-5xl px-5 py-10 lg:px-8 lg:py-16">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Link href="/dashboard/companion" className="mb-4 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-earnings-back">
+              <ArrowLeft className="h-4 w-4" />Companion workspace
+            </Link>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Your income</p>
+            <h1 className="mt-2 font-serif text-5xl leading-none text-[#48213d]">Earnings</h1>
+          </div>
+          <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm font-semibold text-[#654c5f] transition hover:border-[#7f2e62] hover:text-[#7f2e62]"
+            data-testid="link-stripe-dashboard">
+            <WalletCards className="h-4 w-4" />View in Stripe
+          </a>
+        </div>
+
+        {/* Stats grid */}
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <EarningsStat label="Lifetime earned" value={money(data.lifetimeCents)} sub={`${data.totalBookings} bookings`} />
+          <EarningsStat label="This month" value={money(data.thisMonthCents)} />
+          <EarningsStat label="This year" value={money(data.thisYearCents)} />
+          <div className="rounded-[20px] border border-[#ece1d9] bg-[#fdf3e3] p-5">
+            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Pending payout</p>
+            <p className="mt-4 font-serif text-4xl text-[#bf8750]">{money(data.pendingCents)}</p>
+            <p className="mt-1 text-[10px] text-[#9b858e]">Processing or awaiting booking</p>
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="mt-6 rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 md:p-8">
+          <div className="mb-6 flex items-center justify-between">
+            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Monthly earnings · last 6 months</p>
+            <p className="font-mono text-[9px] uppercase tracking-[.12em] text-[#9b858e]">After 15% platform fee</p>
+          </div>
+          <EarningsBarChart months={data.monthlyBreakdown} />
+        </div>
+
+        {/* Transactions */}
+        <div className="mt-6 overflow-hidden rounded-[22px] border border-[#dfd2c9]">
+          <div className="border-b border-[#ece1d9] bg-[#fbf7f1] px-5 py-3">
+            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Recent transactions</p>
+          </div>
+          <div className="divide-y divide-[#f0e8e2] bg-white">
+            {data.recentTransactions.map((t) => (
+              <div key={t.id} className="flex items-center gap-4 px-5 py-4" data-testid={`txn-${t.id}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-[#48213d]">{t.activity}</p>
+                  <p className="mt-0.5 text-[10px] text-[#9b858e]">
+                    {new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {' · '}{t.durationHours} hr{t.durationHours > 1 ? 's' : ''}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-[#48213d]">{money(t.netCents)}</p>
+                  <p className="mt-0.5 text-[10px] text-[#9b858e]">after {money(t.commissionCents)} fee</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[.1em] ${STATUS_STYLES[t.status]}`}>
+                  {t.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer note */}
+        <p className="mt-6 flex items-center gap-1.5 text-[11px] text-[#9b858e]">
+          <LockKeyhole className="h-3.5 w-3.5" />
+          Payouts are initiated within 24 hours of booking completion. Bank transfer times are 2–5 business days via Stripe.
+        </p>
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Pricing page
 // ---------------------------------------------------------------------------
 
@@ -3116,7 +3282,7 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
     : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Profile views', value: companion.data?.profileViews ?? 0, icon: EyeOff }];
   const hasData = stats.some((x) => x.value !== 0 && x.value !== '$0.00');
   const stripeReturn = typeof window !== 'undefined' && window.location.search.includes('stripe=return');
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><div className="flex shrink-0 items-center gap-2 self-start md:self-auto">{!isCustomer && <Link href="/dashboard/companion/profile" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] bg-transparent px-4 text-[13px] font-bold text-[#542642] transition hover:border-[#7f2e62] hover:bg-[#f0e4db]" data-testid="link-edit-profile"><Pencil className="h-4 w-4" />Edit profile</Link>}<Button variant="outline" onClick={() => query.refetch()} testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{isCustomer && <CustomerBookingList />}{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
+  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><div className="flex shrink-0 items-center gap-2 self-start md:self-auto">{!isCustomer && <Link href="/dashboard/companion/earnings" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] bg-transparent px-4 text-[13px] font-bold text-[#542642] transition hover:border-[#7f2e62] hover:bg-[#f0e4db]" data-testid="link-earnings"><WalletCards className="h-4 w-4" />Earnings</Link>}{!isCustomer && <Link href="/dashboard/companion/profile" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] bg-transparent px-4 text-[13px] font-bold text-[#542642] transition hover:border-[#7f2e62] hover:bg-[#f0e4db]" data-testid="link-edit-profile"><Pencil className="h-4 w-4" />Edit profile</Link>}<Button variant="outline" onClick={() => query.refetch()} testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{isCustomer && <CustomerBookingList />}{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
 }
 
 function Apply() {
@@ -3813,6 +3979,7 @@ function Router() {
         <Route path="/safespots" component={SafeSpots} />
         <Route path="/safespots/:id" component={SafeSpotDetail} />
         <Route path="/saved" component={Saved} />
+        <Route path="/dashboard/companion/earnings" component={CompanionEarnings} />
         <Route path="/pricing" component={Pricing} />
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/operations" component={AdminOperations} />

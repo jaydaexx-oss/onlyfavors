@@ -861,6 +861,68 @@ router.post("/bookings/:id/review", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Companion earnings
+// ---------------------------------------------------------------------------
+
+type EarningsMonth = { month: string; label: string; earningsCents: number; bookingCount: number };
+type EarningsTransaction = {
+  id: string; bookingId: string; date: string; activity: string;
+  durationHours: number; grossCents: number; commissionCents: number; netCents: number;
+  status: 'paid' | 'pending' | 'processing';
+};
+
+function makeEarningsData() {
+  const now = new Date();
+  const months: EarningsMonth[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = d.toLocaleString('en-US', { month: 'short' });
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    // Realistic ramp-up: newer months have more activity
+    const bookingCount = Math.max(0, 3 + (5 - i) * 2 + (i === 0 ? -2 : 0));
+    // Each booking averages ~$165 net (3 hrs at $65 × 85%)
+    const earningsCents = bookingCount * (145_00 + Math.round(Math.random() * 40_00));
+    months.push({ month, label, earningsCents, bookingCount });
+  }
+  return months;
+}
+
+const DEV_EARNINGS_MONTHS = makeEarningsData();
+
+const DEV_EARNINGS_TRANSACTIONS: EarningsTransaction[] = [
+  { id: 'txn-1', bookingId: 'bk-101', date: new Date(Date.now() - 2 * 86400_000).toISOString(), activity: 'Museum visit', durationHours: 3, grossCents: 195_00, commissionCents: 29_25, netCents: 165_75, status: 'paid' },
+  { id: 'txn-2', bookingId: 'bk-102', date: new Date(Date.now() - 5 * 86400_000).toISOString(), activity: 'Coffee conversation', durationHours: 2, grossCents: 130_00, commissionCents: 19_50, netCents: 110_50, status: 'paid' },
+  { id: 'txn-3', bookingId: 'bk-103', date: new Date(Date.now() - 9 * 86400_000).toISOString(), activity: 'Gallery tour', durationHours: 4, grossCents: 260_00, commissionCents: 39_00, netCents: 221_00, status: 'paid' },
+  { id: 'txn-4', bookingId: 'bk-104', date: new Date(Date.now() - 12 * 86400_000).toISOString(), activity: 'Farmers market walk', durationHours: 2, grossCents: 130_00, commissionCents: 19_50, netCents: 110_50, status: 'paid' },
+  { id: 'txn-5', bookingId: 'bk-105', date: new Date(Date.now() - 1 * 86400_000).toISOString(), activity: 'Evening gallery visit', durationHours: 3, grossCents: 195_00, commissionCents: 29_25, netCents: 165_75, status: 'processing' },
+  { id: 'txn-6', bookingId: 'bk-106', date: new Date(Date.now() + 2 * 86400_000).toISOString(), activity: 'Coffee conversation', durationHours: 2, grossCents: 130_00, commissionCents: 19_50, netCents: 110_50, status: 'pending' },
+];
+
+router.get("/companion/earnings", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const lifetimeCents = DEV_EARNINGS_MONTHS.reduce((s, m) => s + m.earningsCents, 0);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const thisMonthCents = DEV_EARNINGS_MONTHS.find((m) => m.month === currentMonth)?.earningsCents ?? 0;
+  const pendingCents = DEV_EARNINGS_TRANSACTIONS
+    .filter((t) => t.status === 'pending' || t.status === 'processing')
+    .reduce((s, t) => s + t.netCents, 0);
+  const thisYearCents = DEV_EARNINGS_MONTHS
+    .filter((m) => m.month.startsWith(String(new Date().getFullYear())))
+    .reduce((s, m) => s + m.earningsCents, 0);
+
+  res.json({
+    lifetimeCents, thisMonthCents, pendingCents, thisYearCents,
+    monthlyBreakdown: DEV_EARNINGS_MONTHS,
+    recentTransactions: DEV_EARNINGS_TRANSACTIONS.slice(0, 8),
+    totalBookings: DEV_EARNINGS_MONTHS.reduce((s, m) => s + m.bookingCount, 0),
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Notifications — in-app alerts for booking events and messages
 // ---------------------------------------------------------------------------
 
