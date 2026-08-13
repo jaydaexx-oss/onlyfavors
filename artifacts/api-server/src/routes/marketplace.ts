@@ -111,8 +111,11 @@ router.get("/bookings/quote", async (req, res) => {
 router.post("/bookings", async (req, res) => {
   const body = CreateBookingIntentBody.parse(req.body);
 
-  // TODO: replace with real session once auth is live
-  const customerId = (req as any).user?.id;
+  // Auth — falls back to a preview ID in development so the flow can be tested
+  // before Task #1 (auth) lands. Never permitted in production.
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -171,7 +174,9 @@ router.post("/bookings", async (req, res) => {
 
 router.post("/bookings/:id/deposit", async (req, res) => {
   const { id } = AuthorizeDepositParams.parse(req.params);
-  const customerId = (req as any).user?.id;
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -239,7 +244,9 @@ router.post("/bookings/:id/deposit", async (req, res) => {
 
 router.post("/bookings/:id/authorize", async (req, res) => {
   const { id } = AuthorizeFullPaymentParams.parse(req.params);
-  const customerId = (req as any).user?.id;
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -319,7 +326,9 @@ router.post("/bookings/:id/authorize", async (req, res) => {
 
 router.post("/favor-requests", async (req, res) => {
   const body = CreateFavorRequestBody.parse(req.body);
-  const customerId = (req as any).user?.id;
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;

@@ -7,6 +7,7 @@ import { StripeSync } from "stripe-replit-sync";
  */
 async function getStripeCredentials(): Promise<{
   secretKey: string;
+  publishableKey?: string;
   webhookSecret?: string;
 }> {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -38,7 +39,13 @@ async function getStripeCredentials(): Promise<{
   }
 
   const data = (await resp.json()) as {
-    items?: Array<{ settings?: { secret_key?: string; webhook_secret?: string } }>;
+    items?: Array<{
+      settings?: {
+        secret_key?: string;
+        publishable_key?: string;
+        webhook_secret?: string;
+      };
+    }>;
   };
   const settings = data.items?.[0]?.settings;
 
@@ -51,6 +58,7 @@ async function getStripeCredentials(): Promise<{
 
   return {
     secretKey: settings.secret_key,
+    publishableKey: settings.publishable_key,
     webhookSecret: settings.webhook_secret,
   };
 }
@@ -63,6 +71,20 @@ export async function getUncachableStripeClient(): Promise<Stripe> {
   const { secretKey } = await getStripeCredentials();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return new Stripe(secretKey, { apiVersion: "2025-06-30.basil" as any });
+}
+
+/**
+ * Returns the Stripe publishable key — safe to expose to the browser.
+ */
+export async function getStripePublishableKey(): Promise<string> {
+  const { publishableKey } = await getStripeCredentials();
+  if (!publishableKey) {
+    throw new Error(
+      "Stripe publishable key not found in connector settings. " +
+        "Ensure the Stripe integration is fully connected.",
+    );
+  }
+  return publishableKey;
 }
 
 /**

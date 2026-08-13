@@ -1,0 +1,91 @@
+Yes—location could be OnlyFavors’ best feature, provided it is designed as a safety tool rather than a people-tracking map.
+Use a location ladder:
+Before booking: Show only city, neighborhood and approximate distance.
+After acceptance: Reveal the agreed public venue—not either person’s address.
+During the favor: Enable temporary check-ins and optional live sharing.
+After checkout: Stop sharing automatically and delete precise location after a short, disclosed retention period.
+During an emergency: Share exact location with the user’s trusted contact or emergency services.
+Strong location features could include:
+Near Me: Find available companions within a chosen radius
+SafeSpot Map: Recommended cafés, hotels and public venues
+Meet Here: Both users approve the meeting point
+Geofenced Check-In: Confirm arrival without sharing the route taken
+Trust Circle Link: Temporary booking map for selected contacts
+Missed Check-In Alert: Notify trusted contacts if someone does not respond
+Walk Me There: Continue safety sharing until the person reaches transportation
+Expiring Location Links: Automatically become unusable after the booking
+Important restrictions:
+Never display companions as live pins
+Never expose home or work addresses
+Never track people outside active bookings
+Never sell or use precise location for advertising
+Require clear consent from both sides
+Let either person stop ordinary sharing immediately
+Use an obvious indicator whenever location is active
+The signature interface could be a mulberry map with mint SafeSpots, showing:
+Three verified companions available near Waikīkī this evening
+
+That feels useful and safe without revealing anyone’s precise whereabouts.
+
+
+Wednesday 1:41 PM
+
+
+
+
+
+
+
+
+what else feature can we add?
+
+
+
+
+
+
+Wednesday 1:42 PM
+
+
+
+
+
+
+After location, I’d add features that improve matching, reduce awkwardness and create repeat bookings.
+Matching
+Vibe Check: Match by conversational energy—quiet, playful, outgoing, supportive or adventurous.
+Comfort Dial: Select preferred talking level, physical distance, photography, alcohol and group interaction.
+Voice Preview: Short audio introductions instead of relying entirely on photos.
+Favor Builder: Describe the occasion and receive three suitable companions, venues and estimated totals.
+Mutual Acceptance: Both people review the request before anyone can pay or message.
+Better experiences
+Shared Plan: Venue, schedule, tickets, attire and meeting instructions in one place.
+Conversation Deck: Optional prompts and games for avoiding awkward silences.
+Time Extension: Both users approve and pay for another hour inside the app.
+Standby Match: Quickly find a replacement if someone cancels.
+Duo Booking: Book two companions for concerts, travel or group events.
+Accessibility Match: Filter by language, mobility awareness, sensory preferences and communication style.
+Retention
+Trusted Circle: Privately save companions the customer feels comfortable rebooking.
+Favor Again: Repeat a previous booking in two taps.
+Recurring Favors: Weekly walks, study sessions or monthly events.
+Private Memory Card: A shared photo, venue and note—saved only with mutual consent.
+Gift a Favor: Purchase an activity-specific credit for someone else.
+Loyalty Credits: Reward completed bookings instead of profile popularity.
+Companion quality
+Specialty Badges: Local guide, event etiquette, language practice, photography, gaming or accessibility-aware.
+Availability Calendar: Hourly, half-day and full-day pricing.
+Companion Academy: Short training in boundaries, safety, communication and inclusive behavior.
+Reliability Protection: Reward attendance and responsiveness—not attractiveness or booking volume.
+Anonymous Customer Risk Feedback: Safety information available only to moderators and relevant companions.
+One standout feature
+Build Favor Mode, a live booking screen that activates when the meetup begins:
+Meeting-point navigation
+Temporary location sharing
+Check-in timer
+Boundaries summary
+Trusted-contact status
+Extend or end booking
+Discreet assistance button
+Mutual checkout and payment release
+That would turn OnlyFavors from a profile marketplace into a complete, safety-first companionship experience.

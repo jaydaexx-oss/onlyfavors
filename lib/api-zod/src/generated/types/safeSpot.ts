@@ -13,4 +13,8 @@ export interface SafeSpot {
   city: string;
   addressHint: string;
   openLate: boolean;
+  /** Venue latitude */
+  latitude?: number;
+  /** Venue longitude */
+  longitude?: number;
 }

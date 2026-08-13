@@ -1,4 +1,6 @@
-import { getStripeSync } from "./stripeClient";
+import { getStripeSync, getUncachableStripeClient } from "./stripeClient";
+import { handlePaymentEvent } from "../routes/stripe";
+import { logger } from "./logger";
 
 export class WebhookHandlers {
   static async processWebhook(
@@ -16,7 +18,35 @@ export class WebhookHandlers {
       );
     }
 
+    // 1. Run the StripeSync data sync (mirrors Stripe objects to local DB)
     const sync = await getStripeSync();
     await sync.processWebhook(payload, signature);
+
+    // 2. Handle business logic — update booking status based on payment events
+    try {
+      const stripe = await getUncachableStripeClient();
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+      const event = stripe.webhooks.constructEvent(
+        payload,
+        signature,
+        webhookSecret,
+      );
+
+      if (
+        event.type === "payment_intent.succeeded" ||
+        event.type === "payment_intent.payment_failed" ||
+        event.type === "payment_intent.canceled"
+      ) {
+        const pi = event.data.object as {
+          id: string;
+          metadata: Record<string, string>;
+        };
+        await handlePaymentEvent(event.type, pi.id, pi.metadata);
+      }
+    } catch (err) {
+      // Business logic failure is logged but does not fail the webhook response —
+      // Stripe requires a 2xx to stop retrying. The sync above already succeeded.
+      logger.error({ err }, "Webhook business logic error (sync succeeded)");
+    }
   }
 }

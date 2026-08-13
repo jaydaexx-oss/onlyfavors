@@ -1,4 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Mono:wght@400;700&display=swap');
+
+/* Leaflet map — mulberry tint on dark tiles */
+.leaflet-container { font-family: 'DM Sans', sans-serif; background: #1a0d17; }
+.leaflet-tile { filter: saturate(0.75) brightness(0.82) hue-rotate(12deg); }
+.leaflet-popup-content-wrapper { border-radius: 14px !important; border: 1px solid #dfd2c9; box-shadow: 0 8px 24px rgba(88,37,70,.12); padding: 0 !important; }
+.leaflet-popup-content { margin: 12px 14px !important; }
+.leaflet-popup-tip { background: white !important; }
+.of-popup .leaflet-popup-content-wrapper { background: #fbf7f1; }
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";

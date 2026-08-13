@@ -329,6 +329,15 @@ components:
             type: string
         photoUrl:
           type: ["string", "null"]
+        availableNow:
+          type: boolean
+          description: True if the companion has flagged themselves as available in the next 4 hours
+        latitude:
+          type: number
+          description: Approximate latitude of service area centre — never exact home location
+        longitude:
+          type: number
+          description: Approximate longitude of service area centre — never exact home location
     PriceQuote:
       type: object
       description: >
@@ -442,6 +451,12 @@ components:
           type: string
         openLate:
           type: boolean
+        latitude:
+          type: number
+          description: Venue latitude
+        longitude:
+          type: number
+          description: Venue longitude
     BookingInput:
       type: object
       required: [companionId, activity, date, startTime, durationHours, safeSpotId]

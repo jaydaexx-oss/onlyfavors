@@ -26,4 +26,10 @@ export interface Companion {
   boundaries?: string[];
   /** @nullable */
   photoUrl?: string | null;
+  /** True if the companion has flagged themselves as available in the next 4 hours */
+  availableNow?: boolean;
+  /** Approximate latitude of service area centre — never exact home location */
+  latitude?: number;
+  /** Approximate longitude of service area centre — never exact home location */
+  longitude?: number;
 }

@@ -44,7 +44,10 @@ export const ListCompanionsResponseItem = zod.object({
   "instantBook": zod.boolean(),
   "biography": zod.string().nullish(),
   "boundaries": zod.array(zod.string()).optional(),
-  "photoUrl": zod.string().nullish()
+  "photoUrl": zod.string().nullish(),
+  "availableNow": zod.boolean().optional().describe('True if the companion has flagged themselves as available in the next 4 hours'),
+  "latitude": zod.number().optional().describe('Approximate latitude of service area centre — never exact home location'),
+  "longitude": zod.number().optional().describe('Approximate longitude of service area centre — never exact home location')
 })
 export const ListCompanionsResponse = zod.array(ListCompanionsResponseItem)
 
@@ -71,7 +74,10 @@ export const GetCompanionResponse = zod.object({
   "instantBook": zod.boolean(),
   "biography": zod.string().nullish(),
   "boundaries": zod.array(zod.string()).optional(),
-  "photoUrl": zod.string().nullish()
+  "photoUrl": zod.string().nullish(),
+  "availableNow": zod.boolean().optional().describe('True if the companion has flagged themselves as available in the next 4 hours'),
+  "latitude": zod.number().optional().describe('Approximate latitude of service area centre — never exact home location'),
+  "longitude": zod.number().optional().describe('Approximate longitude of service area centre — never exact home location')
 })
 
 
@@ -131,7 +137,9 @@ export const ListSafeSpotsResponseItem = zod.object({
   "category": zod.string(),
   "city": zod.string(),
   "addressHint": zod.string(),
-  "openLate": zod.boolean()
+  "openLate": zod.boolean(),
+  "latitude": zod.number().optional().describe('Venue latitude'),
+  "longitude": zod.number().optional().describe('Venue longitude')
 })
 export const ListSafeSpotsResponse = zod.array(ListSafeSpotsResponseItem)
 

@@ -1,11 +1,15 @@
-import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { loadStripe, type Stripe as StripeType } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import {
   ArrowLeft, ArrowRight, BadgeCheck, CalendarDays, Check, ChevronDown, ChevronRight,
   CircleAlert, ClipboardCheck, Clock3, Compass, EyeOff, FileText, HeartHandshake,
-  KeyRound, LifeBuoy, LockKeyhole, LogIn, MapPin, Menu, MessageSquare,
-  PanelLeft, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
-  Sparkles, Star, UsersRound, WalletCards, X,
+  KeyRound, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
+  Navigation2, PanelLeft, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
+  Sparkles, Star, UsersRound, WalletCards, X, Zap,
 } from 'lucide-react';
+import SafeSpotMap from '@/components/safe-spot-map';
+import FavorMode from '@/pages/favor-mode';
 import {
   getGetCompanionQueryKey, getGetCustomerDashboardQueryKey, getGetCompanionDashboardQueryKey,
   getGetAdminOverviewQueryKey, getGetSafetyResourcesQueryKey, getListCompanionsQueryKey,
@@ -13,6 +17,7 @@ import {
   useCreateBookingIntent, useGetAdminOverview, useGetCompanion,
   useGetCompanionDashboard, useGetCustomerDashboard, useGetSafetyResources, useHealthCheck,
   useListCompanions, useListSafeSpots, useGetBookingQuote, useCreateFavorRequest,
+  useAuthorizeDeposit, useAuthorizeFullPayment,
   type BookingInput, type Companion, type SafeSpot, type Booking,
 } from '@workspace/api-client-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -136,11 +141,251 @@ function CompanionCard({ companion }: { companion: Companion }) {
 }
 
 function Explore() {
-  const [city, setCity] = useState(''); const [activity, setActivity] = useState(''); const [language, setLanguage] = useState(''); const [maxRate, setMaxRate] = useState(''); const [instant, setInstant] = useState(false); const [filters, setFilters] = useState(false);
-  const params = useMemo(() => ({ ...(city ? { city } : {}), ...(activity ? { activity } : {}), ...(language ? { language } : {}), ...(maxRate ? { maxRate: Number(maxRate) } : {}), ...(instant ? { instantBook: true } : {}) }), [city, activity, language, maxRate, instant]);
+  // Filters
+  const [city, setCity] = useState('');
+  const [activity, setActivity] = useState('');
+  const [language, setLanguage] = useState('');
+  const [maxRate, setMaxRate] = useState('');
+  const [instant, setInstant] = useState(false);
+  const [availNow, setAvailNow] = useState(false);
+  const [filters, setFilters] = useState(false);
+
+  // View: list or map
+  const [view, setView] = useState<'list' | 'map'>('list');
+
+  // Near Me: geolocation
+  const [nearMe, setNearMe] = useState(false);
+  const [userCoords, setUserCoords] = useState<[number, number] | null>(null);
+  const [locError, setLocError] = useState<string | null>(null);
+  const [locLoading, setLocLoading] = useState(false);
+  const detectedCity = nearMe && city ? city : nearMe ? 'your area' : null;
+
+  const handleNearMe = useCallback(() => {
+    if (nearMe) { setNearMe(false); setUserCoords(null); setLocError(null); return; }
+    if (!navigator.geolocation) { setLocError('Your browser does not support location.'); return; }
+    setLocLoading(true); setLocError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserCoords([pos.coords.latitude, pos.coords.longitude]);
+        setNearMe(true); setLocLoading(false); setView('map');
+      },
+      () => { setLocError('Location access denied.'); setLocLoading(false); },
+      { enableHighAccuracy: false, timeout: 8000 },
+    );
+  }, [nearMe]);
+
+  const params = useMemo(() => ({
+    ...(city ? { city } : {}),
+    ...(activity ? { activity } : {}),
+    ...(language ? { language } : {}),
+    ...(maxRate ? { maxRate: Number(maxRate) } : {}),
+    ...(instant ? { instantBook: true } : {}),
+  }), [city, activity, language, maxRate, instant]);
+
   const query = useListCompanions(params, { query: { queryKey: getListCompanionsQueryKey(params) } });
+  const spotsQuery = useListSafeSpots(city ? { city } : undefined, {
+    query: { queryKey: getListSafeSpotsQueryKey(city ? { city } : undefined) },
+  });
+
   const companions = query.data ?? [];
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-6 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">The directory</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d] md:text-6xl">Find your kind<br /><em>of company.</em></h1><p className="mt-4 max-w-md text-sm leading-6 text-[#725e69]">Browse approved companions by approximate area. Take your time — there is no public popularity contest here.</p></div><div className="flex items-center gap-2 text-xs text-[#806c76]"><ShieldCheck className="h-4 w-4 text-[#477254]" />Privacy-safe browsing</div></div><div className="mt-10 rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-3 shadow-[0_10px_25px_rgba(88,37,70,.04)]"><div className="grid gap-2 md:grid-cols-[1.2fr_1fr_auto]"><label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4"><MapPin className="h-4 w-4 text-[#9b6b88]" /><input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City or region" className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-[#a38c95]" data-testid="input-city" /></label><label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4"><Search className="h-4 w-4 text-[#9b6b88]" /><input value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="Activity, like museums" className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-[#a38c95]" data-testid="input-activity" /></label><Button variant={filters ? 'dark' : 'outline'} onClick={() => setFilters(!filters)} className="h-11" testId="button-toggle-filters"><SlidersHorizontal className="h-4 w-4" />Filters</Button></div>{filters && <div className="mt-2 grid gap-2 border-t border-[#e7dbd3] pt-3 md:grid-cols-[1fr_1fr_auto]"><input value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="Language" className="h-10 rounded-xl border border-[#dfd2c9] bg-[#fffaf4] px-3 text-sm outline-none focus:border-[#a85b88]" data-testid="input-language" /><select value={maxRate} onChange={(e) => setMaxRate(e.target.value)} className="h-10 rounded-xl border border-[#dfd2c9] bg-[#fffaf4] px-3 text-sm text-[#654c5f] outline-none" data-testid="select-max-rate"><option value="">Any hourly rate</option><option value="30">Up to $30/hour</option><option value="50">Up to $50/hour</option><option value="80">Up to $80/hour</option></select><label className="flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-[#654c5f]"><input type="checkbox" checked={instant} onChange={(e) => setInstant(e.target.checked)} className="accent-[#7f2e62]" data-testid="checkbox-instant-book" /> Instant book only</label></div>}</div><div className="mt-10 flex items-center justify-between border-b border-[#dfd2c9] pb-4"><p className="font-mono text-[10px] uppercase tracking-[.16em] text-[#9b858e]">{query.isLoading ? 'Searching' : `${companions.length} approved companions`}</p>{(city || activity || language || maxRate || instant) && <button type="button" onClick={() => { setCity(''); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); }} className="text-xs font-bold text-[#7f2e62]" data-testid="button-clear-filters">Clear filters</button>}</div><div className="mt-7">{query.isLoading ? <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"><LoadingState /><LoadingState /><LoadingState /></div> : query.isError ? <ErrorState onRetry={() => query.refetch()} /> : companions.length === 0 ? <EmptyState icon={UsersRound} title="A quiet directory, for now." body="We do not fill this space with invented profiles. Try another area or check back as new companions are approved." action={<Button variant="outline" onClick={() => { setCity(''); setActivity(''); }} testId="button-browse-all">Browse all areas</Button>} /> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{companions.map((companion) => <CompanionCard key={companion.id} companion={companion} />)}</div>}</div></main></Shell>;
+  const safeSpots = spotsQuery.data ?? [];
+
+  const shownCompanions = availNow
+    ? companions.filter((c) => (c as any).availableNow)
+    : companions;
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16">
+
+        {/* Header row */}
+        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">The directory</p>
+            <h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d] md:text-6xl">
+              Find your kind<br /><em>of company.</em>
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-6 text-[#725e69]">
+              Browse approved companions by approximate area. Take your time — there is no public popularity contest here.
+            </p>
+          </div>
+          {/* View toggle + Near Me */}
+          <div className="flex items-center gap-2">
+            {/* Near Me */}
+            <button
+              onClick={handleNearMe}
+              disabled={locLoading}
+              className={cn(
+                'inline-flex h-10 items-center gap-2 rounded-full border px-4 text-xs font-bold transition',
+                nearMe
+                  ? 'border-[#3dbd8c] bg-[#3dbd8c]/10 text-[#267a5a]'
+                  : 'border-[#dfd2c9] bg-[#fbf7f1] text-[#654c5f] hover:border-[#9b6b88]',
+              )}
+              data-testid="button-near-me"
+            >
+              <Navigation2 className={cn('h-3.5 w-3.5', nearMe && 'fill-[#3dbd8c] text-[#3dbd8c]')} />
+              {locLoading ? 'Locating…' : nearMe ? `Near me ✓` : 'Near me'}
+            </button>
+            {/* Available Now */}
+            <button
+              onClick={() => setAvailNow(!availNow)}
+              className={cn(
+                'inline-flex h-10 items-center gap-2 rounded-full border px-4 text-xs font-bold transition',
+                availNow
+                  ? 'border-[#7f2e62] bg-[#ead0dd] text-[#7f2e62]'
+                  : 'border-[#dfd2c9] bg-[#fbf7f1] text-[#654c5f] hover:border-[#9b6b88]',
+              )}
+              data-testid="button-avail-now"
+            >
+              <Zap className="h-3.5 w-3.5" />Available now
+            </button>
+            {/* List / Map toggle */}
+            <div className="flex overflow-hidden rounded-full border border-[#dfd2c9] bg-[#fbf7f1]">
+              <button
+                onClick={() => setView('list')}
+                className={cn('inline-flex h-10 items-center gap-1.5 px-4 text-xs font-bold transition',
+                  view === 'list' ? 'bg-[#3d2038] text-white' : 'text-[#654c5f] hover:bg-[#eee2d9]')}
+                data-testid="button-view-list"
+              >
+                <UsersRound className="h-3.5 w-3.5" />List
+              </button>
+              <button
+                onClick={() => setView('map')}
+                className={cn('inline-flex h-10 items-center gap-1.5 px-4 text-xs font-bold transition',
+                  view === 'map' ? 'bg-[#3d2038] text-white' : 'text-[#654c5f] hover:bg-[#eee2d9]')}
+                data-testid="button-view-map"
+              >
+                <Map className="h-3.5 w-3.5" />Map
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Location error */}
+        {locError && (
+          <p className="mt-4 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{locError}</p>
+        )}
+
+        {/* Search / filter bar */}
+        <div className="mt-8 rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-3 shadow-[0_10px_25px_rgba(88,37,70,.04)]">
+          <div className="grid gap-2 md:grid-cols-[1.2fr_1fr_auto]">
+            <label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4">
+              <MapPin className="h-4 w-4 text-[#9b6b88]" />
+              <input value={city} onChange={(e) => setCity(e.target.value)}
+                placeholder={nearMe ? `Near ${detectedCity ?? 'you'}` : 'City or region'}
+                className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-[#a38c95]"
+                data-testid="input-city" />
+            </label>
+            <label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4">
+              <Search className="h-4 w-4 text-[#9b6b88]" />
+              <input value={activity} onChange={(e) => setActivity(e.target.value)}
+                placeholder="Activity, like museums"
+                className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-[#a38c95]"
+                data-testid="input-activity" />
+            </label>
+            <Button variant={filters ? 'dark' : 'outline'} onClick={() => setFilters(!filters)}
+              className="h-11" testId="button-toggle-filters">
+              <SlidersHorizontal className="h-4 w-4" />Filters
+            </Button>
+          </div>
+          {filters && (
+            <div className="mt-2 grid gap-2 border-t border-[#e7dbd3] pt-3 md:grid-cols-[1fr_1fr_auto]">
+              <input value={language} onChange={(e) => setLanguage(e.target.value)}
+                placeholder="Language"
+                className="h-10 rounded-xl border border-[#dfd2c9] bg-[#fffaf4] px-3 text-sm outline-none focus:border-[#a85b88]"
+                data-testid="input-language" />
+              <select value={maxRate} onChange={(e) => setMaxRate(e.target.value)}
+                className="h-10 rounded-xl border border-[#dfd2c9] bg-[#fffaf4] px-3 text-sm text-[#654c5f] outline-none"
+                data-testid="select-max-rate">
+                <option value="">Any hourly rate</option>
+                <option value="30">Up to $30/hour</option>
+                <option value="50">Up to $50/hour</option>
+                <option value="80">Up to $80/hour</option>
+              </select>
+              <label className="flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-[#654c5f]">
+                <input type="checkbox" checked={instant} onChange={(e) => setInstant(e.target.checked)}
+                  className="accent-[#7f2e62]" data-testid="checkbox-instant-book" /> Instant book only
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Results header */}
+        <div className="mt-8 flex items-center justify-between border-b border-[#dfd2c9] pb-4">
+          <p className="font-mono text-[10px] uppercase tracking-[.16em] text-[#9b858e]">
+            {query.isLoading ? 'Searching…'
+              : view === 'map' ? `${safeSpots.length} SafeSpots · ${shownCompanions.length} companions`
+              : `${shownCompanions.length} approved companions`}
+          </p>
+          {(city || activity || language || maxRate || instant || nearMe || availNow) && (
+            <button type="button"
+              onClick={() => { setCity(''); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); setNearMe(false); setAvailNow(false); setUserCoords(null); }}
+              className="text-xs font-bold text-[#7f2e62]" data-testid="button-clear-filters">
+              Clear all
+            </button>
+          )}
+        </div>
+
+        {/* Map view */}
+        {view === 'map' && (
+          <div className="mt-7">
+            {/* Available now rail */}
+            {shownCompanions.filter((c) => (c as any).availableNow).length > 0 && (
+              <div className="mb-5">
+                <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e] flex items-center gap-2">
+                  <Zap className="h-3 w-3" />Available this evening
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {shownCompanions.filter((c) => (c as any).availableNow).map((c) => (
+                    <Link key={c.id} href={`/companions/${c.id}`}
+                      className="flex shrink-0 items-center gap-3 rounded-[16px] border border-[#3dbd8c]/30 bg-[#e8f5ef] px-4 py-3 hover:border-[#3dbd8c]">
+                      <Avatar companion={c} />
+                      <div>
+                        <p className="text-sm font-bold text-[#31533f]">{c.displayName}</p>
+                        <p className="text-[10px] text-[#688370]">{c.serviceArea}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            <SafeSpotMap
+              safeSpots={safeSpots}
+              companions={shownCompanions}
+              userCoords={userCoords}
+              defaultCity={city || 'honolulu'}
+              height="560px"
+            />
+            <div className="mt-4 flex items-start gap-2 rounded-[16px] bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />
+              Companions appear as service-area circles — never as live pins. SafeSpot venues are exact.
+              Your location is used only to center the map and is never shared or stored.
+            </div>
+          </div>
+        )}
+
+        {/* List view */}
+        {view === 'list' && (
+          <div className="mt-7">
+            {query.isLoading
+              ? <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"><LoadingState /><LoadingState /><LoadingState /></div>
+              : query.isError
+              ? <ErrorState onRetry={() => query.refetch()} />
+              : shownCompanions.length === 0
+              ? <EmptyState icon={UsersRound} title="A quiet directory, for now."
+                  body={availNow
+                    ? 'No one has flagged availability tonight yet. Try removing the "Available now" filter.'
+                    : 'We do not fill this space with invented profiles. Try another area or check back as new companions are approved.'}
+                  action={<Button variant="outline" onClick={() => { setCity(''); setActivity(''); setAvailNow(false); }} testId="button-browse-all">Browse all areas</Button>} />
+              : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {shownCompanions.map((companion) => <CompanionCard key={companion.id} companion={companion} />)}
+                </div>
+            }
+          </div>
+        )}
+      </main>
+    </Shell>
+  );
 }
 
 function Profile() {
@@ -152,20 +397,209 @@ function Profile() {
   return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <span key={x} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62]">{x}</span>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />Identity verified by OnlyFavors</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div><Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link><p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p></aside></div></main></Shell>;
 }
 
+// ---------------------------------------------------------------------------
+// Stripe checkout modal
+// ---------------------------------------------------------------------------
+
+function CheckoutForm({ amountCents, label, onSuccess, onClose }: {
+  amountCents: number; label: string; onSuccess: () => void; onClose: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setBusy(true); setErr(null);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    });
+    setBusy(false);
+    if (error) { setErr(error.message ?? 'Payment failed. Please try again.'); }
+    else { onSuccess(); }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <PaymentElement options={{ layout: 'tabs' }} />
+      {err && <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{err}</p>}
+      <div className="flex gap-3 pt-2">
+        <button type="submit" disabled={busy || !stripe}
+          className="flex-1 h-11 rounded-full bg-[#7f2e62] text-sm font-bold text-white disabled:opacity-50">
+          {busy ? 'Processing…' : `Pay ${money(amountCents)} · ${label}`}
+        </button>
+        <button type="button" onClick={onClose}
+          className="h-11 px-5 rounded-full border border-[#cbbab5] text-sm font-bold text-[#654c5f]">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CheckoutModal({ clientSecret, amountCents, label, onSuccess, onClose }: {
+  clientSecret: string; amountCents: number; label: string; onSuccess: () => void; onClose: () => void;
+}) {
+  const [stripePromise, setStripePromise] = useState<Promise<StripeType | null> | null>(null);
+
+  useEffect(() => {
+    fetch('/api/stripe/config')
+      .then((r) => r.json())
+      .then((d: { publishableKey?: string }) => {
+        if (d.publishableKey) setStripePromise(loadStripe(d.publishableKey));
+      })
+      .catch(() => {/* Stripe config unavailable — form stays loading */});
+  }, []);
+
+  const appearance = {
+    theme: 'stripe' as const,
+    variables: {
+      colorPrimary: '#7f2e62',
+      colorBackground: '#fbf7f1',
+      colorText: '#3d2038',
+      colorDanger: '#a64742',
+      fontFamily: 'DM Sans, sans-serif',
+      borderRadius: '12px',
+    },
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-[28px] bg-[#f8f1e9] p-8 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Secure payment</p>
+            <h2 className="mt-1 font-serif text-3xl text-[#3d2038]">{label}</h2>
+          </div>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full bg-[#efe5de] text-[#654c5f]"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mb-5 rounded-[16px] bg-[#3d2038] p-4">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Amount</span>
+            <span className="font-serif text-2xl text-[#f9efe5]">{money(amountCents)}</span>
+          </div>
+        </div>
+        {!stripePromise ? (
+          <div className="space-y-3">
+            <div className="skeleton h-12 rounded-xl" />
+            <div className="skeleton h-12 rounded-xl" />
+            <p className="text-center text-xs text-[#9d7e8e]">Loading payment form…</p>
+          </div>
+        ) : (
+          <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
+            <CheckoutForm amountCents={amountCents} label={label} onSuccess={onSuccess} onClose={onClose} />
+          </Elements>
+        )}
+        <p className="mt-5 flex items-center justify-center gap-2 text-[10px] text-[#9d7e8e]">
+          <LockKeyhole className="h-3 w-3" />Payments are processed by Stripe. OnlyFavors never stores your card details.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Book() {
   const search = new URLSearchParams(window.location.search); const companionId = search.get('companion') || '';
   const companionQuery = useGetCompanion(companionId, { query: { queryKey: getGetCompanionQueryKey(companionId), enabled: Boolean(companionId) } });
   const companion = companionQuery.data;
   const spotsQuery = useListSafeSpots(companion?.city ? { city: companion.city } : undefined, { query: { queryKey: getListSafeSpotsQueryKey(companion?.city ? { city: companion.city } : undefined), enabled: Boolean(companion?.city) } });
   const [activity, setActivity] = useState(''); const [date, setDate] = useState(''); const [time, setTime] = useState(''); const [duration, setDuration] = useState('2'); const [spot, setSpot] = useState(''); const [created, setCreated] = useState<Booking | null>(null);
+  const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
+  const [checkoutLabel, setCheckoutLabel] = useState('');
+  const [checkoutAmount, setCheckoutAmount] = useState(0);
+  const [paidStatus, setPaidStatus] = useState<'deposit' | 'full' | null>(null);
   const mutation = useCreateBookingIntent();
+  const depositMutation = useAuthorizeDeposit();
+  const authorizeMutation = useAuthorizeFullPayment();
   const quoteParams = { companionId, durationHours: Number(duration) };
   const quoteQuery = useGetBookingQuote(quoteParams, { query: { enabled: Boolean(companionId && duration), queryKey: getGetBookingQuoteQueryKey(quoteParams) } });
   const quote = quoteQuery.data;
   const submit = (e: FormEvent) => { e.preventDefault(); if (!companionId || !activity || !date || !time || !spot) return; const input: BookingInput = { companionId, activity, date, startTime: time, durationHours: Number(duration), safeSpotId: spot }; mutation.mutate({ data: input }, { onSuccess: (booking) => setCreated(booking) }); };
+  const openDeposit = () => { if (!created) return; depositMutation.mutate({ id: created.id }, { onSuccess: (r) => { setCheckoutLabel('$10 refundable deposit'); setCheckoutAmount(1000); setCheckoutSecret(r.clientSecret); } }); };
+  const openFullPayment = () => { if (!created) return; authorizeMutation.mutate({ id: created.id }, { onSuccess: (r) => { setCheckoutLabel('Full payment'); setCheckoutAmount(created.totalCents); setCheckoutSecret(r.clientSecret); } }); };
   if (companionQuery.isLoading) return <Shell><main className="mx-auto max-w-5xl px-5 py-16"><LoadingState label="Opening booking details" /></main></Shell>;
   if (!companionId || companionQuery.isError || !companion) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><EmptyState icon={CalendarDays} title="Start with a companion." body="Choose an approved companion first, then come back here to plan your time together." action={<Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-[#fff5eb]" data-testid="link-book-explore">Explore companions <ArrowRight className="h-4 w-4" /></Link>} /></main></Shell>;
-  if (created) return <Shell><main className="page-enter mx-auto max-w-2xl px-5 py-20"><div className="rounded-[26px] border border-[#c7d9cb] bg-[#e8f0e8] p-8 md:p-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#477254] text-white"><Check /></div><p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#477254]">Request received</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#31533f]">Your time with {companion.displayName.split(' ')[0]} is in motion.</h1><p className="mt-5 text-sm leading-7 text-[#53725d]">These figures were calculated by our server. Nothing was estimated in your browser.</p><div className="mt-8 space-y-2 border-t border-[#c7d9cb] pt-5"><div className="flex items-center justify-between text-sm text-[#53725d]"><span>Activity total</span><span>{money(created.subtotalCents)}</span></div><div className="flex items-center justify-between text-sm text-[#53725d]"><span>Safety &amp; service fee (5%)</span><span>+{money(created.customerFeeCents)}</span></div><div className="my-2 border-t border-[#c7d9cb]" /><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#688370]">You pay</span><span className="font-serif text-3xl text-[#31533f]">{money(created.totalCents)}</span></div><div className="flex items-center justify-between text-xs text-[#688370]"><span>Companion receives</span><span>{money(created.companionPayoutCents)}</span></div></div><p className="mt-5 font-mono text-[10px] text-[#688370]">REQUEST {created.id} · {created.status.toUpperCase()}</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/dashboard/customer" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#31533f] px-5 text-sm font-bold text-white" data-testid="link-book-dashboard">Go to workspace <ArrowRight className="h-4 w-4" /></Link><Link href="/safety" className="inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#477254]" data-testid="link-book-safety"><ShieldCheck className="h-4 w-4" />Review safety plan</Link></div></div></main></Shell>;
+  if (created) return (
+    <Shell>
+      {checkoutSecret && (
+        <CheckoutModal
+          clientSecret={checkoutSecret}
+          amountCents={checkoutAmount}
+          label={checkoutLabel}
+          onClose={() => setCheckoutSecret(null)}
+          onSuccess={() => {
+            setCheckoutSecret(null);
+            setPaidStatus(checkoutLabel.includes('deposit') ? 'deposit' : 'full');
+          }}
+        />
+      )}
+      <main className="page-enter mx-auto max-w-2xl px-5 py-20">
+        <div className="rounded-[26px] border border-[#c7d9cb] bg-[#e8f0e8] p-8 md:p-12">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#477254] text-white"><Check /></div>
+          <p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#477254]">Request received</p>
+          <h1 className="mt-3 font-serif text-5xl leading-none text-[#31533f]">Your time with {companion.displayName.split(' ')[0]} is in motion.</h1>
+          <p className="mt-5 text-sm leading-7 text-[#53725d]">These figures were calculated by our server. Nothing was estimated in your browser.</p>
+          {/* Price breakdown */}
+          <div className="mt-8 space-y-2 border-t border-[#c7d9cb] pt-5">
+            <div className="flex items-center justify-between text-sm text-[#53725d]"><span>Activity total</span><span>{money(created.subtotalCents)}</span></div>
+            <div className="flex items-center justify-between text-sm text-[#53725d]"><span>Safety &amp; service fee (5%)</span><span>+{money(created.customerFeeCents)}</span></div>
+            <div className="my-2 border-t border-[#c7d9cb]" />
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-[#688370]">You pay</span>
+              <span className="font-serif text-3xl text-[#31533f]">{money(created.totalCents)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-[#688370]"><span>Companion receives</span><span>{money(created.companionPayoutCents)}</span></div>
+          </div>
+          {/* Payment status or action */}
+          {paidStatus ? (
+            <div className="mt-6 rounded-[16px] bg-[#477254] p-5 text-white">
+              <div className="flex items-center gap-3">
+                <div className="grid h-8 w-8 place-items-center rounded-full bg-white/20"><Check className="h-4 w-4" /></div>
+                <div>
+                  <p className="text-sm font-bold">{paidStatus === 'deposit' ? 'Deposit paid — chat unlocked' : 'Payment confirmed'}</p>
+                  <p className="mt-0.5 text-xs text-white/70">{paidStatus === 'deposit' ? 'Your $10 will be credited toward the total when you confirm.' : 'Your companion will receive notification to finalise the plan.'}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 space-y-3">
+              <p className="text-xs font-bold text-[#53725d]">How would you like to proceed?</p>
+              <button onClick={openDeposit} disabled={depositMutation.isPending}
+                className="flex w-full items-center justify-between rounded-[16px] border border-[#c7d9cb] bg-white p-4 text-left hover:border-[#7f2e62] disabled:opacity-50"
+                data-testid="button-pay-deposit">
+                <div>
+                  <p className="text-sm font-bold text-[#31533f]">Pay $10 deposit · Unlock chat</p>
+                  <p className="mt-0.5 text-xs text-[#688370]">Chat with {companion.displayName.split(' ')[0]} first. Credited toward your total.</p>
+                </div>
+                <MessageSquare className="h-5 w-5 shrink-0 text-[#7f2e62]" />
+              </button>
+              <button onClick={openFullPayment} disabled={authorizeMutation.isPending}
+                className="flex w-full items-center justify-between rounded-[16px] bg-[#31533f] p-4 text-left hover:bg-[#254030] disabled:opacity-50"
+                data-testid="button-pay-full">
+                <div>
+                  <p className="text-sm font-bold text-white">Pay {money(created.totalCents)} · Confirm now</p>
+                  <p className="mt-0.5 text-xs text-white/60">Skip chat and go straight to a confirmed booking.</p>
+                </div>
+                <WalletCards className="h-5 w-5 shrink-0 text-white/60" />
+              </button>
+              {(depositMutation.isError || authorizeMutation.isError) && (
+                <p className="text-xs text-[#a64742]">Could not start payment. Please try again.</p>
+              )}
+            </div>
+          )}
+          <p className="mt-5 font-mono text-[10px] text-[#688370]">REQUEST {created.id} · {created.status.toUpperCase()}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/dashboard/customer" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#31533f] px-5 text-sm font-bold text-white" data-testid="link-book-dashboard">Go to workspace <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/safety" className="inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#477254]" data-testid="link-book-safety"><ShieldCheck className="h-4 w-4" />Review safety plan</Link>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
   const spots = spotsQuery.data ?? [];
   return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href={`/companions/${companion.id}`} className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-back-profile"><ArrowLeft className="h-4 w-4" />Back to profile</Link><div className="mt-8 grid gap-10 lg:grid-cols-[1fr_340px]"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A thoughtful plan</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Book time with<br /><em>{companion.displayName}.</em></h1><p className="mt-4 max-w-lg text-sm leading-6 text-[#725e69]">Tell us the shape of your time together. We will confirm the price and keep the details clear for everyone.</p><form onSubmit={submit} className="mt-10 space-y-5" data-testid="form-booking"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">What would you like to do?</span><select required value={activity} onChange={(e) => setActivity(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-activity"><option value="">Choose an activity</option>{companion.activities.map((x) => <option key={x} value={x}>{x}</option>)}</select></label><div className="grid gap-5 sm:grid-cols-2"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Date</span><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-date" /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Start time</span><input required type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-time" /></label></div><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">How long?</span><select required value={duration} onChange={(e) => setDuration(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-duration"><option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Choose a SafeSpot in {companion.city}</span>{spotsQuery.isLoading ? <div className="skeleton h-12 rounded-xl" /> : spotsQuery.isError ? <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">SafeSpots are unavailable. Try again in a moment.</p> : spots.length === 0 ? <p className="rounded-xl border border-dashed border-[#cbbab5] p-3 text-xs text-[#806c76]">No public SafeSpots are listed for this area yet.</p> : <select required value={spot} onChange={(e) => setSpot(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-safe-spot"><option value="">Choose a public place</option>{spots.map((s: SafeSpot) => <option key={s.id} value={s.id}>{s.name} · {s.addressHint}{s.openLate ? ' · Open late' : ''}</option>)}</select>}</label><div className="flex items-start gap-2 rounded-xl bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />Your booking is only a request until your companion accepts. Exact details stay private.</div><Button type="submit" disabled={mutation.isPending || spots.length === 0} className="w-full sm:w-auto" testId="button-submit-booking">{mutation.isPending ? 'Pricing your request…' : 'Review server-priced request'} <ArrowRight className="h-4 w-4" /></Button>{mutation.isError && <p className="text-sm text-[#a64742]" data-testid="status-booking-error">We could not create this request. Please check the details and try again.</p>}</form></div><aside className="h-fit rounded-[24px] bg-[#3d2038] p-7 text-[#f9efe5] lg:sticky lg:top-28"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your companion</p><div className="mt-5 flex items-center gap-3"><Avatar companion={companion} /><div><p className="font-serif text-2xl">{companion.displayName}</p><p className="text-xs text-[#d3b6c4]">{companion.serviceArea}, {companion.city}</p></div></div><div className="mt-7 rounded-[16px] border border-[#65445d] bg-[#4a2842] p-5">{quoteQuery.isLoading ? <><div className="skeleton h-3 w-24 rounded-full opacity-30" /><div className="skeleton mt-3 h-8 w-32 rounded-full opacity-30" /><div className="skeleton mt-2 h-3 w-full rounded-full opacity-20" /></> : quote ? <><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[#c695ae]">Price estimate</p><div className="mt-4 space-y-2 text-xs text-[#d8c1cc]"><div className="flex items-center justify-between"><span>{duration} hr × {money(companion.hourlyRate * 100)}/hr</span><span>{money(quote.subtotalCents)}</span></div><div className="flex items-center justify-between text-[#b39dad]"><span>Safety &amp; service fee (5%)</span><span>+{money(quote.customerFeeCents)}</span></div></div><div className="my-3 border-t border-[#65445d]" /><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">You pay</span><span className="font-serif text-3xl text-[#f9efe5]" data-testid="value-quote-total">{money(quote.totalCents)}</span></div><p className="mt-1 text-right text-[10px] text-[#b39dad]">Companion receives {money(quote.companionPayoutCents)}</p><div className="mt-4 rounded-[10px] border border-[#8a4070] bg-[#5a2550] p-3"><div className="flex items-start gap-2"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#df9cbd]" /><p className="text-[10px] leading-4 text-[#dbc3cf]">Or pay a <strong className="text-[#f0c8dc]">$10 deposit</strong> to unlock chat first — credited toward your booking total.</p></div></div></> : <p className="text-xs text-[#b39dad]">Select a duration to see your price.</p>}</div><div className="mt-5 border-t border-[#65445d] pt-5"><p className="flex items-center gap-2 text-xs leading-5 text-[#d8c1cc]"><LockKeyhole className="h-4 w-4 text-[#df9cbd]" />All prices are calculated server-side. Your browser never sets amounts.</p></div></aside></div></main></Shell>;
 }
@@ -232,7 +666,29 @@ function QueueRow({ icon: Icon, title, count, href }: { icon: typeof ClipboardCh
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/explore" component={Explore} /><Route path="/companions/:id" component={Profile} /><Route path="/book" component={Book} /><Route path="/dashboard/customer"><Dashboard mode="customer" /></Route><Route path="/dashboard/companion"><Dashboard mode="companion" /></Route><Route path="/companion/apply" component={Apply} /><Route path="/login" component={Login} /><Route path="/safety" component={Safety} /><Route path="/privacy"><Legal kind="privacy" /></Route><Route path="/terms"><Legal kind="terms" /></Route><Route path="/cancellation"><Legal kind="cancellation" /></Route><Route path="/admin/login" component={AdminLogin} /><Route path="/admin/operations" component={AdminOperations} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return (
+    <ErrorBoundary resetKey={location}>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/explore" component={Explore} />
+        <Route path="/companions/:id" component={Profile} />
+        <Route path="/book" component={Book} />
+        <Route path="/favor/:id" component={FavorMode} />
+        <Route path="/favor" component={FavorMode} />
+        <Route path="/dashboard/customer"><Dashboard mode="customer" /></Route>
+        <Route path="/dashboard/companion"><Dashboard mode="companion" /></Route>
+        <Route path="/companion/apply" component={Apply} />
+        <Route path="/login" component={Login} />
+        <Route path="/safety" component={Safety} />
+        <Route path="/privacy"><Legal kind="privacy" /></Route>
+        <Route path="/terms"><Legal kind="terms" /></Route>
+        <Route path="/cancellation"><Legal kind="cancellation" /></Route>
+        <Route path="/admin/login" component={AdminLogin} />
+        <Route path="/admin/operations" component={AdminOperations} />
+        <Route component={NotFound} />
+      </Switch>
+    </ErrorBoundary>
+  );
 }
 
 function App() {
