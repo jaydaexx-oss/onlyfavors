@@ -6,7 +6,7 @@ import {
   CircleAlert, ClipboardCheck, Clock3, Coffee, Compass, EyeOff, FileText, Heart, HeartHandshake,
   KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
   Navigation2, PanelLeft, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
-  Sparkles, Star, Sunrise, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap,
+  Sparkles, Star, Sunrise, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap, Lock,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
@@ -1259,6 +1259,228 @@ function useBooking(id: string) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// In-booking chat
+// ---------------------------------------------------------------------------
+
+type ChatMessage = { id: string; bookingId: string; senderId: string; senderRole: string; body: string; createdAt: string };
+
+function useMessages(bookingId: string, enabled: boolean) {
+  return useQuery<ChatMessage[]>({
+    queryKey: ['messages', bookingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/messages`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+    retry: false,
+  });
+}
+
+function useSendMessage(bookingId: string) {
+  const qc = useQueryClient();
+  return useMutation<ChatMessage, Error, string>({
+    mutationFn: async (body) => {
+      const res = await fetch(`/api/bookings/${bookingId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to send');
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['messages', bookingId] }),
+  });
+}
+
+const CHAT_ENABLED_STATUSES = new Set(['deposit_paid', 'authorized', 'confirmed', 'completed']);
+
+function BookingChat({ bookingId, status }: { bookingId: string; status: string }) {
+  const enabled = CHAT_ENABLED_STATUSES.has(status);
+  const msgs = useMessages(bookingId, enabled);
+  const sendMessage = useSendMessage(bookingId);
+  const [input, setInput] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs.data?.length]);
+
+  const handleSend = () => {
+    const body = input.trim();
+    if (!body || sendMessage.isPending) return;
+    sendMessage.mutate(body, { onSuccess: () => setInput('') });
+  };
+
+  if (!enabled) {
+    return (
+      <div className="mt-6 rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-5 text-center">
+        <Lock className="mx-auto h-5 w-5 text-[#c6aeb8]" />
+        <p className="mt-2 text-sm font-semibold text-[#48213d]">Chat unlocks after deposit</p>
+        <p className="mt-1 text-xs text-[#806c76]">Pay the $10 deposit to open a private thread with your companion.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 overflow-hidden rounded-[20px] border border-[#dfd2c9] bg-white shadow-sm">
+      {/* Banner */}
+      <div className="flex items-center gap-2 border-b border-[#ece1d9] bg-[#fbf7f1] px-4 py-2.5">
+        <Lock className="h-3 w-3 shrink-0 text-[#9d557e]" />
+        <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Private · Phone numbers and emails are blocked</p>
+      </div>
+
+      {/* Thread */}
+      <div className="max-h-72 space-y-3 overflow-y-auto p-4">
+        {msgs.isLoading && <p className="py-4 text-center text-xs text-[#9b858e]">Loading…</p>}
+        {!msgs.isLoading && (msgs.data ?? []).length === 0 && (
+          <p className="py-6 text-center text-xs text-[#9b858e]">
+            No messages yet. Start the conversation — your companion will reply here.
+          </p>
+        )}
+        {(msgs.data ?? []).map((msg) => {
+          const isMe = msg.senderRole === 'customer';
+          return (
+            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[76%] rounded-[14px] px-3.5 py-2.5 ${isMe ? 'bg-[#7f2e62] text-white' : 'bg-[#e8f0e8] text-[#31533f]'}`}>
+                <p className="text-sm leading-5">{msg.body}</p>
+                <p className={`mt-0.5 text-[9px] ${isMe ? 'text-[#e2b3c9]' : 'text-[#63816a]'}`}>
+                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {' · '}{isMe ? 'You' : 'Companion'}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="flex items-center gap-2 border-t border-[#ece1d9] p-3">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+          placeholder="Send a message…"
+          maxLength={500}
+          disabled={status === 'completed' || status === 'cancelled'}
+          className="flex-1 rounded-full border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-2 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none disabled:opacity-50"
+          data-testid="input-chat-message"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!input.trim() || sendMessage.isPending || status === 'completed' || status === 'cancelled'}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#7f2e62] text-white transition hover:bg-[#9d3a78] disabled:opacity-40"
+          data-testid="button-send-message"
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+      {sendMessage.isError && (
+        <p className="border-t border-[#ece1d9] px-4 pb-3 text-[10px] text-[#a64742]">Failed to send. Try again.</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Customer booking list
+// ---------------------------------------------------------------------------
+
+function useCustomerBookings() {
+  return useQuery<BookingDetail[]>({
+    queryKey: ['customer-bookings'],
+    queryFn: async () => {
+      const res = await fetch('/api/bookings');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    retry: false,
+    refetchInterval: 30_000,
+  });
+}
+
+function CustomerBookingList() {
+  const { data, isLoading, refetch } = useCustomerBookings();
+  const active = (data ?? []).filter((b) => !['completed', 'cancelled'].includes(b.status));
+  const past   = (data ?? []).filter((b) =>  ['completed', 'cancelled'].includes(b.status)).slice(0, 3);
+
+  const STATUS_PILL: Record<string, string> = {
+    requested: 'bg-[#f3ead7] text-[#7a5a12]',
+    deposit_paid: 'bg-[#ead0dd] text-[#7f2e62]',
+    authorized: 'bg-[#e8f0e8] text-[#31533f]',
+    confirmed: 'bg-[#dce8f5] text-[#2a5280]',
+    completed: 'bg-[#ece1d9] text-[#725e69]',
+    cancelled: 'bg-[#ece1d9] text-[#9b858e]',
+  };
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Your bookings</p>
+        <button type="button" onClick={() => refetch()} className="flex items-center gap-1 text-[10px] text-[#9b858e] hover:text-[#7f2e62]">
+          <RefreshCw className="h-3 w-3" />Refresh
+        </button>
+      </div>
+
+      {isLoading && <div className="space-y-3">{[0,1].map(i => <div key={i} className="skeleton h-16 rounded-[16px]" />)}</div>}
+
+      {!isLoading && active.length === 0 && past.length === 0 && (
+        <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-8 text-center">
+          <CalendarDays className="mx-auto h-7 w-7 text-[#c6aeb8]" />
+          <p className="mt-3 font-serif text-xl text-[#48213d]">No bookings yet.</p>
+          <p className="mt-1 text-xs text-[#806c76]">When you book a companion, your requests and confirmed plans appear here.</p>
+          <Link href="/explore" className="mt-4 inline-flex h-9 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-customer-explore">
+            Browse companions <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
+      {active.length > 0 && (
+        <div className="space-y-2">
+          {active.map((b) => (
+            <Link key={b.id} href={`/booking/${b.id}`}
+              className="flex items-center gap-4 rounded-[16px] border border-[#dfd2c9] bg-white px-4 py-3 transition hover:border-[#9d557e] hover:shadow-sm"
+              data-testid={`booking-row-${b.id}`}>
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-sm font-semibold text-[#48213d]">{b.activity}</p>
+                <p className="text-[10px] text-[#9b858e]">{b.date} · {b.startTime} · {b.durationHours}h</p>
+              </div>
+              <span className={cn('shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[.12em]', STATUS_PILL[b.status] ?? 'bg-[#ece1d9] text-[#725e69]')}>
+                {b.status.replace('_', ' ')}
+              </span>
+              <span className="shrink-0 font-mono text-sm text-[#48213d]">{money(b.totalCents)}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-[#b0929f]" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div className="mt-5">
+          <p className="mb-2 font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">Recent</p>
+          <div className="space-y-1.5">
+            {past.map((b) => (
+              <Link key={b.id} href={`/booking/${b.id}`}
+                className="flex items-center gap-3 rounded-[12px] border border-[#ece1d9] px-4 py-2.5 transition hover:border-[#dfd2c9]">
+                <p className="flex-1 truncate text-xs font-medium text-[#725e69]">{b.activity}</p>
+                <p className="text-[10px] text-[#9b858e]">{b.date}</p>
+                <span className={cn('rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[.1em]', STATUS_PILL[b.status] ?? 'bg-[#ece1d9] text-[#725e69]')}>
+                  {b.status}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const { label, tone } = STATUS_LABEL[status] ?? { label: status, tone: 'gray' };
   const cls = { green: 'bg-[#e8f0e8] text-[#31533f]', amber: 'bg-[#f3ead7] text-[#7a5a12]', plum: 'bg-[#ead0dd] text-[#7f2e62]', gray: 'bg-[#f0e4db] text-[#725e69]' }[tone];
@@ -1362,6 +1584,8 @@ function BookingStatus() {
             </Link>
           </div>
         </div>
+
+        <BookingChat bookingId={b.id} status={b.status} />
       </main>
     </Shell>
   );
@@ -1468,7 +1692,7 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
     : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Profile views', value: companion.data?.profileViews ?? 0, icon: EyeOff }];
   const hasData = stats.some((x) => x.value !== 0 && x.value !== '$0.00');
   const stripeReturn = typeof window !== 'undefined' && window.location.search.includes('stripe=return');
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
+  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{isCustomer && <CustomerBookingList />}{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
 }
 
 function Apply() {

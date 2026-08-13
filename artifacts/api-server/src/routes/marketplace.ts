@@ -10,7 +10,7 @@ import {
   ListCompanionsQueryParams,
   ListSafeSpotsQueryParams,
 } from "@workspace/api-zod";
-import { db, bookings, favorRequests } from "@workspace/db";
+import { db, bookings, favorRequests, messages } from "@workspace/db";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getApprovedCompanion,
@@ -596,6 +596,100 @@ router.get("/dashboard/companion", async (req, res) => {
     }
     req.log.error({ err }, "Unable to load companion dashboard");
     res.status(503).json({ error: "Dashboard temporarily unavailable" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// In-booking messages — one thread per booking, gated behind deposit
+// ---------------------------------------------------------------------------
+
+/** Dev in-memory message store — replaced by DB writes once Supabase is live */
+type DevMessage = { id: string; bookingId: string; senderId: string; senderRole: string; body: string; createdAt: string };
+const devMessages = new Map<string, DevMessage[]>();
+
+/** Strip phone numbers and email addresses to prevent off-platform contact */
+function maskBody(body: string): string {
+  return body
+    .replace(/(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, "[number removed]")
+    .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, "[email removed]");
+}
+
+const CHAT_STATUSES = ["deposit_paid", "authorized", "confirmed", "completed"];
+
+router.get("/bookings/:id/messages", async (req, res) => {
+  const { id } = req.params;
+  const userId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== userId && booking.companionId !== userId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!CHAT_STATUSES.includes(booking.status)) {
+      res.status(403).json({ error: "Chat unlocks after deposit is paid" }); return;
+    }
+    // Try DB first, fall back to in-memory for dev
+    try {
+      const rows = await db.select().from(messages).where(eq(messages.bookingId, id));
+      res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
+    } catch (err: any) {
+      if (isMissingTableError(err)) { res.json(devMessages.get(id) ?? []); return; }
+      throw err;
+    }
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.json(devMessages.get(id) ?? []); return; }
+    req.log.error({ err }, "Failed to load messages");
+    res.status(503).json({ error: "Messages temporarily unavailable" });
+  }
+});
+
+router.post("/bookings/:id/messages", async (req, res) => {
+  const { id } = req.params;
+  const userId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const rawBody = String(req.body?.body ?? "").trim();
+  if (!rawBody) { res.status(400).json({ error: "Message body is required" }); return; }
+  if (rawBody.length > 500) { res.status(400).json({ error: "Message exceeds 500 characters" }); return; }
+  const body = maskBody(rawBody);
+
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== userId && booking.companionId !== userId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!CHAT_STATUSES.includes(booking.status)) {
+      res.status(403).json({ error: "Chat unlocks after deposit is paid" }); return;
+    }
+    const senderRole = booking.companionId === userId ? "companion" : "customer";
+
+    try {
+      const [msg] = await db.insert(messages).values({ bookingId: id, senderId: userId, senderRole, body }).returning();
+      res.status(201).json({ ...msg, createdAt: msg.createdAt.toISOString() });
+    } catch (err: any) {
+      if (isMissingTableError(err)) {
+        // Dev fallback — store in memory
+        const msg: DevMessage = { id: crypto.randomUUID(), bookingId: id, senderId: userId, senderRole, body, createdAt: new Date().toISOString() };
+        if (!devMessages.has(id)) devMessages.set(id, []);
+        devMessages.get(id)!.push(msg);
+        res.status(201).json(msg); return;
+      }
+      throw err;
+    }
+  } catch (err: any) {
+    if (isMissingTableError(err)) {
+      const msg: DevMessage = { id: crypto.randomUUID(), bookingId: id, senderId: "dev-preview-customer", senderRole: "customer", body, createdAt: new Date().toISOString() };
+      if (!devMessages.has(id)) devMessages.set(id, []);
+      devMessages.get(id)!.push(msg);
+      res.status(201).json(msg); return;
+    }
+    req.log.error({ err }, "Failed to send message");
+    res.status(503).json({ error: "Could not send message" });
   }
 });
 
