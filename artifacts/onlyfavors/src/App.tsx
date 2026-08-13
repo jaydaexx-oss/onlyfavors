@@ -2,11 +2,11 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef
 import { loadStripe, type Stripe as StripeType } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import {
-  ArrowLeft, ArrowRight, BadgeCheck, CalendarDays, Check, ChevronDown, ChevronRight,
+  AlertTriangle, ArrowLeft, ArrowRight, BadgeCheck, Bell, CalendarDays, Check, ChevronDown, ChevronRight,
   CircleAlert, ClipboardCheck, Clock3, Compass, EyeOff, FileText, Heart, HeartHandshake,
   KeyRound, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
   Navigation2, PanelLeft, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
-  Sparkles, Star, UsersRound, WalletCards, X, Zap,
+  Sparkles, Star, UserPlus, Users, UsersRound, WalletCards, X, Zap,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
@@ -575,6 +575,215 @@ function CheckoutModal({ clientSecret, amountCents, label, onSuccess, onClose }:
 }
 
 // ---------------------------------------------------------------------------
+// Trust Circle — safety net contacts
+// ---------------------------------------------------------------------------
+
+type TrustContact = { id: string; name: string; phone: string; relation: string };
+
+function useTrustCircle() {
+  const [contacts, setContacts] = useState<TrustContact[]>(() => {
+    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
+    catch { return []; }
+  });
+  const add = useCallback((c: Omit<TrustContact, 'id'>) => {
+    setContacts((prev) => {
+      const next = [...prev, { ...c, id: crypto.randomUUID() }].slice(0, 3);
+      try { localStorage.setItem('of_trust_circle', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+  const remove = useCallback((id: string) => {
+    setContacts((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      try { localStorage.setItem('of_trust_circle', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+  return { contacts, add, remove };
+}
+
+/** Inline panel shown on the booking confirmation screen. */
+function TrustCircleBookingPanel() {
+  const [contacts] = useState<TrustContact[]>(() => {
+    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
+    catch { return []; }
+  });
+  const hasContacts = contacts.length > 0;
+  return (
+    <div className={`rounded-[16px] p-4 ${hasContacts ? 'bg-[#e8f0e8]' : 'bg-[#f3ead7]'}`}>
+      <div className="flex items-center justify-between">
+        <p className={`flex items-center gap-2 text-xs font-bold ${hasContacts ? 'text-[#31533f]' : 'text-[#7a5a12]'}`}>
+          <Users className="h-3.5 w-3.5" />Trust Circle
+          <span className="font-normal">{hasContacts ? '· active on this booking' : '· no contacts yet'}</span>
+        </p>
+        <Link href="/trust-circle"
+          className={`text-[10px] font-bold underline ${hasContacts ? 'text-[#477254]' : 'text-[#7f2e62]'}`}
+          data-testid="link-manage-trust-circle">
+          {hasContacts ? 'Manage' : 'Add contacts'}
+        </Link>
+      </div>
+      {hasContacts ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {contacts.map((c) => (
+            <span key={c.id} className="flex items-center gap-1.5 rounded-full bg-white/60 px-3 py-1 text-[11px] font-semibold text-[#31533f]">
+              <span className="grid h-4 w-4 place-items-center rounded-full bg-[#c5d8c8] font-mono text-[8px] font-bold">{c.name[0]}</span>
+              {c.name.split(' ')[0]}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-[10px] leading-4 text-[#7a5a12]">
+          Your Trust Circle is notified when the favor starts. Add at least one contact for a safer booking.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TrustCircleSetup() {
+  const { contacts, add, remove } = useTrustCircle();
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [relation, setRelation] = useState('Friend');
+  const [addedName, setAddedName] = useState<string | null>(null);
+
+  const handleAdd = (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !phone.trim() || contacts.length >= 3) return;
+    add({ name: name.trim(), phone: phone.trim(), relation });
+    setAddedName(name.trim());
+    setName(''); setPhone(''); setRelation('Friend');
+    setTimeout(() => setAddedName(null), 3500);
+  };
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-2xl px-5 py-14 lg:px-8 lg:py-20">
+        <Link href="/dashboard/customer" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-trust-back">
+          <ArrowLeft className="h-4 w-4" />Back to workspace
+        </Link>
+
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <div className="grid h-12 w-12 place-items-center rounded-[16px] bg-[#ead0dd] text-[#7f2e62]">
+            <Users className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Safety network</p>
+            <h1 className="font-serif text-4xl leading-none text-[#48213d]">Trust Circle</h1>
+          </div>
+        </div>
+        <p className="mt-5 max-w-lg text-sm leading-7 text-[#725e69]">
+          Add up to 3 people who care about you. They get a quiet notification when your favor begins and an alert if you miss a check-in. No booking details are ever shared with them.
+        </p>
+
+        {/* Contact list */}
+        {contacts.length > 0 && (
+          <div className="mt-8 space-y-3">
+            <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Your contacts ({contacts.length}/3)</p>
+            {contacts.map((c) => (
+              <div key={c.id} className="flex items-center gap-4 rounded-[20px] border border-[#dfd2c9] bg-white p-5">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-xl text-[#7f2e62]">
+                  {c.name[0]}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-[#48213d]">{c.name}</p>
+                  <p className="text-xs text-[#806c76]">{c.relation} · {c.phone}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="hidden items-center gap-1 text-[10px] font-bold text-[#477254] sm:flex">
+                    <Check className="h-3 w-3" />Active
+                  </span>
+                  <button type="button" onClick={() => remove(c.id)}
+                    className="grid h-8 w-8 place-items-center rounded-full text-[#9b858e] transition hover:bg-[#f0e4db] hover:text-[#7f2e62]"
+                    data-testid={`button-remove-contact-${c.id}`} aria-label="Remove">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {contacts.length === 0 && (
+          <div className="mt-8 rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-10 text-center">
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[#f0e4db] text-[#9b6b88]">
+              <Users className="h-7 w-7" />
+            </div>
+            <p className="mt-5 font-serif text-2xl text-[#48213d]">No one is watching yet.</p>
+            <p className="mt-2 text-sm text-[#725e69]">Add at least one contact before your first booking to activate the safety net.</p>
+          </div>
+        )}
+
+        {/* Add form */}
+        {contacts.length < 3 && (
+          <form onSubmit={handleAdd} className="mt-6 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
+            <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Add a contact</p>
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Name</span>
+                <input required value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="Alex Chen"
+                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-white px-4 text-sm outline-none focus:border-[#7f2e62]"
+                  data-testid="input-trust-name" />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Phone number</span>
+                <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 (808) 555-0123"
+                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-white px-4 text-sm outline-none focus:border-[#7f2e62]"
+                  data-testid="input-trust-phone" />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Relationship</span>
+                <select value={relation} onChange={(e) => setRelation(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-white px-4 text-sm text-[#654c5f] outline-none focus:border-[#7f2e62]"
+                  data-testid="select-trust-relation">
+                  {['Friend', 'Family', 'Partner', 'Colleague', 'Other'].map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </label>
+              <Button type="submit" variant="primary" className="w-full" testId="button-add-trust-contact">
+                <UserPlus className="h-4 w-4" />Add to Trust Circle
+              </Button>
+              {addedName && (
+                <p className="flex items-center gap-2 text-xs font-bold text-[#477254]">
+                  <Check className="h-3.5 w-3.5" />{addedName} added to your Trust Circle
+                </p>
+              )}
+            </div>
+          </form>
+        )}
+
+        {contacts.length >= 3 && (
+          <div className="mt-4 flex items-center gap-2 rounded-[14px] bg-[#e8f0e8] px-4 py-3 text-xs font-semibold text-[#31533f]">
+            <Check className="h-4 w-4" />Trust Circle is full — three contacts is the maximum.
+          </div>
+        )}
+
+        {/* How it works */}
+        <div className="mt-8 grid gap-5 rounded-[20px] bg-[#f0e4db] p-6 sm:grid-cols-3">
+          {([
+            { icon: Bell, label: 'Favor starts', desc: 'A quiet text goes out — no companion name, route, or booking details shared' },
+            { icon: Clock3, label: 'Hourly check-in', desc: 'You tap "I\'m safe" and they see your status update without location data' },
+            { icon: AlertTriangle, label: 'Missed check-in', desc: 'An alert fires automatically if you don\'t respond within the agreed window' },
+          ] as { icon: typeof Bell; label: string; desc: string }[]).map(({ icon: Icon, label, desc }) => (
+            <div key={label}>
+              <Icon className="h-4 w-4 text-[#9b6b88]" />
+              <p className="mt-3 text-xs font-bold text-[#48213d]">{label}</p>
+              <p className="mt-1 text-[10px] leading-5 text-[#725e69]">{desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-6 text-[10px] leading-5 text-[#a38c95]">
+          Contacts only know you are at a verified public venue. No names, routes, or companion details are shared. Contacts can opt out of notifications at any time.
+        </p>
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Boundary Receipt — mutual consent before payment
 // ---------------------------------------------------------------------------
 
@@ -757,8 +966,13 @@ function Book() {
             </div>
             <div className="flex items-center justify-between text-xs text-[#688370]"><span>Companion receives</span><span>{money(created.companionPayoutCents)}</span></div>
           </div>
+          {/* Trust Circle */}
+          <div className="mt-6">
+            <TrustCircleBookingPanel />
+          </div>
+
           {/* Payment actions */}
-          <div className="mt-6 space-y-3">
+          <div className="mt-4 space-y-3">
             <p className="text-xs font-bold text-[#53725d]">How would you like to proceed?</p>
             <button onClick={openDeposit} disabled={depositMutation.isPending}
               className="flex w-full items-center justify-between rounded-[16px] border border-[#c7d9cb] bg-white p-4 text-left hover:border-[#7f2e62] disabled:opacity-50"
@@ -1122,6 +1336,7 @@ function Router() {
         <Route path="/terms"><Legal kind="terms" /></Route>
         <Route path="/cancellation"><Legal kind="cancellation" /></Route>
         <Route path="/booking/:id" component={BookingStatus} />
+        <Route path="/trust-circle" component={TrustCircleSetup} />
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/operations" component={AdminOperations} />
         <Route component={NotFound} />

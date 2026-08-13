@@ -32,9 +32,10 @@ const DEMO = {
   companion: { name: 'Leilani K.', activity: 'Evening walk & coffee', city: 'Waikīkī' },
   venue: { name: 'The Surfjack Hotel Café', hint: 'Pool deck entrance, ask for the OF table' },
   totalMinutes: 120,
-  trustContacts: [{ name: 'Sarah M.', relation: 'Best friend', watching: true }],
   boundaries: ['Platonic only', 'No photography without asking', 'Public spaces only'],
 };
+
+type TrustContact = { id: string; name: string; phone: string; relation: string };
 
 export default function FavorMode() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +46,12 @@ export default function FavorMode() {
     const t = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Trust Circle — read from localStorage (persisted by TrustCircleSetup page)
+  const [trustContacts] = useState<TrustContact[]>(() => {
+    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
+    catch { return []; }
+  });
 
   // Safety state
   const [checkedIn, setCheckedIn] = useState(false);
@@ -190,26 +197,39 @@ export default function FavorMode() {
         <div className="rounded-[20px] bg-[#2d1228] p-5">
           <div className="flex items-center justify-between">
             <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Trust Circle</p>
-            <span className="flex items-center gap-1 text-[10px] text-[#3dbd8c]">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#3dbd8c]" />
-              Watching
-            </span>
+            {trustContacts.length > 0 ? (
+              <span className="flex items-center gap-1 text-[10px] text-[#3dbd8c]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#3dbd8c]" />
+                Watching
+              </span>
+            ) : (
+              <a href="/trust-circle" className="text-[10px] font-bold text-[#df9cbd] underline">Add contacts</a>
+            )}
           </div>
-          {DEMO.trustContacts.map((contact) => (
-            <div key={contact.name} className="mt-4 flex items-center gap-3">
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-[#4a2842] text-sm font-bold text-[#c695ae]">
-                {contact.name[0]}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-[#f9efe5]">{contact.name}</p>
-                <p className="text-[10px] text-[#d9c4cf]">{contact.relation}</p>
-              </div>
-              <Users className="h-4 w-4 text-[#3dbd8c]" />
+          {trustContacts.length > 0 ? (
+            <>
+              {trustContacts.map((contact) => (
+                <div key={contact.id} className="mt-4 flex items-center gap-3">
+                  <div className="grid h-9 w-9 place-items-center rounded-full bg-[#4a2842] font-serif text-sm font-bold text-[#c695ae]">
+                    {contact.name[0]}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#f9efe5]">{contact.name}</p>
+                    <p className="text-[10px] text-[#d9c4cf]">{contact.relation} · {contact.phone}</p>
+                  </div>
+                  <Users className="h-4 w-4 text-[#3dbd8c]" />
+                </div>
+              ))}
+              <p className="mt-4 text-[10px] leading-5 text-[#9d7e8e]">
+                They receive check-in updates. A missed check-in alert fires automatically if you don't respond.
+              </p>
+            </>
+          ) : (
+            <div className="mt-4 rounded-[12px] border border-[#4a2040] p-4 text-center">
+              <p className="text-xs text-[#d9c4cf]">No Trust Circle set up yet.</p>
+              <p className="mt-1 text-[10px] text-[#9d7e8e]">Add trusted contacts before your next booking for automatic safety check-ins.</p>
             </div>
-          ))}
-          <p className="mt-4 text-[10px] leading-5 text-[#9d7e8e]">
-            They receive check-in updates. A missed check-in alert will go out automatically if you don't respond.
-          </p>
+          )}
         </div>
 
         {/* Boundaries summary */}
