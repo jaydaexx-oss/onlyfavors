@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "OnlyFavors"
+description = "A privacy-first marketplace for adults to book verified local companions for platonic activities, with clear safety boundaries, approximate locations, secure booking, and trust-focused operations."
+version = "1.0.0"
+id = "artifacts/onlyfavors"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23212
+
+[services.development]
+run = "pnpm --filter @workspace/onlyfavors run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/onlyfavors", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/onlyfavors/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23212"
+BASE_PATH = "/"

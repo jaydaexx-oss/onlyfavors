@@ -1,0 +1,1 @@
+- [OnlyFavors production boundaries](onlyfavors-production-boundaries.md) — public discovery must fail closed until approved Supabase records and privacy-safe fields exist.

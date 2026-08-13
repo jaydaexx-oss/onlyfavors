@@ -10,6 +10,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: discovery
+    description: Public companion discovery
+  - name: dashboards
+    description: Authenticated user workspace summaries
+  - name: safety
+    description: Safety resources and SafeSpots
+  - name: bookings
+    description: Booking lifecycle
 paths:
   /healthz:
     get:
@@ -24,6 +32,149 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /companions:
+    get:
+      operationId: listCompanions
+      tags: [discovery]
+      summary: List approved companions
+      description: Returns approved companions using privacy-safe approximate areas only.
+      parameters:
+        - in: query
+          name: city
+          schema:
+            type: string
+        - in: query
+          name: activity
+          schema:
+            type: string
+        - in: query
+          name: language
+          schema:
+            type: string
+        - in: query
+          name: maxRate
+          schema:
+            type: number
+        - in: query
+          name: instantBook
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Approved companion results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Companion"
+  /companions/{id}:
+    get:
+      operationId: getCompanion
+      tags: [discovery]
+      summary: Get a companion profile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Companion profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Companion"
+        "404":
+          description: Companion not found
+  /dashboard/customer:
+    get:
+      operationId: getCustomerDashboard
+      tags: [dashboards]
+      summary: Get the authenticated customer's dashboard summary
+      responses:
+        "200":
+          description: Customer dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerDashboard"
+  /dashboard/companion:
+    get:
+      operationId: getCompanionDashboard
+      tags: [dashboards]
+      summary: Get the authenticated companion's dashboard summary
+      responses:
+        "200":
+          description: Companion dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionDashboard"
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [dashboards]
+      summary: Get live admin operations overview
+      responses:
+        "200":
+          description: Admin overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+  /safety:
+    get:
+      operationId: getSafetyResources
+      tags: [safety]
+      summary: Get safety center resources
+      responses:
+        "200":
+          description: Safety resources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyResources"
+  /safespots:
+    get:
+      operationId: listSafeSpots
+      tags: [safety]
+      summary: List public SafeSpots for a city
+      parameters:
+        - in: query
+          name: city
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SafeSpot results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SafeSpot"
+  /bookings:
+    post:
+      operationId: createBookingIntent
+      tags: [bookings]
+      summary: Create a server-priced booking intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingInput"
+      responses:
+        "201":
+          description: Booking intent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "401":
+          description: Authentication required
 components:
   schemas:
     HealthStatus:
@@ -33,4 +184,154 @@ components:
           type: string
       required:
         - status
+    Companion:
+      type: object
+      required:
+        - id
+        - displayName
+        - city
+        - serviceArea
+        - activities
+        - languages
+        - hourlyRate
+        - responseTime
+        - rating
+        - reviewCount
+        - verified
+        - instantBook
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        city:
+          type: string
+        serviceArea:
+          type: string
+          description: Approximate area, never an exact address
+        activities:
+          type: array
+          items:
+            type: string
+        languages:
+          type: array
+          items:
+            type: string
+        hourlyRate:
+          type: number
+        responseTime:
+          type: string
+        rating:
+          type: number
+        reviewCount:
+          type: number
+          description: Whole-number review count
+        verified:
+          type: boolean
+        instantBook:
+          type: boolean
+        biography:
+          type: ["string", "null"]
+        boundaries:
+          type: array
+          items:
+            type: string
+        photoUrl:
+          type: ["string", "null"]
+    CustomerDashboard:
+      type: object
+      required: [upcomingBookings, completedBookings, savedCompanions, safetyPlans]
+      properties:
+        upcomingBookings:
+          type: number
+        completedBookings:
+          type: number
+        savedCompanions:
+          type: number
+        safetyPlans:
+          type: number
+    CompanionDashboard:
+      type: object
+      required: [pendingRequests, upcomingBookings, earningsCents, profileViews]
+      properties:
+        pendingRequests:
+          type: number
+        upcomingBookings:
+          type: number
+        earningsCents:
+          type: number
+        profileViews:
+          type: number
+    AdminOverview:
+      type: object
+      required: [verificationQueue, openReports, activeBookings, checkInsDue]
+      properties:
+        verificationQueue:
+          type: number
+        openReports:
+          type: number
+        activeBookings:
+          type: number
+        checkInsDue:
+          type: number
+    SafetyResources:
+      type: object
+      required: [title, emergencyGuidance, principles]
+      properties:
+        title:
+          type: string
+        emergencyGuidance:
+          type: string
+        principles:
+          type: array
+          items:
+            type: string
+    SafeSpot:
+      type: object
+      required: [id, name, category, city, addressHint, openLate]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        city:
+          type: string
+        addressHint:
+          type: string
+        openLate:
+          type: boolean
+    BookingInput:
+      type: object
+      required: [companionId, activity, date, startTime, durationHours, safeSpotId]
+      properties:
+        companionId:
+          type: string
+        activity:
+          type: string
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+        durationHours:
+          type: number
+        safeSpotId:
+          type: string
+    Booking:
+      type: object
+      required: [id, status, subtotalCents, platformFeeCents, totalCents]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [draft, requested, authorized, confirmed, cancelled]
+        subtotalCents:
+          type: number
+        platformFeeCents:
+          type: number
+        totalCents:
+          type: number
 

@@ -1,6 +1,6 @@
-# [Project name]
+# OnlyFavors
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+OnlyFavors is a privacy-first marketplace for booking verified local companions for platonic activities with clear safety boundaries.
 
 ## Run & Operate
 
@@ -22,23 +22,32 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/onlyfavors/` — the responsive React + Vite product experience and all user-facing routes.
+- `artifacts/api-server/src/routes/marketplace.ts` — fail-closed API boundary for discovery, safety resources, dashboards, and booking intents.
+- `artifacts/api-server/src/lib/supabase.ts` — server-only Supabase REST access using the connected Replit connector.
+- `lib/api-spec/openapi.yaml` — source of truth for generated API hooks and validation schemas.
+- `lib/db/src/schema/` — reserved for application persistence when the production schema is established.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Public companion discovery exposes only approved records and approximate service areas.
+- Unauthenticated dashboards and booking intents fail closed; they never return invented operational data.
+- Safety guidance is available publicly, while operational records and exact locations stay behind protected server boundaries.
+- The frontend uses generated API hooks from the OpenAPI contract rather than hand-written request types.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The first milestone includes the public home, companion discovery, profile and booking entry points, customer and companion workspaces, companion application, email-code login entry, safety center, policy pages, admin login, and protected operations route. The experience uses warm parchment, mulberry, and trust-green cues to communicate privacy and care without resembling a dating app or classifieds site.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the product clearly platonic and safety-forward.
+- Never invent companion profiles, operational metrics, or locations when connected data is empty or unavailable.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- OnlyFavors expects the connected Supabase project to expose approved `companion_profiles` and active `safespots` REST resources before discovery can serve records.
+- Stripe Connect, OTP authorization, RLS, and the full application schema remain follow-up production work; do not present the current preview as payment-ready.
 
 ## Pointers
 
