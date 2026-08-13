@@ -1829,15 +1829,314 @@ function AdminLogin() {
 }
 
 function AdminOperations() {
-  const query = useGetAdminOverview({ query: { queryKey: getGetAdminOverviewQueryKey() } }); const data = query.data;
-  if (query.isLoading) return <Shell><main className="mx-auto max-w-7xl px-5 py-16 lg:px-8"><LoadingState label="Loading operations overview" /></main></Shell>;
-  if (query.isError) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => query.refetch()} /></main></Shell>;
-  const metrics = [{ label: 'Verification queue', value: data?.verificationQueue ?? 0, icon: ClipboardCheck, tone: 'plum' }, { label: 'Open reports', value: data?.openReports ?? 0, icon: CircleAlert, tone: 'rose' }, { label: 'Active bookings', value: data?.activeBookings ?? 0, icon: CalendarDays, tone: 'green' }, { label: 'Check-ins due', value: data?.checkInsDue ?? 0, icon: Clock3, tone: 'gold' }];
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-10 lg:px-8 lg:py-14"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]"><PanelLeft className="h-4 w-4" />Trust operations</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">The quiet work<br /><em>behind good company.</em></h1></div><Button variant="outline" onClick={() => query.refetch()} testId="button-refresh-operations"><RefreshCw className="h-4 w-4" />Refresh overview</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon, tone }) => <div key={label} className={cn('rounded-2xl p-5', tone === 'rose' ? 'bg-[#fbebe7]' : tone === 'green' ? 'bg-[#e8f0e8]' : tone === 'gold' ? 'bg-[#f3ead7]' : 'bg-[#ead0dd]')}><Icon className={cn('h-5 w-5', tone === 'rose' ? 'text-[#a64742]' : tone === 'green' ? 'text-[#477254]' : tone === 'gold' ? 'text-[#9a6d25]' : 'text-[#7f2e62]')} /><p className="mt-8 font-serif text-4xl text-[#48213d]" data-testid={`admin-value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-bold text-[#725e69]">{label}</p></div>)}</div><div className="mt-8 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Live queue</p><h2 className="mt-2 font-serif text-3xl text-[#48213d]">What needs a human?</h2></div><span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#477254]"><span className="h-2 w-2 rounded-full bg-[#6f9a79]" />Live</span></div><div className="mt-7 space-y-2"><QueueRow icon={ClipboardCheck} title="Companion verification" count={data?.verificationQueue ?? 0} href="/companion/apply" /><QueueRow icon={CircleAlert} title="Safety reports" count={data?.openReports ?? 0} href="/safety" /><QueueRow icon={Clock3} title="Check-ins due" count={data?.checkInsDue ?? 0} href="/safety" /></div></div><div className="rounded-[22px] bg-[#3d2038] p-7 text-[#f9efe5]"><ShieldCheck className="h-6 w-6 text-[#d897b6]" /><h2 className="mt-12 font-serif text-3xl leading-none">Review with care.</h2><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">Every number here represents a person waiting for a considered response. Leave an audit note whenever you make a decision.</p><button type="button" onClick={() => window.alert('Audit log is ready for your next review.')} className="mt-6 inline-flex items-center gap-2 text-xs font-bold text-[#e2b3c9]" data-testid="button-open-audit-log">Open audit log <ArrowRight className="h-3.5 w-3.5" /></button></div></div></main></Shell>;
+  const overview = useGetAdminOverview({ query: { queryKey: getGetAdminOverviewQueryKey(), retry: false } });
+  const companions = useAdminCompanions();
+  const bookings_ = useAdminBookings();
+  const data = overview.data;
+
+  const metrics = [
+    { label: 'Verification queue', value: data?.verificationQueue ?? 0, icon: ClipboardCheck, tone: 'plum' },
+    { label: 'Open reports',       value: data?.openReports ?? 0,       icon: CircleAlert,   tone: 'rose'  },
+    { label: 'Active bookings',    value: data?.activeBookings ?? 0,    icon: CalendarDays,  tone: 'green' },
+    { label: 'Check-ins due',      value: data?.checkInsDue ?? 0,       icon: Clock3,        tone: 'gold'  },
+  ];
+
+  const refetchAll = () => { overview.refetch(); companions.refetch(); bookings_.refetch(); };
+
+  const STATUS_STYLE: Record<string, string> = {
+    requested: 'bg-[#f0e4db] text-[#7f5042]', deposit_paid: 'bg-[#f3ead7] text-[#7a5a12]',
+    authorized: 'bg-[#e8f0e8] text-[#31533f]', confirmed: 'bg-[#dce8f5] text-[#2a5280]',
+    completed: 'bg-[#ece1d9] text-[#654c5f]', cancelled: 'bg-[#ece1d9] text-[#9b858e]',
+  };
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-7xl px-5 py-10 lg:px-8 lg:py-14">
+
+        {/* Header */}
+        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+          <div>
+            <p className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">
+              <PanelLeft className="h-4 w-4" />Trust operations
+            </p>
+            <h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">
+              The quiet work<br /><em>behind good company.</em>
+            </h1>
+          </div>
+          <Button variant="outline" onClick={refetchAll} testId="button-refresh-operations">
+            <RefreshCw className="h-4 w-4" />Refresh
+          </Button>
+        </div>
+
+        {/* Stat cards */}
+        <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {metrics.map(({ label, value, icon: Icon, tone }) => (
+            <div key={label} className={cn('rounded-2xl p-5', tone === 'rose' ? 'bg-[#fbebe7]' : tone === 'green' ? 'bg-[#e8f0e8]' : tone === 'gold' ? 'bg-[#f3ead7]' : 'bg-[#ead0dd]')}>
+              <Icon className={cn('h-5 w-5', tone === 'rose' ? 'text-[#a64742]' : tone === 'green' ? 'text-[#477254]' : tone === 'gold' ? 'text-[#9a6d25]' : 'text-[#7f2e62]')} />
+              <p className="mt-8 font-serif text-4xl text-[#48213d]" data-testid={`admin-value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p>
+              <p className="mt-1 text-xs font-bold text-[#725e69]">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Live queue + Review card */}
+        <div className="mt-8 grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
+          <div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Live queue</p>
+                <h2 className="mt-2 font-serif text-3xl text-[#48213d]">What needs a human?</h2>
+              </div>
+              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#477254]">
+                <span className="h-2 w-2 rounded-full bg-[#6f9a79]" />Live
+              </span>
+            </div>
+            <div className="mt-7 space-y-2">
+              <QueueRow icon={ClipboardCheck} title="Companion verification" count={data?.verificationQueue ?? 0} href="#companion-review" />
+              <QueueRow icon={CircleAlert}   title="Safety reports"          count={data?.openReports ?? 0}       href="/safety" />
+              <QueueRow icon={Clock3}         title="Check-ins due"           count={data?.checkInsDue ?? 0}       href="#bookings" />
+            </div>
+          </div>
+          <div className="rounded-[22px] bg-[#3d2038] p-7 text-[#f9efe5]">
+            <ShieldCheck className="h-6 w-6 text-[#d897b6]" />
+            <h2 className="mt-12 font-serif text-3xl leading-none">Review with care.</h2>
+            <p className="mt-3 text-sm leading-6 text-[#d9c4cf]">Every number here represents a person waiting for a considered response. Leave an audit note whenever you make a decision.</p>
+            <button type="button" onClick={() => window.alert('Audit log is ready for your next review.')}
+              className="mt-6 inline-flex items-center gap-2 text-xs font-bold text-[#e2b3c9]"
+              data-testid="button-open-audit-log">
+              Open audit log <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Companion verification review */}
+        <div id="companion-review" className="mt-10 scroll-mt-8">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Companion review</p>
+              <h2 className="mt-1 font-serif text-3xl text-[#48213d]">Pending applications</h2>
+            </div>
+            <span className="rounded-full bg-[#ead0dd] px-3 py-1 font-mono text-xs font-bold text-[#7f2e62]">
+              {companions.data?.filter(a => a.status === 'pending').length ?? 0} pending
+            </span>
+          </div>
+
+          {companions.isLoading && (
+            <div className="space-y-3">{[0,1,2].map(i => <div key={i} className="skeleton h-36 rounded-[20px]" />)}</div>
+          )}
+          {companions.isError && (
+            <div className="rounded-[16px] bg-[#fbebe7] p-5 text-sm text-[#86555a]">
+              Could not load applications. <button type="button" onClick={() => companions.refetch()} className="font-bold underline">Retry</button>
+            </div>
+          )}
+          {!companions.isLoading && !companions.isError && companions.data?.length === 0 && (
+            <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-10 text-center">
+              <BadgeCheck className="mx-auto h-7 w-7 text-[#c6aeb8]" />
+              <p className="mt-3 font-serif text-xl text-[#48213d]">Queue is clear.</p>
+              <p className="mt-1 text-xs text-[#806c76]">All companion applications have been reviewed.</p>
+            </div>
+          )}
+          {(companions.data ?? []).length > 0 && (
+            <div className="space-y-3">
+              {(companions.data ?? []).map(app => (
+                <CompanionApplicationCard key={app.id} app={app} onDecision={() => companions.refetch()} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent bookings */}
+        <div id="bookings" className="mt-10 scroll-mt-8">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Platform bookings</p>
+              <h2 className="mt-1 font-serif text-3xl text-[#48213d]">Recent activity</h2>
+            </div>
+            {bookings_.data && bookings_.data.length > 0 && (
+              <span className="font-mono text-[10px] text-[#9b858e]">{bookings_.data.length} shown</span>
+            )}
+          </div>
+
+          {bookings_.isLoading && (
+            <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="skeleton h-14 rounded-[14px]" />)}</div>
+          )}
+          {!bookings_.isLoading && (bookings_.data ?? []).length === 0 && (
+            <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-10 text-center">
+              <CalendarDays className="mx-auto h-7 w-7 text-[#c6aeb8]" />
+              <p className="mt-3 font-serif text-xl text-[#48213d]">No bookings yet.</p>
+              <p className="mt-1 text-xs text-[#806c76]">Booking activity across the platform will appear here once Supabase is live.</p>
+            </div>
+          )}
+          {(bookings_.data ?? []).length > 0 && (
+            <div className="overflow-hidden rounded-[20px] border border-[#dfd2c9] bg-white">
+              <div className="grid grid-cols-[1fr_2fr_1fr_1fr_auto] gap-px border-b border-[#ece1d9] bg-[#ece1d9] text-[9px] font-bold uppercase tracking-wider text-[#9b858e]">
+                <div className="bg-[#fbf7f1] px-4 py-3">ID</div>
+                <div className="bg-[#fbf7f1] px-4 py-3">Activity</div>
+                <div className="bg-[#fbf7f1] px-4 py-3">Date</div>
+                <div className="bg-[#fbf7f1] px-4 py-3">Status</div>
+                <div className="bg-[#fbf7f1] px-4 py-3 text-right">Amount</div>
+              </div>
+              {(bookings_.data ?? []).map((b) => (
+                <Link key={b.id} href={`/booking/${b.id}`}
+                  className="grid grid-cols-[1fr_2fr_1fr_1fr_auto] items-center gap-px border-b border-[#ece1d9] bg-[#ece1d9] last:border-0 hover:bg-[#f0e4db] transition">
+                  <div className="bg-white px-4 py-3 font-mono text-[10px] text-[#9b858e]">{b.id.slice(-8).toUpperCase()}</div>
+                  <div className="bg-white px-4 py-3 text-sm font-medium text-[#48213d]">{b.activity}</div>
+                  <div className="bg-white px-4 py-3 text-xs text-[#725e69]">{b.date}</div>
+                  <div className="bg-white px-4 py-3">
+                    <span className={cn('rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[.1em]', STATUS_STYLE[b.status] ?? 'bg-[#ece1d9] text-[#725e69]')}>
+                      {b.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="bg-white px-4 py-3 text-right font-mono text-sm text-[#48213d]">{money(b.totalCents)}</div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </main>
+    </Shell>
+  );
 }
 
 function QueueRow({ icon: Icon, title, count, href }: { icon: typeof ClipboardCheck; title: string; count: number; href: string }) {
   return <Link href={href} className="flex items-center gap-3 rounded-xl border border-[#ece1d9] p-4 transition hover:border-[#c89bb5] hover:bg-[#f0e4db]" data-testid={`row-queue-${title.toLowerCase().replaceAll(' ', '-')}`}><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="flex-1 text-sm font-bold text-[#654c5f]">{title}</span><span className="font-mono text-sm text-[#7f2e62]">{count}</span><ChevronRight className="h-4 w-4 text-[#b0929f]" /></Link>;
+}
+
+// ---------------------------------------------------------------------------
+// Admin operations — companion review + bookings
+// ---------------------------------------------------------------------------
+
+type CompanionApplication = {
+  id: string; displayName: string; city: string; activities: string[];
+  languages: string[]; hourlyRate: number; applicationDate: string; bio: string; status: string;
+};
+
+function useAdminCompanions() {
+  return useQuery<CompanionApplication[]>({
+    queryKey: ['admin-companions-pending'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/companions/pending');
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    retry: false,
+  });
+}
+
+function useAdminBookings() {
+  return useQuery<BookingDetail[]>({
+    queryKey: ['admin-bookings-recent'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/bookings/recent');
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    retry: false,
+  });
+}
+
+function useCompanionDecision() {
+  const qc = useQueryClient();
+  return useMutation<{ id: string; status: string }, Error, { id: string; action: 'approve' | 'reject' }>({
+    mutationFn: async ({ id, action }) => {
+      const res = await fetch(`/api/admin/companions/${id}/${action}`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-companions-pending'] }),
+  });
+}
+
+function CompanionApplicationCard({ app, onDecision }: { app: CompanionApplication; onDecision: (id: string, action: 'approve' | 'reject') => void }) {
+  const [confirming, setConfirming] = useState<'approve' | 'reject' | null>(null);
+  const decision = useCompanionDecision();
+  const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
+
+  const handle = (action: 'approve' | 'reject') => {
+    if (confirming !== action) { setConfirming(action); return; }
+    decision.mutate({ id: app.id, action }, {
+      onSuccess: () => {
+        setDecided(action === 'approve' ? 'approved' : 'rejected');
+        setConfirming(null);
+        onDecision(app.id, action);
+      },
+    });
+  };
+
+  return (
+    <div className={`rounded-[20px] border p-5 transition ${decided === 'approved' ? 'border-[#c7d9cb] bg-[#f4faf5]' : decided === 'rejected' ? 'border-[#f0d7d5] bg-[#fdf5f4]' : 'border-[#dfd2c9] bg-white'}`}
+      data-testid={`application-card-${app.id}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-sm font-bold text-[#7f2e62]">
+            {app.displayName[0]}
+          </div>
+          <div>
+            <p className="font-bold text-[#48213d]">{app.displayName}</p>
+            <p className="text-[10px] text-[#9b858e]">{app.city} · Applied {app.applicationDate}</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-[#9b858e]">Rate</p>
+          <p className="font-serif text-xl text-[#48213d]">${app.hourlyRate}/hr</p>
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-[#725e69] italic">"{app.bio}"</p>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {app.activities.map((a) => (
+          <span key={a} className="rounded-full bg-[#f0e4db] px-2 py-0.5 text-[10px] text-[#7f5042]">{a}</span>
+        ))}
+        {app.languages.map((l) => (
+          <span key={l} className="rounded-full bg-[#e8f0e8] px-2 py-0.5 text-[10px] text-[#477254]">{l}</span>
+        ))}
+      </div>
+
+      {decided ? (
+        <div className={`mt-4 flex items-center gap-2 rounded-[10px] px-3 py-2 text-xs font-bold ${decided === 'approved' ? 'bg-[#e8f0e8] text-[#31533f]' : 'bg-[#f0d7d5] text-[#86555a]'}`}>
+          <Check className="h-3.5 w-3.5" />
+          {decided === 'approved' ? 'Approved — profile will go live after Supabase sync' : 'Rejected — applicant will be notified'}
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {confirming === 'approve' ? (
+            <button type="button" disabled={decision.isPending} onClick={() => handle('approve')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#477254] px-3 text-xs font-bold text-white disabled:opacity-60"
+              data-testid={`button-confirm-approve-${app.id}`}>
+              {decision.isPending ? 'Approving…' : <><Check className="h-3 w-3" />Tap again to approve</>}
+            </button>
+          ) : (
+            <button type="button" onClick={() => handle('approve')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#e8f0e8] px-3 text-xs font-bold text-[#31533f] hover:bg-[#477254] hover:text-white transition"
+              data-testid={`button-approve-${app.id}`}>
+              <Check className="h-3 w-3" />Approve
+            </button>
+          )}
+          {confirming === 'reject' ? (
+            <button type="button" disabled={decision.isPending} onClick={() => handle('reject')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#a64742] px-3 text-xs font-bold text-white disabled:opacity-60"
+              data-testid={`button-confirm-reject-${app.id}`}>
+              {decision.isPending ? 'Rejecting…' : <><X className="h-3 w-3" />Tap again to reject</>}
+            </button>
+          ) : (
+            <button type="button" onClick={() => handle('reject')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dfd2c9] px-3 text-xs font-bold text-[#725e69] hover:border-[#a64742] hover:text-[#a64742] transition"
+              data-testid={`button-reject-${app.id}`}>
+              <X className="h-3 w-3" />Reject
+            </button>
+          )}
+          {confirming && (
+            <button type="button" onClick={() => setConfirming(null)} className="text-[10px] text-[#9b858e] hover:text-[#48213d]">
+              Cancel
+            </button>
+          )}
+          <Link href={`/companions/${app.id}`} className="ml-auto text-[10px] text-[#9d557e] hover:underline">View full profile →</Link>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Router() {

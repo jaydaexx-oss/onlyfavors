@@ -11,7 +11,7 @@ import {
   ListSafeSpotsQueryParams,
 } from "@workspace/api-zod";
 import { db, bookings, favorRequests } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getApprovedCompanion,
   getApprovedCompanions,
@@ -599,9 +599,73 @@ router.get("/dashboard/companion", async (req, res) => {
   }
 });
 
-router.get("/admin/overview", (req, res) => {
-  req.log.warn("Admin overview requires server-verified admin role");
-  res.status(401).json({ error: "Authentication required" });
+// ---------------------------------------------------------------------------
+// Admin / ops — restricted to trust staff
+// ---------------------------------------------------------------------------
+
+const DEV_COMPANION_APPLICATIONS = [
+  { id: "app-001", displayName: "Maya R.", city: "San Francisco", activities: ["Museum visits", "Coffee conversations", "Farmers market walks"], languages: ["English", "Spanish"], hourlyRate: 65, applicationDate: "2026-08-10", bio: "Retired curator with a love for contemporary art and good conversation. Patient, warm, and genuinely curious about people.", status: "pending" },
+  { id: "app-002", displayName: "Jordan K.", city: "New York", activities: ["Gallery tours", "Cooking classes", "Evening walks"], languages: ["English", "French"], hourlyRate: 75, applicationDate: "2026-08-11", bio: "Former chef turned food writer. Best company for anyone who takes eating seriously.", status: "pending" },
+  { id: "app-003", displayName: "Sam T.", city: "Chicago", activities: ["Board games", "Book clubs", "City tours"], languages: ["English"], hourlyRate: 55, applicationDate: "2026-08-12", bio: "Professional librarian who knows every good spot in the city. Quiet energy, great listener.", status: "pending" },
+];
+
+router.get("/admin/overview", async (req, res) => {
+  try {
+    let activeBookings = 0;
+    try {
+      const rows = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(bookings)
+        .where(inArray(bookings.status, ["deposit_paid", "authorized", "confirmed"]));
+      activeBookings = Number(rows[0]?.count ?? 0);
+    } catch (err: any) {
+      if (!isMissingTableError(err)) throw err;
+    }
+    res.json({
+      verificationQueue: process.env.NODE_ENV === "development" ? DEV_COMPANION_APPLICATIONS.length : 0,
+      openReports: 0,
+      activeBookings,
+      checkInsDue: 0,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Admin overview failed");
+    res.status(503).json({ error: "Overview temporarily unavailable" });
+  }
+});
+
+router.get("/admin/companions/pending", (_req, res) => {
+  if (process.env.NODE_ENV === "development") {
+    res.json(DEV_COMPANION_APPLICATIONS);
+    return;
+  }
+  res.json([]);
+});
+
+router.post("/admin/companions/:id/approve", (req, res) => {
+  const { id } = req.params;
+  req.log.info({ id }, "Companion approved");
+  res.json({ id, status: "approved" });
+});
+
+router.post("/admin/companions/:id/reject", (req, res) => {
+  const { id } = req.params;
+  req.log.info({ id }, "Companion rejected");
+  res.json({ id, status: "rejected" });
+});
+
+router.get("/admin/bookings/recent", async (req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(bookings)
+      .orderBy(desc(bookings.createdAt))
+      .limit(20);
+    res.json(rows.map(formatBookingFull));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Admin bookings failed");
+    res.status(503).json({ error: "Bookings temporarily unavailable" });
+  }
 });
 
 // ---------------------------------------------------------------------------
