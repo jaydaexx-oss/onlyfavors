@@ -60,3 +60,9 @@ export function getSafeSpots(city?: string): Promise<SupabaseSafeSpotRow[]> {
     `/rest/v1/safespots?active=eq.true${cityFilter}&select=id,name,category,city,address_hint,open_late`,
   );
 }
+
+export function getSafeSpot(id: string): Promise<SupabaseSafeSpotRow[]> {
+  return supabaseGet<SupabaseSafeSpotRow[]>(
+    `/rest/v1/safespots?id=eq.${encodeURIComponent(id)}&active=eq.true&select=id,name,category,city,address_hint,open_late`,
+  );
+}

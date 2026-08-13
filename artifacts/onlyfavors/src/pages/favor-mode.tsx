@@ -14,8 +14,9 @@ import { useEffect, useState } from 'react';
 import {
   AlertCircle, ArrowRight, Check, CheckCircle2, ChevronRight,
   Clock, Heart, HeartHandshake, LifeBuoy, LockKeyhole, MapPin,
-  Navigation, Phone, Radio, Shield, ShieldCheck, TimerReset, Users, X,
+  Navigation, Phone, QrCode, Radio, Shield, ShieldCheck, TimerReset, Users, X,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Link, useParams } from 'wouter';
 
 // Format seconds as mm:ss or h:mm:ss
@@ -55,6 +56,7 @@ export default function FavorMode() {
 
   // Safety state
   const [checkedIn, setCheckedIn] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const [safeSignalSent, setSafeSignalSent] = useState(false);
   const [showExit, setShowExit] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
@@ -151,7 +153,7 @@ export default function FavorMode() {
         {/* Safety actions */}
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => { setCheckedIn(true); setSafeSignalSent(false); }}
+            onClick={() => { if (!checkedIn) setShowQr(true); }}
             className={`rounded-[20px] p-5 text-left transition-all ${
               checkedIn
                 ? 'bg-[#3dbd8c]/20 ring-2 ring-[#3dbd8c]'
@@ -161,13 +163,13 @@ export default function FavorMode() {
           >
             {checkedIn
               ? <CheckCircle2 className="h-6 w-6 text-[#3dbd8c]" />
-              : <MapPin className="h-6 w-6 text-[#9d557e]" />
+              : <QrCode className="h-6 w-6 text-[#9d557e]" />
             }
             <p className="mt-8 text-sm font-bold text-[#f9efe5]">
               {checkedIn ? 'Checked in ✓' : 'Check in'}
             </p>
             <p className="mt-0.5 text-[10px] text-[#d9c4cf]">
-              {checkedIn ? 'Contacts notified' : 'Confirm arrival'}
+              {checkedIn ? 'Contacts notified' : 'Scan at SafeSpot'}
             </p>
           </button>
 
@@ -359,6 +361,52 @@ export default function FavorMode() {
               ))}
             </div>
             <button onClick={() => setShowExtend(false)} className="mt-5 w-full text-center text-sm text-[#9d7e8e]">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* QR Check-in modal */}
+      {showQr && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowQr(false)}>
+          <div className="w-full max-w-md rounded-t-[28px] bg-[#1f0c1b] p-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#c695ae]">SafeSpot check-in</p>
+                <h2 className="mt-1 font-serif text-3xl text-[#f9efe5]">Show this at the venue.</h2>
+              </div>
+              <button onClick={() => setShowQr(false)} className="grid h-9 w-9 place-items-center rounded-full bg-[#3d2038] text-[#d9c4cf]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* QR code */}
+            <div className="mt-6 flex justify-center">
+              <div className="rounded-[20px] bg-white p-5">
+                <QRCodeSVG
+                  value={`onlyfavors://checkin?session=${DEMO.companion.id}&venue=${encodeURIComponent(DEMO.venue.name)}&ts=${Date.now()}`}
+                  size={180}
+                  level="M"
+                  includeMargin={false}
+                />
+              </div>
+            </div>
+
+            <p className="mt-4 text-center text-[11px] leading-5 text-[#9d7e8e]">
+              Venue staff scan this to log your arrival. Your Trust Circle gets a quiet "arrived safely" — no details shared.
+            </p>
+
+            <div className="mt-6 space-y-3">
+              <button
+                onClick={() => { setCheckedIn(true); setShowQr(false); }}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#3dbd8c] px-5 py-3 text-sm font-bold text-white"
+                data-testid="button-confirm-checkin"
+              >
+                <Check className="h-4 w-4" />Confirm I've arrived
+              </button>
+              <button onClick={() => setShowQr(false)} className="w-full text-center text-sm text-[#9d7e8e]">
+                Still on my way
+              </button>
+            </div>
           </div>
         </div>
       )}

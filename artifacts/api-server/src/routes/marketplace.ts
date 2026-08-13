@@ -15,6 +15,7 @@ import { desc, eq } from "drizzle-orm";
 import {
   getApprovedCompanion,
   getApprovedCompanions,
+  getSafeSpot,
   getSafeSpots,
 } from "../lib/supabase";
 import { calculatePrice } from "../lib/pricing";
@@ -639,6 +640,26 @@ router.get("/safespots", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Unable to read SafeSpots");
     res.status(503).json({ error: "SafeSpots are temporarily unavailable" });
+  }
+});
+
+router.get("/safespots/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const rows = await getSafeSpot(id);
+    if (!rows.length) { res.status(404).json({ error: "SafeSpot not found" }); return; }
+    const row = rows[0];
+    res.json({
+      id: row.id,
+      name: row.name,
+      category: row.category,
+      city: row.city,
+      addressHint: row.address_hint,
+      openLate: row.open_late,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Unable to read SafeSpot");
+    res.status(503).json({ error: "SafeSpot temporarily unavailable" });
   }
 });
 

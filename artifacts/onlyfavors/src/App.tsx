@@ -2,11 +2,11 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef
 import { loadStripe, type Stripe as StripeType } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, BadgeCheck, Bell, CalendarDays, Check, ChevronDown, ChevronRight,
-  CircleAlert, ClipboardCheck, Clock3, Compass, EyeOff, FileText, Heart, HeartHandshake,
-  KeyRound, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
+  AlertTriangle, ArrowLeft, ArrowRight, BadgeCheck, Bell, Building2, CalendarDays, Check, ChevronDown, ChevronRight,
+  CircleAlert, ClipboardCheck, Clock3, Coffee, Compass, EyeOff, FileText, Heart, HeartHandshake,
+  KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
   Navigation2, PanelLeft, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
-  Sparkles, Star, UserPlus, Users, UsersRound, WalletCards, X, Zap,
+  Sparkles, Star, Sunrise, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
@@ -1503,6 +1503,326 @@ function Legal({ kind }: { kind: keyof typeof legalCopy }) {
   return <Shell><main className="page-enter mx-auto max-w-4xl px-5 py-14 lg:px-8 lg:py-20"><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{copy.eyebrow}</p><h1 className="mt-4 max-w-2xl font-serif text-6xl leading-[.9] text-[#48213d]">{copy.title}</h1><p className="mt-6 max-w-xl text-[16px] leading-8 text-[#725e69]">{copy.intro}</p><div className="mt-14 border-t border-[#dfd2c9]">{copy.sections.map(([title, body], index) => <section key={title} className="grid gap-4 border-b border-[#dfd2c9] py-8 md:grid-cols-[180px_1fr]"><p className="font-mono text-[10px] uppercase tracking-[.16em] text-[#9d557e]">0{index + 1}</p><div><h2 className="font-serif text-3xl text-[#48213d]">{title}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-[#725e69]">{body}</p></div></section>)}</div></main></Shell>;
 }
 
+// ---------------------------------------------------------------------------
+// SafeSpot Network — directory + detail pages
+// ---------------------------------------------------------------------------
+
+const CATEGORY_ICON: Record<string, typeof MapPin> = {
+  Café: Coffee,
+  Restaurant: UtensilsCrossed,
+  Hotel: Building2,
+  Library: Landmark,
+  Museum: Landmark,
+  Bar: Sunrise,
+  default: MapPin,
+};
+
+const DEMO_SAFESPOTS: SafeSpot[] = [
+  { id: 'ss-demo-1', name: 'The Commons Café', category: 'Café', city: 'San Francisco', addressHint: 'Near Union Square, downtown', openLate: false },
+  { id: 'ss-demo-2', name: 'Grand Central Lounge', category: 'Bar', city: 'New York', addressHint: 'Midtown East, ground floor', openLate: true },
+  { id: 'ss-demo-3', name: 'Riverside Public Library', category: 'Library', city: 'Chicago', addressHint: 'River North branch', openLate: false },
+  { id: 'ss-demo-4', name: 'Ember & Oak', category: 'Restaurant', city: 'Austin', addressHint: 'Downtown, street level', openLate: true },
+  { id: 'ss-demo-5', name: 'The Garden Hotel Lobby', category: 'Hotel', city: 'Los Angeles', addressHint: 'West Hollywood, lobby level', openLate: true },
+  { id: 'ss-demo-6', name: 'Meridian Museum Café', category: 'Museum', city: 'Seattle', addressHint: 'Capitol Hill, ground floor', openLate: false },
+];
+
+const ALL_CATEGORIES = ['Café', 'Restaurant', 'Hotel', 'Library', 'Museum', 'Bar'];
+
+function SafeSpotCard({ spot }: { spot: SafeSpot }) {
+  const Icon = CATEGORY_ICON[spot.category] ?? CATEGORY_ICON.default;
+  return (
+    <Link href={`/safespots/${spot.id}`} data-testid={`safespot-card-${spot.id}`}>
+      <div className="group rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:border-[#9d557e] hover:shadow-sm cursor-pointer h-full">
+        <div className="flex items-start justify-between gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="flex items-center gap-1 rounded-full bg-[#e8f0e8] px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#477254]">
+              <ShieldCheck className="h-3 w-3" />Verified
+            </span>
+            {spot.openLate && (
+              <span className="rounded-full bg-[#f0e4db] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#7f5042]">
+                Open late
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="mt-4 font-serif text-xl leading-tight text-[#48213d] group-hover:text-[#7f2e62]">{spot.name}</p>
+        <p className="mt-1 text-xs font-medium text-[#806c76]">{spot.category} · {spot.city}</p>
+        <p className="mt-2 flex items-center gap-1 text-[10px] text-[#9b858e]">
+          <MapPin className="h-3 w-3 shrink-0" />{spot.addressHint}
+        </p>
+        <p className="mt-4 flex items-center gap-1 text-[10px] font-bold text-[#9d557e] group-hover:text-[#7f2e62]">
+          View details <ChevronRight className="h-3 w-3" />
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+function SafeSpots() {
+  const [city, setCity] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [lateOnly, setLateOnly] = useState(false);
+  const [debouncedCity, setDebouncedCity] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCity(city), 400);
+    return () => clearTimeout(t);
+  }, [city]);
+
+  const query = useListSafeSpots(debouncedCity ? { city: debouncedCity } : undefined, {
+    query: {
+      queryKey: getListSafeSpotsQueryKey(debouncedCity ? { city: debouncedCity } : undefined),
+      retry: false,
+    },
+  });
+
+  const spots: SafeSpot[] = (query.data && query.data.length > 0) ? query.data as SafeSpot[] : DEMO_SAFESPOTS;
+  const filtered = spots.filter((s) =>
+    (!categoryFilter || s.category === categoryFilter) &&
+    (!lateOnly || s.openLate)
+  );
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-6xl px-5 py-12 lg:px-8 lg:py-16">
+        {/* Hero */}
+        <div className="max-w-2xl">
+          <p className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">
+            <ShieldCheck className="h-4 w-4" />Safety network
+          </p>
+          <h1 className="mt-4 font-serif text-6xl leading-[.9] text-[#48213d]">SafeSpot<br />Network</h1>
+          <p className="mt-5 max-w-lg text-[15px] leading-7 text-[#725e69]">
+            Verified public venues where every favor begins. Staff-aware, well-lit, and easy to leave.
+            No home addresses, ever.
+          </p>
+        </div>
+
+        {/* Search + filters */}
+        <div className="mt-10 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9b858e]" />
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Filter by city…"
+              className="h-11 w-full rounded-full border border-[#dfd2c9] bg-white pl-9 pr-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+              data-testid="input-safespot-city"
+            />
+          </div>
+          <button
+            onClick={() => setLateOnly((v) => !v)}
+            className={`h-11 rounded-full border px-4 text-xs font-bold transition ${lateOnly ? 'border-[#9d557e] bg-[#ead0dd] text-[#7f2e62]' : 'border-[#dfd2c9] bg-white text-[#806c76]'}`}
+            data-testid="toggle-open-late"
+          >
+            Open late
+          </button>
+        </div>
+
+        {/* Category chips */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setCategoryFilter(null)}
+            className={`rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] transition ${!categoryFilter ? 'border-[#9d557e] bg-[#9d557e] text-white' : 'border-[#dfd2c9] text-[#806c76] hover:border-[#9d557e]'}`}
+            data-testid="chip-all"
+          >All</button>
+          {ALL_CATEGORIES.map((cat) => {
+            const Icon = CATEGORY_ICON[cat] ?? CATEGORY_ICON.default;
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter((v) => v === cat ? null : cat)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[.12em] transition ${categoryFilter === cat ? 'border-[#9d557e] bg-[#9d557e] text-white' : 'border-[#dfd2c9] text-[#806c76] hover:border-[#9d557e]'}`}
+                data-testid={`chip-${cat.toLowerCase()}`}
+              >
+                <Icon className="h-3 w-3" />{cat}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Results */}
+        <div className="mt-8">
+          {(query.isLoading && !query.isError) ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {[0,1,2,3,4,5].map((i) => <div key={i} className="skeleton h-48 rounded-[20px]" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-12 text-center">
+              <MapPin className="mx-auto h-8 w-8 text-[#c6aeb8]" />
+              <p className="mt-4 font-serif text-xl text-[#48213d]">No SafeSpots match those filters.</p>
+              <p className="mt-2 text-xs text-[#806c76]">Try a different city or clear the category filter.</p>
+            </div>
+          ) : (
+            <>
+              <p className="mb-4 font-mono text-[10px] text-[#9b858e] uppercase tracking-wider">{filtered.length} verified venue{filtered.length !== 1 ? 's' : ''}</p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.map((s) => <SafeSpotCard key={s.id} spot={s} />)}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Apply banner */}
+        <div className="mt-16 rounded-[24px] bg-[#2d1228] p-8 md:p-10">
+          <div className="max-w-xl">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">For venue managers</p>
+            <h2 className="mt-3 font-serif text-4xl leading-none text-[#f9efe5]">List your venue as a SafeSpot.</h2>
+            <p className="mt-4 text-sm leading-6 text-[#d9c4cf]">
+              OnlyFavors partners with cafés, hotel lobbies, libraries, and other public spaces to build
+              a network people can trust. No special equipment — just a staff-friendly environment.
+            </p>
+            <a href="mailto:safespots@onlyfavors.com" className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]">
+              Apply your venue <ArrowRight className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function useSafeSpot(id: string) {
+  return useQuery<SafeSpot | null>({
+    queryKey: ['safespot', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/safespots/${id}`);
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        // Return from demo set as fallback
+        return DEMO_SAFESPOTS.find((s) => s.id === id) ?? null;
+      }
+      return res.json();
+    },
+  });
+}
+
+function SafeSpotDetail() {
+  const { id } = useParams<{ id: string }>();
+  const { data: spot, isLoading, isError } = useSafeSpot(id!);
+  const Icon = spot ? (CATEGORY_ICON[spot.category] ?? CATEGORY_ICON.default) : MapPin;
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-4xl px-5 py-12 lg:px-8 lg:py-16">
+        <Link href="/safespots" className="inline-flex items-center gap-2 text-xs text-[#9b858e] hover:text-[#48213d]" data-testid="link-back-safespots">
+          <ArrowLeft className="h-3.5 w-3.5" />All SafeSpots
+        </Link>
+
+        {isLoading && (
+          <div className="mt-10 space-y-4">
+            <div className="skeleton h-12 w-64 rounded-2xl" />
+            <div className="skeleton h-6 w-40 rounded-xl" />
+            <div className="skeleton h-48 rounded-[24px]" />
+          </div>
+        )}
+
+        {(isError || (!isLoading && !spot)) && (
+          <div className="mt-10 rounded-[20px] bg-[#fbebe7] p-8 text-sm text-[#86555a]">
+            This SafeSpot could not be loaded right now.{' '}
+            <Link href="/safespots" className="font-bold underline">Browse all venues</Link>
+          </div>
+        )}
+
+        {spot && (
+          <>
+            {/* Header */}
+            <div className="mt-8 flex flex-wrap items-start gap-6">
+              <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[#ead0dd] text-[#7f2e62]">
+                <Icon className="h-8 w-8" />
+              </div>
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex items-center gap-1 rounded-full bg-[#e8f0e8] px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#477254]">
+                    <ShieldCheck className="h-3 w-3" />Verified SafeSpot
+                  </span>
+                  {spot.openLate && (
+                    <span className="rounded-full bg-[#f0e4db] px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-[#7f5042]">
+                      Open late
+                    </span>
+                  )}
+                </div>
+                <h1 className="mt-3 font-serif text-5xl leading-[.95] text-[#48213d]">{spot.name}</h1>
+                <p className="mt-2 text-sm font-medium text-[#806c76]">{spot.category} · {spot.city}</p>
+                <p className="mt-2 flex items-center gap-1.5 text-sm text-[#9b858e]">
+                  <MapPin className="h-4 w-4 shrink-0" />{spot.addressHint}
+                  <span className="ml-1 rounded-full bg-[#f3ead7] px-2 py-0.5 font-mono text-[9px] text-[#7a5a12]">Approx. location</span>
+                </p>
+              </div>
+            </div>
+
+            {/* CTA */}
+            <div className="mt-10 flex flex-wrap gap-3">
+              <Link
+                href={`/book`}
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white hover:bg-[#9d3a78]"
+                data-testid="button-book-here"
+              >
+                Start a favor here <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/explore"
+                className="inline-flex h-12 items-center gap-2 rounded-full border border-[#dfd2c9] px-6 text-sm font-bold text-[#48213d] hover:border-[#9d557e]"
+                data-testid="button-find-companion"
+              >
+                Find a companion first
+              </Link>
+            </div>
+
+            {/* Info grid */}
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              <div className="rounded-[20px] bg-[#e8f0e8] p-6">
+                <ShieldCheck className="h-5 w-5 text-[#477254]" />
+                <p className="mt-4 font-bold text-[#31533f]">Staff aware</p>
+                <p className="mt-1.5 text-xs leading-5 text-[#53725d]">Venue staff know OnlyFavors customers may use their space. You're never out of place.</p>
+              </div>
+              <div className="rounded-[20px] bg-[#f0e4db] p-6">
+                <Navigation2 className="h-5 w-5 text-[#7f5042]" />
+                <p className="mt-4 font-bold text-[#5c3625]">Easy to find and leave</p>
+                <p className="mt-1.5 text-xs leading-5 text-[#7f5042]">Public entrances, multiple exits. Never feel locked in.</p>
+              </div>
+              <div className="rounded-[20px] bg-[#f9efe5] p-6">
+                <EyeOff className="h-5 w-5 text-[#9d557e]" />
+                <p className="mt-4 font-bold text-[#48213d]">Privacy first</p>
+                <p className="mt-1.5 text-xs leading-5 text-[#725e69]">Your exact location is never shared. Your Trust Circle only knows a SafeSpot is involved.</p>
+              </div>
+            </div>
+
+            {/* How check-in works */}
+            <div className="mt-10 rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-8">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">How QR check-in works</p>
+              <div className="mt-6 space-y-4">
+                {[
+                  { n: '01', title: 'Booking confirmed', body: 'Once your companion accepts, a unique QR code is generated for your booking.' },
+                  { n: '02', title: 'Arrive and check in', body: 'Open your favor screen and tap Check In. Your QR code appears — show it to venue staff or scan the SafeSpot code.' },
+                  { n: '03', title: 'Trust Circle notified', body: 'A quiet message goes out. No names, no details — just "arrived safely at a SafeSpot."' },
+                  { n: '04', title: 'Hourly check-in', body: 'If a scheduled check-in is missed, your Trust Circle is alerted automatically.' },
+                ].map(({ n, title, body }) => (
+                  <div key={n} className="flex gap-4">
+                    <span className="font-mono text-[10px] text-[#c6aeb8] mt-0.5">{n}</span>
+                    <div>
+                      <p className="text-sm font-bold text-[#48213d]">{title}</p>
+                      <p className="mt-0.5 text-xs leading-5 text-[#806c76]">{body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Apply banner */}
+            <div className="mt-8 flex items-center justify-between rounded-[16px] border border-[#dfd2c9] px-6 py-4">
+              <p className="text-xs text-[#806c76]">Manage this listing or report an issue.</p>
+              <a href="mailto:safespots@onlyfavors.com" className="text-xs font-bold text-[#9d557e] hover:text-[#7f2e62]">Contact venues team →</a>
+            </div>
+          </>
+        )}
+      </main>
+    </Shell>
+  );
+}
+
 function AdminLogin() {
   const [sent, setSent] = useState(false);
   return <Shell bare><main className="grid min-h-[100dvh] place-items-center bg-[#3d2038] px-5"><div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#48243f] p-8 text-[#f9efe5] md:p-10"><div className="flex items-center justify-between"><Brand dark /><span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span></div>{sent ? <div className="mt-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><Check /></div><h1 className="mt-7 font-serif text-4xl">Check your inbox.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">A secure operations code is on its way. This workspace is restricted to approved trust staff.</p><Link href="/admin/operations" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]" data-testid="link-admin-operations">Continue to operations <ArrowRight className="h-4 w-4" /></Link></div> : <form onSubmit={(e) => { e.preventDefault(); setSent(true); }} className="mt-12"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p><h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations email</span><input required type="email" className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3d2038] px-4 text-sm text-[#f9efe5] outline-none focus:border-[#d897b6]" data-testid="input-admin-email" /></label><Button type="submit" variant="primary" className="mt-5 w-full" testId="button-admin-login">Send secure code <KeyRound className="h-4 w-4" /></Button></form>}<Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home"><ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors</Link></div></main></Shell>;
@@ -1541,6 +1861,8 @@ function Router() {
         <Route path="/cancellation"><Legal kind="cancellation" /></Route>
         <Route path="/booking/:id" component={BookingStatus} />
         <Route path="/trust-circle" component={TrustCircleSetup} />
+        <Route path="/safespots" component={SafeSpots} />
+        <Route path="/safespots/:id" component={SafeSpotDetail} />
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/operations" component={AdminOperations} />
         <Route component={NotFound} />
