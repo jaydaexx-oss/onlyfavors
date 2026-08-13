@@ -47,6 +47,7 @@ function Header() {
       <nav className="hidden items-center gap-7 md:flex" aria-label="Main navigation">
         <Link href="/explore" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-explore">Explore</Link>
         <Link href="/safety" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-safety">Safety</Link>
+        <Link href="/safespots" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-safespots">SafeSpots</Link>
         <Link href="/companion/apply" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-apply">Become a companion</Link>
       </nav>
       <div className="hidden items-center gap-3 md:flex">
@@ -59,6 +60,7 @@ function Header() {
       <div className="flex flex-col gap-1">
         <Link href="/explore" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-explore">Explore companions</Link>
         <Link href="/safety" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safety">Safety center</Link>
+        <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
         <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
       </div>
     </div>}
@@ -69,7 +71,7 @@ function Footer() {
   return <footer className="border-t border-[#ddcfc6] bg-[#f0e4db]">
     <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
       <div><Brand /><p className="mt-4 max-w-xs text-sm leading-6 text-[#725e69]">Good company for the moments that matter. Built with privacy at the center.</p></div>
-      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link></div></div>
+      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/safespots" className="block hover:text-[#7f2e62]" data-testid="footer-link-safespots">SafeSpot Network</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/login" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Contact support <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </div>
@@ -751,6 +753,13 @@ function CompanionInbox() {
                     )}
                   </div>
                 )}
+                {CHAT_ENABLED_STATUSES.has(b.status) && (
+                  <Link href={`/companion/booking/${b.id}`}
+                    className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold text-[#7f2e62] hover:underline"
+                    data-testid={`link-chat-${b.id}`}>
+                    <MessageSquare className="h-3 w-3" />Open thread
+                  </Link>
+                )}
                 <p className="mt-3 font-mono text-[9px] text-[#b0929f]">BOOKING {b.id.slice(-8).toUpperCase()}</p>
               </div>
             );
@@ -1297,7 +1306,7 @@ function useSendMessage(bookingId: string) {
 
 const CHAT_ENABLED_STATUSES = new Set(['deposit_paid', 'authorized', 'confirmed', 'completed']);
 
-function BookingChat({ bookingId, status }: { bookingId: string; status: string }) {
+function BookingChat({ bookingId, status, viewerRole = 'customer' }: { bookingId: string; status: string; viewerRole?: 'customer' | 'companion' }) {
   const enabled = CHAT_ENABLED_STATUSES.has(status);
   const msgs = useMessages(bookingId, enabled);
   const sendMessage = useSendMessage(bookingId);
@@ -1341,14 +1350,15 @@ function BookingChat({ bookingId, status }: { bookingId: string; status: string 
           </p>
         )}
         {(msgs.data ?? []).map((msg) => {
-          const isMe = msg.senderRole === 'customer';
+          const isMe = msg.senderRole === viewerRole;
+          const otherLabel = viewerRole === 'customer' ? 'Companion' : 'Customer';
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[76%] rounded-[14px] px-3.5 py-2.5 ${isMe ? 'bg-[#7f2e62] text-white' : 'bg-[#e8f0e8] text-[#31533f]'}`}>
                 <p className="text-sm leading-5">{msg.body}</p>
                 <p className={`mt-0.5 text-[9px] ${isMe ? 'text-[#e2b3c9]' : 'text-[#63816a]'}`}>
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {' · '}{isMe ? 'You' : 'Companion'}
+                  {' · '}{isMe ? 'You' : otherLabel}
                 </p>
               </div>
             </div>
@@ -1485,6 +1495,108 @@ function StatusBadge({ status }: { status: string }) {
   const { label, tone } = STATUS_LABEL[status] ?? { label: status, tone: 'gray' };
   const cls = { green: 'bg-[#e8f0e8] text-[#31533f]', amber: 'bg-[#f3ead7] text-[#7a5a12]', plum: 'bg-[#ead0dd] text-[#7f2e62]', gray: 'bg-[#f0e4db] text-[#725e69]' }[tone];
   return <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[.18em] ${cls}`}>{label}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// Companion booking detail — companion-perspective view of a booking + chat
+// ---------------------------------------------------------------------------
+
+function useCompanionBookingDetail(id: string) {
+  return useQuery<BookingDetail & { viewerRole: 'companion' }>({
+    queryKey: ['companion-booking', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/companion/bookings/${id}`);
+      if (!res.ok) throw new Error('Booking not found');
+      return res.json();
+    },
+    enabled: Boolean(id),
+    retry: 1,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      return s === 'confirmed' || s === 'completed' || s === 'cancelled' ? false : 8000;
+    },
+  });
+}
+
+function CompanionBookingDetail() {
+  const { id = '' } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const { data: b, isLoading, isError, refetch } = useCompanionBookingDetail(id);
+
+  if (!id) { navigate('/dashboard/companion'); return null; }
+
+  if (isLoading) return (
+    <Shell><main className="mx-auto max-w-2xl px-5 py-20"><LoadingState label="Loading booking" /></main></Shell>
+  );
+  if (isError || !b) return (
+    <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => refetch()} /></main></Shell>
+  );
+
+  const isConfirmed = b.status === 'confirmed' || b.status === 'completed';
+  const isChatOpen = CHAT_ENABLED_STATUSES.has(b.status);
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-2xl px-5 py-14 lg:px-8 lg:py-20">
+        <Link href="/dashboard/companion" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-companion">
+          <ArrowLeft className="h-4 w-4" />Back to workspace
+        </Link>
+
+        {/* Summary card */}
+        <div className={`rounded-[26px] p-8 md:p-12 ${isConfirmed ? 'bg-[#e8f0e8]' : 'border border-[#dfd2c9] bg-[#fbf7f1]'}`}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <StatusBadge status={b.status} />
+              <h1 className="mt-4 font-serif text-4xl leading-none text-[#48213d]">{b.activity}</h1>
+              <p className="mt-2 text-sm text-[#725e69]">{b.date} · {b.startTime} · {b.durationHours}h</p>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">You receive</p>
+              <p className="mt-1 font-serif text-4xl text-[#48213d]">{money(b.companionPayoutCents)}</p>
+            </div>
+          </div>
+
+          {/* Payout breakdown */}
+          <div className="mt-8 space-y-2 rounded-[16px] border border-[#dfd2c9] bg-white/60 p-5 text-sm">
+            <div className="flex justify-between text-[#725e69]"><span>Activity total</span><span>{money(b.subtotalCents)}</span></div>
+            <div className="flex justify-between text-[#725e69]"><span>Platform fee (15%)</span><span>−{money(Math.round(b.subtotalCents * 0.15))}</span></div>
+            <div className="my-2 border-t border-[#dfd2c9]" />
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-[#9d557e]">Your payout</span>
+              <span className="font-serif text-2xl text-[#48213d]">{money(b.companionPayoutCents)}</span>
+            </div>
+          </div>
+
+          {/* Timeline */}
+          {(b.confirmedAt || b.depositPaidAt) && (
+            <div className="mt-6 space-y-2 rounded-[14px] border border-[#dfd2c9] bg-white/50 p-4">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Timeline</p>
+              {b.depositPaidAt && <p className="flex items-center gap-2 text-xs text-[#725e69]"><Check className="h-3 w-3 text-[#477254]" />Deposit received {new Date(b.depositPaidAt).toLocaleString()}</p>}
+              {b.confirmedAt && <p className="flex items-center gap-2 text-xs text-[#725e69]"><Check className="h-3 w-3 text-[#477254]" />You confirmed {new Date(b.confirmedAt).toLocaleString()}</p>}
+            </div>
+          )}
+
+          {!isChatOpen && b.status === 'requested' && (
+            <div className="mt-6 rounded-[14px] bg-[#f3ead7] p-4 text-xs leading-5 text-[#7a5a12]">
+              <Clock3 className="mb-1 h-4 w-4" />
+              Waiting for the customer's deposit. The chat thread opens once payment clears.
+            </div>
+          )}
+
+          <p className="mt-6 font-mono text-[10px] text-[#a38c95]">BOOKING {b.id}</p>
+
+          <div className="mt-4">
+            <Link href="/dashboard/companion" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white">
+              <ArrowLeft className="h-3.5 w-3.5" />Back to inbox
+            </Link>
+          </div>
+        </div>
+
+        {/* Chat thread */}
+        <BookingChat bookingId={b.id} status={b.status} viewerRole="companion" />
+      </main>
+    </Shell>
+  );
 }
 
 function BookingStatus() {
@@ -2383,6 +2495,7 @@ function Router() {
         <Route path="/terms"><Legal kind="terms" /></Route>
         <Route path="/cancellation"><Legal kind="cancellation" /></Route>
         <Route path="/booking/:id" component={BookingStatus} />
+        <Route path="/companion/booking/:id" component={CompanionBookingDetail} />
         <Route path="/trust-circle" component={TrustCircleSetup} />
         <Route path="/safespots" component={SafeSpots} />
         <Route path="/safespots/:id" component={SafeSpotDetail} />

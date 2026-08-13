@@ -414,6 +414,25 @@ router.get("/companion/bookings", async (req, res) => {
   }
 });
 
+router.get("/companion/bookings/:id", async (req, res) => {
+  const { id } = req.params;
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.companionId !== companionId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    res.json({ ...formatBookingFull(booking), viewerRole: "companion" });
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.status(404).json({ error: "Booking not found" }); return; }
+    req.log.error({ err }, "Unable to load companion booking");
+    res.status(503).json({ error: "Booking temporarily unavailable" });
+  }
+});
+
 router.post("/bookings/:id/accept", async (req, res) => {
   const { id } = req.params;
   const companionId =
