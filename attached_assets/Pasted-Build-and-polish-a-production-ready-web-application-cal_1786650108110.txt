@@ -1,0 +1,238 @@
+Build and polish a production-ready web application called OnlyFavors.
+
+PRODUCT VISION
+
+OnlyFavors is a privacy-first marketplace where adults can book verified local companions for platonic activities such as coffee, dining, events, shopping, sightseeing, workouts, conversation, or having someone accompany them somewhere.
+
+This is not an escort or sexual-services marketplace. Clearly prohibit sexual services, illegal activity, harassment, minors, off-platform payments, and misleading profiles.
+
+The experience should feel premium, trustworthy, warm, private, and modern—not like a dating app or classified-ads website.
+
+BRAND
+
+Name: OnlyFavors
+Primary color: Mulberry
+Suggested palette:
+- Mulberry: #8F294C
+- Dark mulberry: #5D1833
+- Deep mulberry: #3E1027
+- Cream: #FFF7ED
+- Paper: #FFFDF9
+- Mint safety accent: #BDEBD7
+- Coral alert accent: #FF625D
+- Ink: #241A20
+
+Use an original logo and identity. Do not copy OnlyFans or another company’s protected logo, typography, or icon.
+
+The visual design should be award-quality:
+- Generous spacing
+- Editorial typography
+- Premium profile cards
+- Subtle animation
+- Strong mobile experience
+- Accessible color contrast
+- Clear privacy and safety indicators
+- No generic template appearance
+
+TECHNOLOGY
+
+Use the existing project and connections:
+- Next.js 16 with App Router
+- React 19
+- TypeScript
+- Supabase Database, Auth, Storage, Realtime, and RLS
+- Vercel hosting
+- Stripe Connect for marketplace payments and companion payouts
+- PostGIS for privacy-safe location searching
+
+Do not replace existing Supabase or Vercel connections.
+
+USER TYPES
+
+Use one secure authentication system with role-based access:
+
+1. Customer
+2. Companion
+3. Admin
+
+Do not build three separate authentication databases.
+
+Authentication should use an 8-digit email OTP code. Authorization must come from protected database roles, never user-editable metadata.
+
+CUSTOMER FEATURES
+
+Customers should be able to:
+- Create a private account
+- Complete an 18+ identity and safety profile
+- Browse approved companions available in their area
+- Search by city, approximate distance, availability, activity, price, language, and interests
+- View approximate locations only
+- Save favorite companions
+- View verified profiles, rates, boundaries, reviews, languages, and response time
+- Select an activity, date, start time, and duration
+- Choose a public SafeSpot meeting location
+- See complete pricing before payment
+- Request or instantly confirm a booking
+- Pay securely through Stripe
+- Message only after a qualifying booking/payment event
+- Receive booking reminders
+- Share a safety plan with a trusted contact
+- Complete timed safety check-ins
+- Report a concern or emergency
+- Cancel according to a visible refund policy
+- Leave a review after a completed booking
+- View upcoming and previous bookings
+
+COMPANION FEATURES
+
+Companions should be able to:
+- Apply to become a companion
+- Complete identity, age, background, and safety verification
+- Create a profile with biography, activities, languages, boundaries, and photos
+- Set hourly and day rates
+- Define service areas using approximate location radiuses
+- Manage availability
+- Enable or disable instant booking
+- Accept or decline requests
+- Message customers after a booking is authorized
+- View booking details without unnecessary customer information
+- Complete check-ins during active plans
+- Track earnings, fees, and payouts
+- Pause their profile
+- Report unsafe behavior
+- Appeal moderation decisions
+
+ADMIN FEATURES
+
+Build a real, production-connected Trust and Safety dashboard. Never display invented demo metrics.
+
+Admin sections:
+- Live operations overview
+- Companion verification queue
+- Safety reports
+- Bookings
+- Accounts and suspensions
+- Payment status
+- Audit log
+
+Admin actions:
+- Approve or reject companion applications
+- Triage and resolve safety reports
+- Change risk levels
+- Suspend customer or companion access
+- Review bookings and check-in status
+- Record every admin action in an immutable audit log
+
+Every admin request must be authenticated and authorized on the server and again inside the database. Normal users must never access admin data.
+
+LOCATION AND PRIVACY
+
+Location privacy is a core differentiator:
+- Show only approximate service areas before booking
+- Never publish home addresses
+- Never expose raw latitude and longitude publicly
+- Store exact active-booking locations in a private schema
+- Encrypt sensitive location and safety information
+- Reveal the agreed meeting location only after booking confirmation
+- Automatically limit and expire location access
+- Do not create a public map of users
+- Do not store unnecessary location history
+
+SAFETY
+
+Make safety visible throughout the product:
+- 18+ requirement
+- Identity verification
+- Companion approval process
+- SafeSpot public meeting recommendations
+- Clearly stated personal boundaries
+- Trusted contacts
+- Timed check-ins
+- Missed-check-in escalation
+- One-tap reporting
+- Block and suspension controls
+- Fraud and payment-risk monitoring
+- No off-platform payment solicitation
+- Moderation and appeals
+- Emergency guidance that directs users to local emergency services when necessary
+
+PAYMENTS
+
+Use Stripe Connect:
+- Configurable 20% platform fee
+- Companion receives the remaining 80%
+- Payment authorization before confirmation
+- Store Stripe IDs only in protected server/database areas
+- Use verified Stripe webhooks
+- Make webhook processing idempotent
+- Do not trust payment amounts supplied by the browser
+- Calculate prices on the server
+- Support cancellations, refunds, disputes, and payout holds
+
+Treat the proposed $99 access or messaging fee as an admin-configurable business setting. Do not hardcode or activate it without showing the customer exactly what it unlocks. Recommend testing a lower-friction model before launch.
+
+DATABASE AND SECURITY
+
+Use strong database constraints and Row Level Security:
+- Profiles
+- Protected account roles
+- Companion profiles
+- Service areas
+- Availability windows
+- SafeSpots
+- Bookings
+- Booking messages
+- Private payment records
+- Private exact locations
+- Trusted contacts
+- Booking check-ins
+- Incident reports
+- Admin audit records
+
+Requirements:
+- RLS on every exposed table
+- Authorization based on auth.uid() and protected account roles
+- Never authorize from user_metadata
+- Never expose a service-role or secret key to the browser
+- Store sensitive records in a non-exposed private schema
+- Use server-side validation for all mutations
+- Add rate limiting and abuse protection
+- Use secure Storage buckets and signed URLs
+- Validate uploads and strip unsafe metadata
+- Avoid logging sensitive personal information
+- Fail closed when authentication or configuration is missing
+
+PAGES
+
+Create and connect:
+- Home
+- Explore companions
+- Companion profile
+- Booking flow
+- Customer dashboard
+- Companion dashboard
+- Companion application/onboarding
+- Login and email-code verification
+- Safety center
+- Privacy policy
+- Terms and community guidelines
+- Cancellation policy
+- Admin login
+- Live admin operations dashboard
+
+QUALITY REQUIREMENTS
+
+- Use real Supabase data everywhere
+- No demo banners, fake metrics, or fake operational records
+- Empty databases should show polished empty states
+- All buttons and navigation must work
+- Responsive on phones, tablets, and desktops
+- Keyboard accessible
+- Proper loading, success, empty, and error states
+- Prevent double submissions
+- Use clear and respectful language such as “companion,” not “worker for rent”
+- Run linting, TypeScript checks, production build, and security checks
+- Test authorization as admin, normal user, and logged-out visitor
+- Deploy the completed version to the existing Vercel production domain
+
+Before changing code, inspect the existing project, database schema, migrations, and connected services. Preserve working features and user changes. Implement the highest-priority missing production functionality, verify it, deploy it, and report exactly what is genuinely live versus what still requires external credentials or business approval.
