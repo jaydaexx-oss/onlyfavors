@@ -20,7 +20,7 @@ import {
   useAuthorizeDeposit, useAuthorizeFullPayment,
   type BookingInput, type Companion, type SafeSpot, type Booking,
 } from '@workspace/api-client-react';
-import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -570,6 +570,210 @@ function CheckoutModal({ clientSecret, amountCents, label, onSuccess, onClose }:
           <LockKeyhole className="h-3 w-3" />Payments are processed by Stripe. OnlyFavors never stores your card details.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Companion booking inbox
+// ---------------------------------------------------------------------------
+
+const INBOX_STATUS: Record<string, { label: string; tone: string; canAccept: boolean; canDecline: boolean }> = {
+  requested:    { label: 'Deposit needed',       tone: 'amber',  canAccept: false, canDecline: true  },
+  deposit_paid: { label: 'Ready to confirm',     tone: 'green',  canAccept: true,  canDecline: true  },
+  authorized:   { label: 'Payment held',         tone: 'green',  canAccept: true,  canDecline: true  },
+  confirmed:    { label: 'Confirmed',            tone: 'plum',   canAccept: false, canDecline: false },
+  completed:    { label: 'Completed',            tone: 'gray',   canAccept: false, canDecline: false },
+  cancelled:    { label: 'Cancelled',            tone: 'gray',   canAccept: false, canDecline: false },
+};
+
+function useCompanionBookings() {
+  return useQuery<BookingDetail[]>({
+    queryKey: ['companion-bookings'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/bookings');
+      if (!res.ok) throw new Error('Failed to load bookings');
+      return res.json() as Promise<BookingDetail[]>;
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+function useAcceptBooking() {
+  const qc = useQueryClient();
+  return useMutation<BookingDetail, Error, string>({
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/bookings/${id}/accept`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to accept');
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['companion-bookings'] }),
+  });
+}
+
+function useDeclineBooking() {
+  const qc = useQueryClient();
+  return useMutation<BookingDetail, Error, string>({
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/bookings/${id}/decline`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to decline');
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['companion-bookings'] }),
+  });
+}
+
+function InboxStatusBadge({ status }: { status: string }) {
+  const s = INBOX_STATUS[status] ?? { label: status, tone: 'gray' };
+  const cls: Record<string, string> = {
+    green: 'bg-[#e8f0e8] text-[#31533f]',
+    amber: 'bg-[#f3ead7] text-[#7a5a12]',
+    plum:  'bg-[#ead0dd] text-[#7f2e62]',
+    gray:  'bg-[#f0e4db] text-[#725e69]',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[.15em] ${cls[s.tone]}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function CompanionInbox() {
+  const { data, isLoading, isError, refetch } = useCompanionBookings();
+  const accept = useAcceptBooking();
+  const decline = useDeclineBooking();
+  const [confirming, setConfirming] = useState<{ id: string; action: 'accept' | 'decline' } | null>(null);
+
+  const active = (data ?? []).filter((b) => !['completed', 'cancelled'].includes(b.status));
+  const past   = (data ?? []).filter((b) =>  ['completed', 'cancelled'].includes(b.status)).slice(0, 3);
+
+  const handleAction = (id: string, action: 'accept' | 'decline') => {
+    if (action === 'accept') {
+      accept.mutate(id, { onSuccess: () => setConfirming(null) });
+    } else {
+      decline.mutate(id, { onSuccess: () => setConfirming(null) });
+    }
+  };
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Booking requests</p>
+        <button type="button" onClick={() => refetch()} className="flex items-center gap-1 text-[10px] text-[#9b858e] hover:text-[#7f2e62]">
+          <RefreshCw className="h-3 w-3" />Refresh
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-3">
+          {[0, 1].map((i) => <div key={i} className="skeleton h-24 rounded-[18px]" />)}
+        </div>
+      )}
+
+      {isError && (
+        <div className="rounded-[18px] bg-[#fbebe7] p-5 text-sm text-[#86555a]">
+          Could not load bookings. <button type="button" onClick={() => refetch()} className="font-bold underline">Try again</button>
+        </div>
+      )}
+
+      {!isLoading && !isError && active.length === 0 && (
+        <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-8 text-center">
+          <CalendarDays className="mx-auto h-8 w-8 text-[#c6aeb8]" />
+          <p className="mt-4 font-serif text-xl text-[#48213d]">Your inbox is clear.</p>
+          <p className="mt-2 text-xs text-[#806c76]">New booking requests from customers will appear here. Keep your profile current so the right ones find you.</p>
+        </div>
+      )}
+
+      {active.length > 0 && (
+        <div className="space-y-3">
+          {active.map((b) => {
+            const s = INBOX_STATUS[b.status] ?? { canAccept: false, canDecline: false };
+            const isActing = (accept.isPending || decline.isPending) && confirming?.id === b.id;
+            return (
+              <div key={b.id} className={`rounded-[20px] border p-5 transition ${
+                s.canAccept ? 'border-[#c7d9cb] bg-[#f4faf5]' : 'border-[#dfd2c9] bg-[#fbf7f1]'
+              }`} data-testid={`inbox-booking-${b.id}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <InboxStatusBadge status={b.status} />
+                    <p className="mt-3 font-serif text-2xl leading-none text-[#48213d]">{b.activity}</p>
+                    <p className="mt-1.5 text-xs text-[#806c76]">{b.date} · {b.startTime} · {b.durationHours}h</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-[9px] uppercase tracking-wider text-[#9b858e]">You receive</p>
+                    <p className="mt-1 font-serif text-3xl text-[#48213d]">{money(b.companionPayoutCents)}</p>
+                  </div>
+                </div>
+
+                {b.status === 'requested' && (
+                  <p className="mt-3 rounded-[10px] bg-[#f3ead7] px-3 py-2 text-[10px] text-[#7a5a12]">
+                    Customer hasn't paid yet — you'll be able to confirm once their deposit arrives.
+                  </p>
+                )}
+
+                {(s.canAccept || s.canDecline) && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {s.canAccept && (
+                      confirming?.id === b.id && confirming.action === 'accept' ? (
+                        <button type="button" disabled={isActing} onClick={() => handleAction(b.id, 'accept')}
+                          className="inline-flex h-9 items-center gap-2 rounded-full bg-[#477254] px-4 text-xs font-bold text-white disabled:opacity-60"
+                          data-testid={`button-confirm-accept-${b.id}`}>
+                          {isActing ? 'Confirming…' : 'Tap again to confirm'} <Check className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setConfirming({ id: b.id, action: 'accept' })}
+                          className="inline-flex h-9 items-center gap-2 rounded-full bg-[#e8f0e8] px-4 text-xs font-bold text-[#31533f] hover:bg-[#477254] hover:text-white transition"
+                          data-testid={`button-accept-${b.id}`}>
+                          <Check className="h-3.5 w-3.5" />Accept booking
+                        </button>
+                      )
+                    )}
+                    {s.canDecline && (
+                      confirming?.id === b.id && confirming.action === 'decline' ? (
+                        <button type="button" disabled={isActing} onClick={() => handleAction(b.id, 'decline')}
+                          className="inline-flex h-9 items-center gap-2 rounded-full bg-[#a64742] px-4 text-xs font-bold text-white disabled:opacity-60"
+                          data-testid={`button-confirm-decline-${b.id}`}>
+                          {isActing ? 'Declining…' : 'Tap again to decline'} <X className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setConfirming({ id: b.id, action: 'decline' })}
+                          className="inline-flex h-9 items-center gap-2 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#725e69] hover:border-[#a64742] hover:text-[#a64742] transition"
+                          data-testid={`button-decline-${b.id}`}>
+                          <X className="h-3.5 w-3.5" />Decline
+                        </button>
+                      )
+                    )}
+                    {confirming?.id === b.id && (
+                      <button type="button" onClick={() => setConfirming(null)}
+                        className="text-xs text-[#9b858e] hover:text-[#48213d]">
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                )}
+                <p className="mt-3 font-mono text-[9px] text-[#b0929f]">BOOKING {b.id.slice(-8).toUpperCase()}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-3 font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">Recent</p>
+          <div className="space-y-2">
+            {past.map((b) => (
+              <div key={b.id} className="flex items-center justify-between rounded-[14px] border border-[#ece1d9] px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-[#48213d]">{b.activity}</p>
+                  <p className="text-[10px] text-[#9b858e]">{b.date}</p>
+                </div>
+                <InboxStatusBadge status={b.status} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1264,7 +1468,7 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
     : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Profile views', value: companion.data?.profileViews ?? 0, icon: EyeOff }];
   const hasData = stats.some((x) => x.value !== 0 && x.value !== '$0.00');
   const stripeReturn = typeof window !== 'undefined' && window.location.search.includes('stripe=return');
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
+  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
 }
 
 function Apply() {

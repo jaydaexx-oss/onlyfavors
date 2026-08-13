@@ -11,7 +11,7 @@ import {
   ListSafeSpotsQueryParams,
 } from "@workspace/api-zod";
 import { db, bookings, favorRequests } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   getApprovedCompanion,
   getApprovedCompanions,
@@ -387,6 +387,83 @@ router.post("/bookings/:id/authorize", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Unable to create full payment intent");
     res.status(500).json({ error: "Unable to initiate payment" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Companion booking inbox — view, accept, decline requests
+// ---------------------------------------------------------------------------
+
+router.get("/companion/bookings", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const rows = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.companionId, companionId))
+      .orderBy(desc(bookings.createdAt));
+    res.json(rows.map(formatBookingFull));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Unable to list companion bookings");
+    res.status(503).json({ error: "Bookings temporarily unavailable" });
+  }
+});
+
+router.post("/bookings/:id/accept", async (req, res) => {
+  const { id } = req.params;
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.companionId !== companionId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!["deposit_paid", "authorized"].includes(booking.status)) {
+      res.status(409).json({ error: "Booking cannot be accepted in its current state" }); return;
+    }
+    const [updated] = await db
+      .update(bookings)
+      .set({ status: "confirmed", confirmedAt: new Date(), updatedAt: new Date() })
+      .where(eq(bookings.id, id))
+      .returning();
+    res.json(formatBookingFull(updated));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.status(503).json({ error: "Service temporarily unavailable" }); return; }
+    req.log.error({ err }, "Unable to accept booking");
+    res.status(503).json({ error: "Could not accept booking" });
+  }
+});
+
+router.post("/bookings/:id/decline", async (req, res) => {
+  const { id } = req.params;
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.companionId !== companionId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (["confirmed", "completed", "cancelled"].includes(booking.status)) {
+      res.status(409).json({ error: "Booking cannot be declined in its current state" }); return;
+    }
+    const [updated] = await db
+      .update(bookings)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(bookings.id, id))
+      .returning();
+    res.json(formatBookingFull(updated));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.status(503).json({ error: "Service temporarily unavailable" }); return; }
+    req.log.error({ err }, "Unable to decline booking");
+    res.status(503).json({ error: "Could not decline booking" });
   }
 });
 
