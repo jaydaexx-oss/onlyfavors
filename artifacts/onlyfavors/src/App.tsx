@@ -51,6 +51,7 @@ function Header() {
         <Link href="/companion/apply" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-apply">Become a companion</Link>
       </nav>
       <div className="hidden items-center gap-3 md:flex">
+        <NotificationBell role="customer" />
         <SavedNavIcon />
         <Link href="/login" className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-login"><LogIn className="h-4 w-4" />Sign in</Link>
         <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-[13px] font-bold text-[#fff5eb] shadow-[0_7px_18px_rgba(127,46,98,.18)] transition hover:-translate-y-0.5 hover:bg-[#65234e]" data-testid="link-find-companion">Find a companion <ArrowRight className="h-4 w-4" /></Link>
@@ -109,6 +110,157 @@ function useSavedCompanionIds() {
   }, []);
 
   return { ids, remove };
+}
+
+// ---------------------------------------------------------------------------
+// Notification bell
+// ---------------------------------------------------------------------------
+
+type Notif = {
+  id: string; kind: string; title: string; body: string;
+  href: string; createdAt: string; read: boolean; audience: string;
+};
+
+const NOTIF_ICONS: Record<string, typeof Bell> = {
+  booking_request: CalendarDays,
+  booking_accepted: Check,
+  booking_declined: AlertTriangle,
+  new_message: MessageSquare,
+  payout_ready: Send,
+};
+
+function useNotifications(role: 'customer' | 'companion') {
+  return useQuery<Notif[]>({
+    queryKey: ['notifications', role],
+    queryFn: async () => {
+      const res = await fetch(`/api/notifications?role=${role}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+    retry: false,
+  });
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function NotificationBell({ role = 'customer' }: { role?: 'customer' | 'companion' }) {
+  const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const { data } = useNotifications(role);
+  const notifs = data ?? [];
+  const unread = notifs.filter((n) => !n.read).length;
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const markAllRead = async () => {
+    await fetch('/api/notifications/read-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+    qc.invalidateQueries({ queryKey: ['notifications', role] });
+  };
+
+  const markRead = async (id: string) => {
+    await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+    qc.invalidateQueries({ queryKey: ['notifications', role] });
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#654c5f] transition hover:bg-[#eee2d9] hover:text-[#7f2e62]"
+        aria-label="Notifications"
+        data-testid="button-notifications"
+      >
+        <Bell className="h-4 w-4" />
+        {unread > 0 && (
+          <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7f2e62] font-mono text-[9px] font-bold text-white">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-[20px] border border-[#dfd2c9] bg-white shadow-[0_20px_50px_rgba(61,32,56,.15)]" data-testid="panel-notifications">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[#ece1d9] bg-[#fbf7f1] px-4 py-3">
+            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Notifications</p>
+            {unread > 0 && (
+              <button type="button" onClick={markAllRead} className="text-[10px] font-bold text-[#7f2e62] hover:underline" data-testid="button-mark-all-read">
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div className="max-h-[340px] divide-y divide-[#f0e8e2] overflow-y-auto">
+            {notifs.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-10 text-center">
+                <Bell className="h-7 w-7 text-[#c6aeb8]" />
+                <p className="text-sm font-semibold text-[#806c76]">All caught up</p>
+                <p className="text-xs text-[#9b858e]">New booking and message alerts appear here.</p>
+              </div>
+            ) : notifs.map((n) => {
+              const Icon = NOTIF_ICONS[n.kind] ?? Bell;
+              const accentClass = n.kind === 'booking_declined' ? 'bg-[#fdf3f1] text-[#a64742]'
+                : n.kind === 'booking_accepted' || n.kind === 'payout_ready' ? 'bg-[#e8f0e8] text-[#477254]'
+                : 'bg-[#ead0dd] text-[#7f2e62]';
+              return (
+                <a
+                  key={n.id}
+                  href={n.href}
+                  onClick={() => { markRead(n.id); setOpen(false); }}
+                  className={`flex gap-3 px-4 py-3.5 transition hover:bg-[#fdf9f6] ${n.read ? 'opacity-60' : ''}`}
+                  data-testid={`notif-${n.id}`}
+                >
+                  <div className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl ${accentClass}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-bold text-[#48213d]">{n.title}</p>
+                      {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#7f2e62]" />}
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-4 text-[#725e69]">{n.body}</p>
+                    <p className="mt-1 font-mono text-[9px] text-[#9b858e]">{timeAgo(n.createdAt)}</p>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          {notifs.length > 0 && (
+            <div className="border-t border-[#ece1d9] bg-[#fbf7f1] px-4 py-2.5 text-center">
+              <p className="text-[10px] text-[#9b858e]">Alerts refresh every 30 seconds · polling while auth is live</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SavedNavIcon() {

@@ -861,6 +861,113 @@ router.post("/bookings/:id/review", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Notifications — in-app alerts for booking events and messages
+// ---------------------------------------------------------------------------
+
+type NotifKind = 'booking_request' | 'booking_accepted' | 'booking_declined' | 'new_message' | 'payout_ready';
+
+type DevNotif = {
+  id: string;
+  kind: NotifKind;
+  title: string;
+  body: string;
+  href: string;
+  createdAt: string;
+  read: boolean;
+  /** 'customer' | 'companion' — which role sees this */
+  audience: 'customer' | 'companion';
+};
+
+const devNotifications: DevNotif[] = [
+  {
+    id: 'notif-1',
+    kind: 'booking_request',
+    title: 'New booking request',
+    body: 'A customer wants to book 3 hours on Saturday. Review and respond.',
+    href: '/dashboard/companion',
+    createdAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+    read: false,
+    audience: 'companion',
+  },
+  {
+    id: 'notif-2',
+    kind: 'new_message',
+    title: 'New message',
+    body: 'Your customer sent a message — tap to reply.',
+    href: '/dashboard/companion',
+    createdAt: new Date(Date.now() - 38 * 60_000).toISOString(),
+    read: false,
+    audience: 'companion',
+  },
+  {
+    id: 'notif-3',
+    kind: 'payout_ready',
+    title: 'Payout on its way',
+    body: '$110.50 is being transferred to your connected bank account.',
+    href: '/dashboard/companion',
+    createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    read: true,
+    audience: 'companion',
+  },
+  {
+    id: 'notif-4',
+    kind: 'booking_accepted',
+    title: 'Booking confirmed',
+    body: 'Your companion accepted the request. Complete payment to lock it in.',
+    href: '/dashboard/customer',
+    createdAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    read: false,
+    audience: 'customer',
+  },
+  {
+    id: 'notif-5',
+    kind: 'new_message',
+    title: 'New message',
+    body: 'Your companion replied to your question.',
+    href: '/dashboard/customer',
+    createdAt: new Date(Date.now() - 55 * 60_000).toISOString(),
+    read: false,
+    audience: 'customer',
+  },
+  {
+    id: 'notif-6',
+    kind: 'booking_declined',
+    title: 'Booking not available',
+    body: "Your companion couldn't take this date. Browse others nearby.",
+    href: '/explore',
+    createdAt: new Date(Date.now() - 5 * 3600_000).toISOString(),
+    read: true,
+    audience: 'customer',
+  },
+];
+
+/** Mark individual notification read (toggled by front-end) */
+const readNotifIds = new Set<string>();
+
+router.get("/notifications", (req, res) => {
+  // Role detection: companions see companion audience, everyone else sees customer
+  const isCompanion = req.query.role === 'companion';
+  const audience: 'customer' | 'companion' = isCompanion ? 'companion' : 'customer';
+  const items = devNotifications
+    .filter((n) => n.audience === audience)
+    .map((n) => ({ ...n, read: n.read || readNotifIds.has(n.id) }))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json(items);
+});
+
+router.post("/notifications/read-all", (req, res) => {
+  const isCompanion = req.body?.role === 'companion';
+  const audience: 'customer' | 'companion' = isCompanion ? 'companion' : 'customer';
+  devNotifications.filter((n) => n.audience === audience).forEach((n) => readNotifIds.add(n.id));
+  res.json({ ok: true });
+});
+
+router.post("/notifications/:id/read", (req, res) => {
+  readNotifIds.add(req.params.id);
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Admin / ops — restricted to trust staff
 // ---------------------------------------------------------------------------
 
