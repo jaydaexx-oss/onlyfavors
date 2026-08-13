@@ -23,6 +23,28 @@ import { getUncachableStripeClient } from "../lib/stripeClient";
 const router: IRouter = Router();
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Returns true when a DB error is caused by a missing table (pre-migration). */
+function isMissingTableError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as Record<string, unknown>;
+  const msg = (s: unknown) => typeof s === "string" && s.includes("does not exist");
+  // Drizzle wraps the postgres error — check message at every level of the chain
+  if (msg(e.message)) return true;
+  if (msg((e.cause as any)?.message)) return true;
+  if ((e.cause as any)?.code === "42P01") return true; // undefined_table
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// In-memory Stripe Connect account store (dev-only)
+// Replace with Supabase companion_profiles.stripe_account_id once Task #1 lands
+// ---------------------------------------------------------------------------
+const devCompanionStripeAccounts = new Map<string, string>(); // companionId → stripeAccountId
+
+// ---------------------------------------------------------------------------
 // Discovery — public, privacy-safe
 // ---------------------------------------------------------------------------
 
@@ -280,14 +302,18 @@ router.post("/bookings/:id/authorize", async (req, res) => {
     }
 
     // Full payment: customer pays totalCents.
-    // application_fee_amount = platformRevenueCents (taken before companion payout).
-    // Transfer to companion's connected account happens after payment_intent.succeeded.
-    // TODO: add transfer_data.destination once companion Stripe Connect onboarding is live.
+    // When companion has a Stripe Connect account, platform keeps application_fee_amount
+    // and the rest is transferred to the companion's account automatically.
+    const companionAccountId = devCompanionStripeAccounts.get(booking.companionId);
     const pi = await stripe.paymentIntents.create({
       amount: booking.totalCents,
       currency: "usd",
-      // Platform keeps its cut via application_fee_amount on the connected account charge
-      // when companion Stripe Connect is live. For now, full amount captured to platform.
+      ...(companionAccountId
+        ? {
+            application_fee_amount: booking.platformRevenueCents,
+            transfer_data: { destination: companionAccountId },
+          }
+        : {}),
       metadata: {
         bookingId: booking.id,
         customerId,
@@ -379,12 +405,76 @@ router.post("/favor-requests", async (req, res) => {
 // Dashboards — auth required
 // ---------------------------------------------------------------------------
 
-router.get("/dashboard/customer", (req, res) => {
-  res.status(401).json({ error: "Authentication required" });
+router.get("/dashboard/customer", async (req, res) => {
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!customerId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    const rows = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.customerId, customerId));
+    const upcomingCount = rows.filter((b) =>
+      ["requested", "authorized", "deposit_paid"].includes(b.status),
+    ).length;
+    const completedCount = rows.filter((b) => b.status === "confirmed").length;
+
+    res.json({
+      upcomingBookings: upcomingCount,
+      completedBookings: completedCount,
+      savedCompanions: 0,
+      safetyPlans: upcomingCount,
+    });
+  } catch (err: any) {
+    // Tables don't exist yet (schema created in Task #1) — check full error chain
+    if (isMissingTableError(err)) {
+      req.log.warn("Dashboard tables not yet created — returning empty stats");
+      res.json({ upcomingBookings: 0, completedBookings: 0, savedCompanions: 0, safetyPlans: 0 });
+      return;
+    }
+    req.log.error({ err }, "Unable to load customer dashboard");
+    res.status(503).json({ error: "Dashboard temporarily unavailable" });
+  }
 });
 
-router.get("/dashboard/companion", (req, res) => {
-  res.status(401).json({ error: "Authentication required" });
+router.get("/dashboard/companion", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    const [companionBookings, companionRequests] = await Promise.all([
+      db.select().from(bookings).where(eq(bookings.companionId, companionId)),
+      db.select().from(favorRequests).where(eq(favorRequests.companionId, companionId)),
+    ]);
+    const pendingReqs = companionRequests.filter((r) => r.status === "pending").length;
+    const upcomingCount = companionBookings.filter((b) =>
+      ["authorized", "deposit_paid"].includes(b.status),
+    ).length;
+    const earningsCents = companionBookings
+      .filter((b) => b.status === "confirmed")
+      .reduce((sum, b) => sum + b.companionPayoutCents, 0);
+
+    res.json({ pendingRequests: pendingReqs, upcomingBookings: upcomingCount, earningsCents, profileViews: 0 });
+  } catch (err: any) {
+    // Tables don't exist yet (schema created in Task #1) — check full error chain
+    if (isMissingTableError(err)) {
+      req.log.warn("Dashboard tables not yet created — returning empty stats");
+      res.json({ pendingRequests: 0, upcomingBookings: 0, earningsCents: 0, profileViews: 0 });
+      return;
+    }
+    req.log.error({ err }, "Unable to load companion dashboard");
+    res.status(503).json({ error: "Dashboard temporarily unavailable" });
+  }
 });
 
 router.get("/admin/overview", (req, res) => {
@@ -428,6 +518,94 @@ router.get("/safespots", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Unable to read SafeSpots");
     res.status(503).json({ error: "SafeSpots are temporarily unavailable" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Companion payout setup — Stripe Connect Express onboarding
+// ---------------------------------------------------------------------------
+
+router.post("/companion/stripe/onboard", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    const stripe = await getUncachableStripeClient();
+
+    // Reuse existing account if already created (idempotent)
+    let accountId = devCompanionStripeAccounts.get(companionId);
+    if (!accountId) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        metadata: { companionId },
+        capabilities: { transfers: { requested: true } },
+      });
+      accountId = account.id;
+      devCompanionStripeAccounts.set(companionId, accountId);
+    }
+
+    // Build return/refresh URLs from the incoming request origin
+    const origin =
+      (req.headers["x-forwarded-proto"] ?? "https") +
+      "://" +
+      (req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost");
+    const base = `${origin}${process.env.FRONTEND_BASE_PATH ?? "/onlyfavors"}`;
+    const returnUrl = `${base}/dashboard/companion?stripe=return`;
+    const refreshUrl = `${base}/dashboard/companion?stripe=refresh`;
+
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      return_url: returnUrl,
+      refresh_url: refreshUrl,
+      type: "account_onboarding",
+    });
+
+    req.log.info({ companionId, accountId }, "Stripe Connect onboarding link created");
+    res.json({ url: link.url });
+  } catch (err) {
+    req.log.error({ err }, "Unable to create Stripe Connect onboarding link");
+    res.status(500).json({ error: "Unable to start payout setup" });
+  }
+});
+
+router.get("/companion/stripe/status", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    const accountId = devCompanionStripeAccounts.get(companionId);
+    if (!accountId) {
+      res.json({ status: "not_started" });
+      return;
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const account = await stripe.accounts.retrieve(accountId);
+
+    const active =
+      account.details_submitted &&
+      (account.charges_enabled || account.payouts_enabled);
+
+    req.log.info({ companionId, accountId, active }, "Stripe Connect status checked");
+    res.json({
+      status: active ? "active" : "pending",
+      accountId,
+      detailsSubmitted: account.details_submitted,
+      payoutsEnabled: account.payouts_enabled ?? false,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Unable to retrieve Stripe Connect account status");
+    res.status(500).json({ error: "Unable to check payout status" });
   }
 });
 

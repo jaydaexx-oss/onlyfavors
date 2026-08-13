@@ -20,7 +20,7 @@ import {
   useAuthorizeDeposit, useAuthorizeFullPayment,
   type BookingInput, type Companion, type SafeSpot, type Booking,
 } from '@workspace/api-client-react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -604,6 +604,98 @@ function Book() {
   return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href={`/companions/${companion.id}`} className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-back-profile"><ArrowLeft className="h-4 w-4" />Back to profile</Link><div className="mt-8 grid gap-10 lg:grid-cols-[1fr_340px]"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A thoughtful plan</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Book time with<br /><em>{companion.displayName}.</em></h1><p className="mt-4 max-w-lg text-sm leading-6 text-[#725e69]">Tell us the shape of your time together. We will confirm the price and keep the details clear for everyone.</p><form onSubmit={submit} className="mt-10 space-y-5" data-testid="form-booking"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">What would you like to do?</span><select required value={activity} onChange={(e) => setActivity(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-activity"><option value="">Choose an activity</option>{companion.activities.map((x) => <option key={x} value={x}>{x}</option>)}</select></label><div className="grid gap-5 sm:grid-cols-2"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Date</span><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-date" /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Start time</span><input required type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-time" /></label></div><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">How long?</span><select required value={duration} onChange={(e) => setDuration(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-duration"><option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Choose a SafeSpot in {companion.city}</span>{spotsQuery.isLoading ? <div className="skeleton h-12 rounded-xl" /> : spotsQuery.isError ? <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">SafeSpots are unavailable. Try again in a moment.</p> : spots.length === 0 ? <p className="rounded-xl border border-dashed border-[#cbbab5] p-3 text-xs text-[#806c76]">No public SafeSpots are listed for this area yet.</p> : <select required value={spot} onChange={(e) => setSpot(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-safe-spot"><option value="">Choose a public place</option>{spots.map((s: SafeSpot) => <option key={s.id} value={s.id}>{s.name} · {s.addressHint}{s.openLate ? ' · Open late' : ''}</option>)}</select>}</label><div className="flex items-start gap-2 rounded-xl bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />Your booking is only a request until your companion accepts. Exact details stay private.</div><Button type="submit" disabled={mutation.isPending || spots.length === 0} className="w-full sm:w-auto" testId="button-submit-booking">{mutation.isPending ? 'Pricing your request…' : 'Review server-priced request'} <ArrowRight className="h-4 w-4" /></Button>{mutation.isError && <p className="text-sm text-[#a64742]" data-testid="status-booking-error">We could not create this request. Please check the details and try again.</p>}</form></div><aside className="h-fit rounded-[24px] bg-[#3d2038] p-7 text-[#f9efe5] lg:sticky lg:top-28"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your companion</p><div className="mt-5 flex items-center gap-3"><Avatar companion={companion} /><div><p className="font-serif text-2xl">{companion.displayName}</p><p className="text-xs text-[#d3b6c4]">{companion.serviceArea}, {companion.city}</p></div></div><div className="mt-7 rounded-[16px] border border-[#65445d] bg-[#4a2842] p-5">{quoteQuery.isLoading ? <><div className="skeleton h-3 w-24 rounded-full opacity-30" /><div className="skeleton mt-3 h-8 w-32 rounded-full opacity-30" /><div className="skeleton mt-2 h-3 w-full rounded-full opacity-20" /></> : quote ? <><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[#c695ae]">Price estimate</p><div className="mt-4 space-y-2 text-xs text-[#d8c1cc]"><div className="flex items-center justify-between"><span>{duration} hr × {money(companion.hourlyRate * 100)}/hr</span><span>{money(quote.subtotalCents)}</span></div><div className="flex items-center justify-between text-[#b39dad]"><span>Safety &amp; service fee (5%)</span><span>+{money(quote.customerFeeCents)}</span></div></div><div className="my-3 border-t border-[#65445d]" /><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">You pay</span><span className="font-serif text-3xl text-[#f9efe5]" data-testid="value-quote-total">{money(quote.totalCents)}</span></div><p className="mt-1 text-right text-[10px] text-[#b39dad]">Companion receives {money(quote.companionPayoutCents)}</p><div className="mt-4 rounded-[10px] border border-[#8a4070] bg-[#5a2550] p-3"><div className="flex items-start gap-2"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#df9cbd]" /><p className="text-[10px] leading-4 text-[#dbc3cf]">Or pay a <strong className="text-[#f0c8dc]">$10 deposit</strong> to unlock chat first — credited toward your booking total.</p></div></div></> : <p className="text-xs text-[#b39dad]">Select a duration to see your price.</p>}</div><div className="mt-5 border-t border-[#65445d] pt-5"><p className="flex items-center gap-2 text-xs leading-5 text-[#d8c1cc]"><LockKeyhole className="h-4 w-4 text-[#df9cbd]" />All prices are calculated server-side. Your browser never sets amounts.</p></div></aside></div></main></Shell>;
 }
 
+type PayoutStatus = { status: 'not_started' | 'pending' | 'active'; detailsSubmitted?: boolean; payoutsEnabled?: boolean };
+
+function useCompanionPayoutStatus() {
+  return useQuery<PayoutStatus>({
+    queryKey: ['companion-payout-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/stripe/status');
+      if (!res.ok) throw new Error('Failed to check payout status');
+      return res.json() as Promise<PayoutStatus>;
+    },
+    retry: 1,
+  });
+}
+
+function useStartPayoutOnboarding() {
+  return useMutation<{ url: string }, Error>({
+    mutationFn: async () => {
+      const res = await fetch('/api/companion/stripe/onboard', { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to start payout setup');
+      return res.json() as Promise<{ url: string }>;
+    },
+    onSuccess: (data) => { window.location.href = data.url; },
+  });
+}
+
+function PayoutSetup({ stripeReturn }: { stripeReturn: boolean }) {
+  const { data, isLoading, refetch } = useCompanionPayoutStatus();
+  const onboard = useStartPayoutOnboarding();
+
+  useEffect(() => { if (stripeReturn) refetch(); }, [stripeReturn, refetch]);
+
+  if (isLoading) return null;
+
+  const status = data?.status ?? 'not_started';
+
+  if (status === 'active') {
+    return (
+      <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#c7d9cb] bg-[#e8f0e8] px-6 py-4" data-testid="payout-status-active">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#cad8cb] text-[#31533f]"><Check className="h-4 w-4" /></span>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-[#31533f]">Payouts active</p>
+          <p className="text-xs text-[#53725d]">Earnings from confirmed bookings transfer to your bank automatically.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'pending') {
+    return (
+      <div className="mt-6 rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-6" data-testid="payout-status-pending">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Payout setup</p>
+            <h2 className="mt-2 font-serif text-2xl text-[#48213d]">One step left.</h2>
+            <p className="mt-2 text-sm leading-6 text-[#725e69]">Your Stripe account was created but needs a few more details before payouts can be sent.</p>
+          </div>
+          <WalletCards className="mt-1 h-6 w-6 shrink-0 text-[#9b6b88]" />
+        </div>
+        <div className="mt-5 flex items-center gap-3">
+          <Button onClick={() => onboard.mutate()} disabled={onboard.isPending} testId="button-payout-finish">
+            {onboard.isPending ? 'Opening Stripe…' : 'Finish setup'}<ArrowRight className="h-4 w-4" />
+          </Button>
+          <button onClick={() => refetch()} type="button" className="inline-flex h-11 items-center gap-2 rounded-full px-4 text-xs font-bold text-[#7f2e62] transition hover:bg-[#ead0dd]" data-testid="button-payout-refresh">
+            <RefreshCw className="h-3.5 w-3.5" />Check again
+          </button>
+        </div>
+        {onboard.isError && <p className="mt-3 text-xs text-[#a64742]">{onboard.error.message}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-6" data-testid="payout-status-not-started">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Payout setup</p>
+          <h2 className="mt-2 font-serif text-2xl text-[#48213d]">Get paid for your time.</h2>
+          <p className="mt-2 text-sm leading-6 text-[#725e69]">Connect a bank account through Stripe so earnings from confirmed bookings land automatically. Takes about 5 minutes.</p>
+        </div>
+        <WalletCards className="mt-1 h-6 w-6 shrink-0 text-[#9b6b88]" />
+      </div>
+      <div className="mt-5">
+        <Button onClick={() => onboard.mutate()} disabled={onboard.isPending} testId="button-payout-start">
+          {onboard.isPending ? 'Opening Stripe…' : 'Set up payouts'}<ArrowRight className="h-4 w-4" />
+        </Button>
+        {stripeReturn && <p className="mt-3 text-xs text-[#9a6d25]">We got your return from Stripe — your account is still being reviewed. Give it a moment and check again.</p>}
+      </div>
+      {onboard.isError && <p className="mt-3 text-xs text-[#a64742]">{onboard.error.message}</p>}
+    </div>
+  );
+}
+
 function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
   const isCustomer = mode === 'customer'; const customer = useGetCustomerDashboard({ query: { enabled: isCustomer, queryKey: getGetCustomerDashboardQueryKey() } }); const companion = useGetCompanionDashboard({ query: { enabled: !isCustomer, queryKey: getGetCompanionDashboardQueryKey() } }); const query = isCustomer ? customer : companion;
   if (query.isLoading) return <Shell><main className="mx-auto max-w-7xl px-5 py-16 lg:px-8"><LoadingState label="Preparing your workspace" /></main></Shell>;
@@ -612,7 +704,8 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
     ? [{ label: 'Upcoming bookings', value: customer.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Completed together', value: customer.data?.completedBookings ?? 0, icon: Check }, { label: 'Saved companions', value: customer.data?.savedCompanions ?? 0, icon: HeartHandshake }, { label: 'Safety plans', value: customer.data?.safetyPlans ?? 0, icon: ShieldCheck }]
     : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Profile views', value: companion.data?.profileViews ?? 0, icon: EyeOff }];
   const hasData = stats.some((x) => x.value !== 0 && x.value !== '$0.00');
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div><div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
+  const stripeReturn = typeof window !== 'undefined' && window.location.search.includes('stripe=return');
+  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
 }
 
 function Apply() {
