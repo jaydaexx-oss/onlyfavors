@@ -468,7 +468,7 @@ function Profile() {
   if (query.isLoading) return <Shell><main className="mx-auto max-w-6xl px-5 py-16"><LoadingState /></main></Shell>;
   if (query.isError || !query.data) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => query.refetch()} /></main></Shell>;
   const c = query.data;
-  return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <span key={x} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62]">{x}</span>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />Identity verified by OnlyFavors</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div><Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link><p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p></aside></div></main></Shell>;
+  return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <span key={x} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62]">{x}</span>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionReviews companionId={c.id} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />Identity verified by OnlyFavors</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div><Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link><p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p></aside></div></main></Shell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1495,6 +1495,185 @@ function StatusBadge({ status }: { status: string }) {
   const { label, tone } = STATUS_LABEL[status] ?? { label: status, tone: 'gray' };
   const cls = { green: 'bg-[#e8f0e8] text-[#31533f]', amber: 'bg-[#f3ead7] text-[#7a5a12]', plum: 'bg-[#ead0dd] text-[#7f2e62]', gray: 'bg-[#f0e4db] text-[#725e69]' }[tone];
   return <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[.18em] ${cls}`}>{label}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// Reviews
+// ---------------------------------------------------------------------------
+
+type Review = { id: string; bookingId: string; companionId: string; rating: number; comment: string; createdAt: string };
+
+function useCompanionReviews(companionId: string) {
+  return useQuery<Review[]>({
+    queryKey: ['companion-reviews', companionId],
+    queryFn: async () => {
+      const res = await fetch(`/api/companions/${companionId}/reviews`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: Boolean(companionId),
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+function useSubmitReview(bookingId: string) {
+  const qc = useQueryClient();
+  return useMutation<Review, Error, { rating: number; comment: string }>({
+    mutationFn: async ({ rating, comment }) => {
+      const res = await fetch(`/api/bookings/${bookingId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating, comment }),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'Failed to submit' }));
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['companion-reviews', data.companionId] });
+      localStorage.setItem(`of_reviewed_${bookingId}`, '1');
+    },
+  });
+}
+
+function StarInput({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="flex gap-1" role="group" aria-label="Rating">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n)}
+          onMouseEnter={() => setHover(n)}
+          onMouseLeave={() => setHover(0)}
+          className="text-[#bf8750] transition hover:scale-110"
+          aria-label={`${n} star${n > 1 ? 's' : ''}`}
+          data-testid={`star-${n}`}
+        >
+          <Star className={`h-7 w-7 ${(hover || value) >= n ? 'fill-[#bf8750]' : 'fill-transparent'}`} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StarDisplay({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'xs' }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={size === 'sm' ? 'h-3.5 w-3.5' : 'h-3 w-3'}
+          fill={rating >= n ? '#bf8750' : 'transparent'}
+          color={rating >= n ? '#bf8750' : '#d4bfa8'}
+        />
+      ))}
+    </div>
+  );
+}
+
+const REVIEW_LABELS: Record<number, string> = { 1: 'Not what I hoped', 2: 'Okay', 3: 'Good', 4: 'Really enjoyed it', 5: 'Exceptional' };
+
+function ReviewForm({ bookingId }: { bookingId: string }) {
+  const alreadyReviewed = Boolean(localStorage.getItem(`of_reviewed_${bookingId}`));
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [done, setDone] = useState(alreadyReviewed);
+  const submit = useSubmitReview(bookingId);
+
+  if (done) {
+    return (
+      <div className="mt-6 flex items-center gap-3 rounded-[20px] bg-[#e8f0e8] px-5 py-4">
+        <Check className="h-5 w-5 shrink-0 text-[#477254]" />
+        <div>
+          <p className="text-sm font-semibold text-[#31533f]">Review submitted.</p>
+          <p className="text-xs text-[#53725d]">Thank you — your feedback helps future customers choose with confidence.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 overflow-hidden rounded-[20px] border border-[#dfd2c9] bg-white">
+      <div className="border-b border-[#ece1d9] bg-[#fbf7f1] px-5 py-3">
+        <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Leave a review · helps future customers</p>
+      </div>
+      <div className="p-5">
+        <p className="mb-3 text-sm font-semibold text-[#48213d]">How was your time?</p>
+        <StarInput value={rating} onChange={setRating} />
+        {rating > 0 && (
+          <p className="mt-2 font-mono text-[10px] text-[#9d557e]">{REVIEW_LABELS[rating]}</p>
+        )}
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          maxLength={300}
+          rows={3}
+          placeholder="A few honest words (optional)…"
+          className="mt-4 w-full resize-none rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] p-3 text-sm leading-6 text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+          data-testid="textarea-review-comment"
+        />
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-[10px] text-[#9b858e]">{comment.length}/300</span>
+          <button
+            type="button"
+            disabled={rating === 0 || submit.isPending}
+            onClick={() => submit.mutate({ rating, comment }, { onSuccess: () => setDone(true) })}
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white disabled:opacity-40"
+            data-testid="button-submit-review"
+          >
+            {submit.isPending ? 'Submitting…' : 'Submit review'} <Send className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {submit.isError && (
+          <p className="mt-2 text-[10px] text-[#a64742]">{submit.error?.message}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CompanionReviews({ companionId }: { companionId: string }) {
+  const { data, isLoading } = useCompanionReviews(companionId);
+  const reviews = data ?? [];
+
+  if (isLoading) return <div className="mt-10 skeleton h-24 rounded-[20px]" />;
+  if (reviews.length === 0) return (
+    <div className="mt-10 border-t border-[#dfd2c9] pt-8">
+      <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Reviews</p>
+      <p className="mt-4 text-sm text-[#806c76]">No reviews yet. Be the first to share your experience.</p>
+    </div>
+  );
+
+  const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+
+  return (
+    <div className="mt-10 border-t border-[#dfd2c9] pt-8">
+      <div className="mb-5 flex items-center gap-4">
+        <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Reviews</p>
+        <div className="flex items-center gap-2">
+          <StarDisplay rating={Math.round(avg)} />
+          <span className="font-mono text-[11px] font-bold text-[#48213d]">{avg.toFixed(1)}</span>
+          <span className="text-[10px] text-[#9b858e]">from {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}</span>
+        </div>
+      </div>
+      <div className="space-y-4">
+        {reviews.slice(0, 5).map((r) => (
+          <div key={r.id} className="rounded-[16px] border border-[#ece1d9] bg-[#fbf7f1] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <StarDisplay rating={r.rating} size="xs" />
+              <span className="text-[9px] text-[#9b858e]">{new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
+            </div>
+            {r.comment && <p className="mt-2 text-sm leading-6 text-[#654c5f]">{r.comment}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

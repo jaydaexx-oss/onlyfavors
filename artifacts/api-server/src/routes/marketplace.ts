@@ -89,20 +89,50 @@ router.get("/companions", async (req, res) => {
   }
 });
 
+/** Dev companion fixtures — shown when Supabase is unavailable */
+const DEV_COMPANIONS: Record<string, object> = {
+  "companion-maya": {
+    id: "companion-maya", displayName: "Maya R.", verified: true,
+    biography: "Retired curator with a love for contemporary art and good conversation. Patient, warm, and genuinely curious about people.",
+    activities: ["Museum visits", "Coffee conversations", "Farmers market walks", "Gallery tours"],
+    languages: ["English", "Spanish"], hourlyRate: 65,
+    serviceArea: "San Francisco", city: "CA",
+    photoUrl: null, rating: 4.9, reviewCount: 3, responseTime: "within 2h",
+    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
+    availability: [],
+  },
+  "companion-jordan": {
+    id: "companion-jordan", displayName: "Jordan K.", verified: true,
+    biography: "Former chef turned food writer. Best company for anyone who takes eating seriously.",
+    activities: ["Gallery tours", "Cooking classes", "Evening walks"],
+    languages: ["English", "French"], hourlyRate: 75,
+    serviceArea: "New York", city: "NY",
+    photoUrl: null, rating: 4.8, reviewCount: 12, responseTime: "within 1h",
+    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
+    availability: [],
+  },
+};
+
 router.get("/companions/:id", async (req, res) => {
   const { id } = GetCompanionParams.parse(req.params);
   try {
     const [row] = await getApprovedCompanion(id);
     if (!row) {
+      // Dev fallback: return a fixture if one exists for this ID
+      if (process.env.NODE_ENV === "development" && DEV_COMPANIONS[id]) {
+        res.json(DEV_COMPANIONS[id]); return;
+      }
       res.status(404).json({ error: "Companion not found" });
       return;
     }
     res.json(mapCompanionRow(row));
   } catch (err) {
+    // Dev fallback: Supabase unavailable — serve fixture if available, else 503
+    if (process.env.NODE_ENV === "development" && DEV_COMPANIONS[id]) {
+      res.json(DEV_COMPANIONS[id]); return;
+    }
     req.log.error({ err }, "Unable to read companion profile");
-    res
-      .status(503)
-      .json({ error: "Companion profile is temporarily unavailable" });
+    res.status(503).json({ error: "Companion profile is temporarily unavailable" });
   }
 });
 
@@ -709,6 +739,124 @@ router.post("/bookings/:id/messages", async (req, res) => {
     }
     req.log.error({ err }, "Failed to send message");
     res.status(503).json({ error: "Could not send message" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Reviews — submitted by customers after completed bookings
+// ---------------------------------------------------------------------------
+
+type DevReview = {
+  id: string;
+  bookingId: string;
+  companionId: string;
+  customerId: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+};
+
+const devReviews: DevReview[] = [
+  {
+    id: "rev-demo-1",
+    bookingId: "bk-demo-1",
+    companionId: "companion-maya",
+    customerId: "cust-demo-1",
+    rating: 5,
+    comment: "Maya was thoughtful, punctual, and made the afternoon feel easy. The gallery she chose was perfect. Already planning the next one.",
+    createdAt: new Date(Date.now() - 8 * 86400_000).toISOString(),
+  },
+  {
+    id: "rev-demo-2",
+    bookingId: "bk-demo-2",
+    companionId: "companion-maya",
+    customerId: "cust-demo-2",
+    rating: 5,
+    comment: "Genuinely warm and attentive. She remembered details from my messages and the conversation never ran dry.",
+    createdAt: new Date(Date.now() - 22 * 86400_000).toISOString(),
+  },
+  {
+    id: "rev-demo-3",
+    bookingId: "bk-demo-3",
+    companionId: "companion-maya",
+    customerId: "cust-demo-3",
+    rating: 4,
+    comment: "Great time at the farmers market. Very present and easy to be around.",
+    createdAt: new Date(Date.now() - 45 * 86400_000).toISOString(),
+  },
+];
+
+/** bookingIds that have already been reviewed, to enforce one-review-per-booking */
+const reviewedBookings = new Set<string>(["bk-demo-1", "bk-demo-2", "bk-demo-3"]);
+
+router.get("/companions/:id/reviews", async (req, res) => {
+  const { id } = req.params;
+  // Production: query reviews table WHERE companion_id = id, ORDER BY created_at DESC
+  const reviews = devReviews.filter((r) => r.companionId === id);
+  res.json(reviews);
+});
+
+router.post("/bookings/:id/review", async (req, res) => {
+  const { id } = req.params;
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const { rating, comment } = req.body ?? {};
+  if (typeof rating !== "number" || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+    res.status(400).json({ error: "Rating must be a whole number between 1 and 5" }); return;
+  }
+  if (comment && String(comment).length > 300) {
+    res.status(400).json({ error: "Comment must be 300 characters or fewer" }); return;
+  }
+
+  if (reviewedBookings.has(id)) {
+    res.status(409).json({ error: "You have already reviewed this booking" }); return;
+  }
+
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.customerId !== customerId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (booking.status !== "completed") {
+      res.status(403).json({ error: "Reviews are only available after a booking is completed" }); return;
+    }
+
+    const review: DevReview = {
+      id: crypto.randomUUID(),
+      bookingId: id,
+      companionId: booking.companionId,
+      customerId,
+      rating,
+      comment: comment ? String(comment).trim() : "",
+      createdAt: new Date().toISOString(),
+    };
+
+    devReviews.push(review);
+    reviewedBookings.add(id);
+    req.log.info({ bookingId: id, rating }, "Review submitted");
+    res.status(201).json(review);
+  } catch (err: any) {
+    if (isMissingTableError(err)) {
+      // Dev: booking table missing — accept review against demo companion
+      const review: DevReview = {
+        id: crypto.randomUUID(),
+        bookingId: id,
+        companionId: "companion-demo",
+        customerId,
+        rating,
+        comment: comment ? String(comment).trim() : "",
+        createdAt: new Date().toISOString(),
+      };
+      devReviews.push(review);
+      reviewedBookings.add(id);
+      res.status(201).json(review);
+      return;
+    }
+    req.log.error({ err }, "Failed to save review");
+    res.status(503).json({ error: "Could not save review" });
   }
 });
 
