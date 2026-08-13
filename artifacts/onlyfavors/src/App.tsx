@@ -5,7 +5,7 @@ import {
   AlertTriangle, ArrowLeft, ArrowRight, BadgeCheck, Bell, Building2, CalendarDays, Check, ChevronDown, ChevronRight,
   CircleAlert, ClipboardCheck, Clock3, Coffee, Compass, EyeOff, FileText, Heart, HeartHandshake,
   KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
-  Navigation2, PanelLeft, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
+  Navigation2, PanelLeft, Pencil, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
   Sparkles, Star, Sunrise, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap, Lock,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
@@ -1498,6 +1498,326 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Companion profile editor
+// ---------------------------------------------------------------------------
+
+type CompanionProfileData = {
+  displayName: string;
+  bio: string;
+  hourlyRateCents: number;
+  activities: string[];
+  languages: string[];
+  serviceArea: string;
+  availableDays: string[];
+  availableHoursStart: string;
+  availableHoursEnd: string;
+};
+
+function useCompanionProfile() {
+  return useQuery<CompanionProfileData>({
+    queryKey: ['companion-profile'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/profile');
+      if (!res.ok) throw new Error('Failed to load profile');
+      return res.json();
+    },
+    retry: 1,
+  });
+}
+
+function useUpdateCompanionProfile() {
+  const qc = useQueryClient();
+  return useMutation<CompanionProfileData, Error, CompanionProfileData>({
+    mutationFn: async (data) => {
+      const res = await fetch('/api/companion/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'Save failed' }));
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['companion-profile'] }),
+  });
+}
+
+const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function TagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (t: string[]) => void; placeholder: string }) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const v = draft.trim();
+    if (v && !tags.includes(v) && tags.length < 12) { onChange([...tags, v]); setDraft(''); }
+  };
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tags.map((t) => (
+        <span key={t} className="inline-flex items-center gap-1.5 rounded-full bg-[#ead0dd] px-3 py-1 text-xs font-semibold text-[#7f2e62]">
+          {t}
+          <button type="button" onClick={() => onChange(tags.filter((x) => x !== t))} className="text-[#9d557e] hover:text-[#7f2e62]">
+            <X className="h-3 w-3" />
+          </button>
+        </span>
+      ))}
+      <div className="flex items-center gap-1">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          className="h-8 rounded-full border border-[#dfd2c9] bg-[#fbf7f1] px-3 text-xs text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+        />
+        <button type="button" onClick={add} className="grid h-8 w-8 place-items-center rounded-full bg-[#ead0dd] text-[#7f2e62] hover:bg-[#d9b8cc]">
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-[20px] border border-[#dfd2c9] bg-white p-6">
+      <p className="mb-5 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function CompanionProfileEditor() {
+  const [, navigate] = useLocation();
+  const profileQuery = useCompanionProfile();
+  const updateProfile = useUpdateCompanionProfile();
+  const [saved, setSaved] = useState(false);
+
+  // Form state — seeded from query data once loaded
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [hourlyRate, setHourlyRate] = useState('70');
+  const [activities, setActivities] = useState<string[]>([]);
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [serviceArea, setServiceArea] = useState('');
+  const [availableDays, setAvailableDays] = useState<string[]>([]);
+  const [hoursStart, setHoursStart] = useState('10:00');
+  const [hoursEnd, setHoursEnd] = useState('20:00');
+  const [seeded, setSeeded] = useState(false);
+
+  useEffect(() => {
+    if (profileQuery.data && !seeded) {
+      const p = profileQuery.data;
+      setDisplayName(p.displayName);
+      setBio(p.bio);
+      setHourlyRate(String(Math.round(p.hourlyRateCents / 100)));
+      setActivities(p.activities);
+      setLanguages(p.languages);
+      setServiceArea(p.serviceArea);
+      setAvailableDays(p.availableDays);
+      setHoursStart(p.availableHoursStart);
+      setHoursEnd(p.availableHoursEnd);
+      setSeeded(true);
+    }
+  }, [profileQuery.data, seeded]);
+
+  const handleSave = () => {
+    const rate = Math.round(parseFloat(hourlyRate) * 100);
+    if (!displayName.trim() || !bio.trim() || isNaN(rate)) return;
+    updateProfile.mutate(
+      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd },
+      {
+        onSuccess: () => {
+          setSaved(true);
+          setTimeout(() => setSaved(false), 3000);
+        },
+      }
+    );
+  };
+
+  if (profileQuery.isLoading) return (
+    <Shell><main className="mx-auto max-w-2xl px-5 py-20"><LoadingState label="Loading your profile" /></main></Shell>
+  );
+  if (profileQuery.isError) return (
+    <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => profileQuery.refetch()} /></main></Shell>
+  );
+
+  const isValid = displayName.trim() && bio.trim() && activities.length > 0 && parseFloat(hourlyRate) >= 20;
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-2xl px-5 py-14 lg:px-8 lg:py-20">
+        <Link href="/dashboard/companion" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-profile">
+          <ArrowLeft className="h-4 w-4" />Back to workspace
+        </Link>
+
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Companion profile</p>
+            <h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Your listing.</h1>
+            <p className="mt-3 text-sm text-[#725e69]">What customers see when they find you. Keep it honest and current.</p>
+          </div>
+          {saved && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f0e8] px-3 py-1.5 text-xs font-bold text-[#31533f]">
+              <Check className="h-3.5 w-3.5" />Saved
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4" data-testid="form-companion-profile">
+
+          {/* Story */}
+          <ProfileSection title="Your story">
+            <div className="space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Display name</span>
+                <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={80}
+                  placeholder="Alex M."
+                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+                  data-testid="input-profile-name"
+                />
+                <p className="mt-1 text-[10px] text-[#9b858e]">Only first name and last initial. We protect your full identity.</p>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Bio</span>
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  maxLength={600}
+                  rows={5}
+                  placeholder="Tell potential customers what kind of company you are…"
+                  className="w-full resize-none rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] p-4 text-sm leading-6 text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+                  data-testid="textarea-profile-bio"
+                />
+                <p className="mt-1 text-right text-[10px] text-[#9b858e]">{bio.length}/600</p>
+              </label>
+            </div>
+          </ProfileSection>
+
+          {/* What you offer */}
+          <ProfileSection title="What you offer">
+            <div className="space-y-5">
+              <div>
+                <p className="mb-2.5 text-xs font-bold text-[#654c5f]">Activities</p>
+                <TagInput tags={activities} onChange={setActivities} placeholder="Museum visits…" />
+                <p className="mt-1.5 text-[10px] text-[#9b858e]">Add up to 12. These appear as chips on your public profile.</p>
+              </div>
+              <div>
+                <p className="mb-2.5 text-xs font-bold text-[#654c5f]">Languages</p>
+                <TagInput tags={languages} onChange={setLanguages} placeholder="English…" />
+              </div>
+            </div>
+          </ProfileSection>
+
+          {/* Availability */}
+          <ProfileSection title="Availability">
+            <div className="space-y-5">
+              <div>
+                <p className="mb-2.5 text-xs font-bold text-[#654c5f]">Days available</p>
+                <div className="flex flex-wrap gap-2">
+                  {ALL_DAYS.map((day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setAvailableDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day])}
+                      className={`h-9 w-12 rounded-full text-xs font-bold transition ${
+                        availableDays.includes(day)
+                          ? 'bg-[#7f2e62] text-white'
+                          : 'border border-[#dfd2c9] bg-[#fbf7f1] text-[#806c76] hover:border-[#9d557e]'
+                      }`}
+                      data-testid={`toggle-day-${day}`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Earliest start</span>
+                  <input
+                    type="time"
+                    value={hoursStart}
+                    onChange={(e) => setHoursStart(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm text-[#48213d] focus:border-[#9d557e] focus:outline-none"
+                    data-testid="input-hours-start"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Latest end</span>
+                  <input
+                    type="time"
+                    value={hoursEnd}
+                    onChange={(e) => setHoursEnd(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm text-[#48213d] focus:border-[#9d557e] focus:outline-none"
+                    data-testid="input-hours-end"
+                  />
+                </label>
+              </div>
+            </div>
+          </ProfileSection>
+
+          {/* Rate & area */}
+          <ProfileSection title="Rate & service area">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Hourly rate (USD)</span>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[#9b858e]">$</span>
+                  <input
+                    type="number"
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(e.target.value)}
+                    min={20}
+                    max={500}
+                    step={5}
+                    className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] pl-8 pr-4 text-sm text-[#48213d] focus:border-[#9d557e] focus:outline-none"
+                    data-testid="input-profile-rate"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-[#9b858e]">Min $20 · Max $500 per hour</p>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Service area</span>
+                <input
+                  value={serviceArea}
+                  onChange={(e) => setServiceArea(e.target.value)}
+                  placeholder="San Francisco, CA"
+                  maxLength={100}
+                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+                  data-testid="input-profile-area"
+                />
+                <p className="mt-1 text-[10px] text-[#9b858e]">Shown as an approximate region, never your exact location.</p>
+              </label>
+            </div>
+          </ProfileSection>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-[10px] text-[#9b858e]">Changes go live after the next trust team review cycle.</p>
+            <button
+              type="submit"
+              disabled={!isValid || updateProfile.isPending}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white disabled:opacity-50"
+              data-testid="button-save-profile"
+            >
+              {updateProfile.isPending ? 'Saving…' : 'Save profile'} <Check className="h-4 w-4" />
+            </button>
+          </div>
+
+          {updateProfile.isError && (
+            <p className="rounded-xl bg-[#fbebe7] px-4 py-3 text-xs text-[#a64742]">{updateProfile.error?.message ?? 'Could not save. Try again.'}</p>
+          )}
+        </form>
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Companion booking detail — companion-perspective view of a booking + chat
 // ---------------------------------------------------------------------------
 
@@ -1804,7 +2124,7 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
     : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Profile views', value: companion.data?.profileViews ?? 0, icon: EyeOff }];
   const hasData = stats.some((x) => x.value !== 0 && x.value !== '$0.00');
   const stripeReturn = typeof window !== 'undefined' && window.location.search.includes('stripe=return');
-  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><Button variant="outline" onClick={() => query.refetch()} className="self-start md:self-auto" testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{isCustomer && <CustomerBookingList />}{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
+  return <Shell><main className="page-enter mx-auto max-w-7xl px-5 py-12 lg:px-8 lg:py-16"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">{isCustomer ? 'Customer workspace' : 'Companion workspace'}</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">{isCustomer ? 'Your time, kept simple.' : 'Your room is ready.'}</h1><p className="mt-4 text-sm text-[#725e69]">{isCustomer ? 'A quiet place to keep plans, favorites, and safety details together.' : 'Keep your availability, requests, and earnings in one considered place.'}</p></div><div className="flex shrink-0 items-center gap-2 self-start md:self-auto">{!isCustomer && <Link href="/dashboard/companion/profile" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] bg-transparent px-4 text-[13px] font-bold text-[#542642] transition hover:border-[#7f2e62] hover:bg-[#f0e4db]" data-testid="link-edit-profile"><Pencil className="h-4 w-4" />Edit profile</Link>}<Button variant="outline" onClick={() => query.refetch()} testId="button-refresh-dashboard"><RefreshCw className="h-4 w-4" />Refresh</Button></div></div><div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-[#dfd2c9] bg-[#fbf7f1] p-5"><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></span><span className="font-mono text-[10px] text-[#ad929e]">LIVE</span></div><p className="mt-7 font-serif text-4xl text-[#48213d]" data-testid={`value-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</p><p className="mt-1 text-xs font-semibold text-[#806c76]">{label}</p></div>)}</div>{isCustomer && <CustomerBookingList />}{!isCustomer && <PayoutSetup stripeReturn={stripeReturn} />}{!isCustomer && <CompanionInbox />}<div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_.85fr]"><div className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-7"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Next up</p><h2 className="mt-3 font-serif text-3xl text-[#48213d]">{hasData ? 'Your live activity' : 'Nothing on the calendar yet.'}</h2>{hasData ? <p className="mt-2 text-sm leading-6 text-[#725e69]">When a booking is scheduled, the details and safety plan will appear here.</p> : <EmptyState icon={CalendarDays} title={isCustomer ? 'Make the first plan.' : 'Your next request will land here.'} body={isCustomer ? 'Browse the directory when you are ready to find good company.' : 'Keep your profile clear and availability current so the right requests can find you.'} action={isCustomer ? <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-explore">Explore companions <ArrowRight className="h-3.5 w-3.5" /></Link> : <Link href="/companion/apply" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white" data-testid="link-dashboard-profile">Review application <ArrowRight className="h-3.5 w-3.5" /></Link>} />}</div><div className="rounded-[22px] bg-[#d9e1d7] p-7"><ShieldCheck className="h-6 w-6 text-[#477254]" /><h2 className="mt-12 font-serif text-3xl leading-none text-[#31533f]">Safety is part of the plan.</h2><p className="mt-3 text-sm leading-6 text-[#53725d]">Every booking keeps public meeting places, clear boundaries, and check-ins close at hand.</p><Link href="/safety" className="mt-6 inline-flex items-center gap-1 text-xs font-bold text-[#477254]" data-testid="link-dashboard-safety">Open safety center <ArrowRight className="h-3.5 w-3.5" /></Link></div></div></main></Shell>;
 }
 
 function Apply() {
@@ -2496,6 +2816,7 @@ function Router() {
         <Route path="/cancellation"><Legal kind="cancellation" /></Route>
         <Route path="/booking/:id" component={BookingStatus} />
         <Route path="/companion/booking/:id" component={CompanionBookingDetail} />
+        <Route path="/dashboard/companion/profile" component={CompanionProfileEditor} />
         <Route path="/trust-circle" component={TrustCircleSetup} />
         <Route path="/safespots" component={SafeSpots} />
         <Route path="/safespots/:id" component={SafeSpotDetail} />

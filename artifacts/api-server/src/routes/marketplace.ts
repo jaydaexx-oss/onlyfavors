@@ -716,6 +716,83 @@ router.post("/bookings/:id/messages", async (req, res) => {
 // Admin / ops — restricted to trust staff
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Companion profile management
+// ---------------------------------------------------------------------------
+
+type DevCompanionProfile = {
+  displayName: string;
+  bio: string;
+  hourlyRateCents: number;
+  activities: string[];
+  languages: string[];
+  serviceArea: string;
+  availableDays: string[];
+  availableHoursStart: string;
+  availableHoursEnd: string;
+};
+
+const DEFAULT_DEV_PROFILE: DevCompanionProfile = {
+  displayName: "Alex M.",
+  bio: "Patient, curious, and good at showing up. I enjoy gallery afternoons, farmers markets, and long walks with good conversation.",
+  hourlyRateCents: 7000,
+  activities: ["Museum visits", "Coffee conversations", "Farmers market walks", "Gallery tours"],
+  languages: ["English"],
+  serviceArea: "San Francisco, CA",
+  availableDays: ["Fri", "Sat", "Sun"],
+  availableHoursStart: "10:00",
+  availableHoursEnd: "20:00",
+};
+
+/** In-memory store — replaced by Supabase companion_profiles once Task #1 lands */
+const devCompanionProfiles = new Map<string, DevCompanionProfile>();
+
+router.get("/companion/profile", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  // Production: query Supabase companion_profiles table
+  // Dev: return from in-memory store (or default if first visit)
+  const profile = devCompanionProfiles.get(companionId) ?? DEFAULT_DEV_PROFILE;
+  res.json(profile);
+});
+
+router.put("/companion/profile", async (req, res) => {
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const { displayName, bio, hourlyRateCents, activities, languages, serviceArea, availableDays, availableHoursStart, availableHoursEnd } = req.body ?? {};
+
+  // Validation
+  if (!displayName?.trim()) { res.status(400).json({ error: "Display name is required" }); return; }
+  if (!bio?.trim()) { res.status(400).json({ error: "Bio is required" }); return; }
+  if (typeof hourlyRateCents !== "number" || hourlyRateCents < 2000 || hourlyRateCents > 50000) {
+    res.status(400).json({ error: "Hourly rate must be between $20 and $500" }); return;
+  }
+  if (!Array.isArray(activities) || activities.length === 0) { res.status(400).json({ error: "At least one activity is required" }); return; }
+  if (!Array.isArray(languages) || languages.length === 0) { res.status(400).json({ error: "At least one language is required" }); return; }
+
+  const updated: DevCompanionProfile = {
+    displayName: String(displayName).slice(0, 80),
+    bio: String(bio).slice(0, 600),
+    hourlyRateCents: Math.round(hourlyRateCents),
+    activities: activities.slice(0, 12).map((a: unknown) => String(a).slice(0, 50)),
+    languages: languages.slice(0, 8).map((l: unknown) => String(l).slice(0, 40)),
+    serviceArea: String(serviceArea ?? "").slice(0, 100),
+    availableDays: Array.isArray(availableDays) ? availableDays.slice(0, 7).map(String) : [],
+    availableHoursStart: String(availableHoursStart ?? "09:00"),
+    availableHoursEnd: String(availableHoursEnd ?? "21:00"),
+  };
+
+  devCompanionProfiles.set(companionId, updated);
+  req.log.info({ companionId }, "Companion profile updated");
+  res.json(updated);
+});
+
 const DEV_COMPANION_APPLICATIONS = [
   { id: "app-001", displayName: "Maya R.", city: "San Francisco", activities: ["Museum visits", "Coffee conversations", "Farmers market walks"], languages: ["English", "Spanish"], hourlyRate: 65, applicationDate: "2026-08-10", bio: "Retired curator with a love for contemporary art and good conversation. Patient, warm, and genuinely curious about people.", status: "pending" },
   { id: "app-002", displayName: "Jordan K.", city: "New York", activities: ["Gallery tours", "Cooking classes", "Evening walks"], languages: ["English", "French"], hourlyRate: 75, applicationDate: "2026-08-11", bio: "Former chef turned food writer. Best company for anyone who takes eating seriously.", status: "pending" },
