@@ -113,25 +113,189 @@ function EmptyState({ icon: Icon = Search, title, body, action }: { icon?: typeo
   return <div className="rounded-2xl border border-dashed border-[#cbbab5] bg-[#fbf6f0] px-6 py-14 text-center" data-testid="state-empty"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-5 w-5" /></div><h3 className="mt-5 font-serif text-2xl text-[#48213d]">{title}</h3><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#725e69]">{body}</p>{action && <div className="mt-5">{action}</div>}</div>;
 }
 
+function HomeFeaturedCard({ id, initials, name, city, state, rating, reviewCount, rate, activities, tag }: {
+  id: string; initials: string; name: string; city: string; state: string;
+  rating: number; reviewCount: number; rate: number; activities: string[]; tag?: string;
+}) {
+  return (
+    <Link href={`/companions/${id}`} className="group block rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-1 hover:border-[#bc83a6] hover:shadow-[0_18px_34px_rgba(88,37,70,.09)]" data-testid={`home-companion-${id}`}>
+      <div className="flex items-start justify-between">
+        <div className="grid h-12 w-12 place-items-center rounded-full bg-[#ead0dd] font-serif text-xl text-[#7f2e62]">{initials}</div>
+        {tag && <span className="rounded-full bg-[#e8f0e8] px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#477254]">{tag}</span>}
+      </div>
+      <div className="mt-4 flex items-center gap-2">
+        <h3 className="font-serif text-[26px] leading-none text-[#48213d]">{name}</h3>
+        <BadgeCheck className="h-4 w-4 text-[#7f2e62]" />
+      </div>
+      <p className="mt-1.5 flex items-center gap-1 text-xs text-[#806c76]"><MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />{city}, {state}</p>
+      <div className="mt-2 flex items-center gap-1.5">
+        <StarDisplay rating={Math.round(rating)} size="xs" />
+        <span className="font-mono text-[10px] font-bold text-[#48213d]">{rating.toFixed(1)}</span>
+        <span className="text-[10px] text-[#9b858e]">· {reviewCount} reviews</span>
+      </div>
+      <div className="mt-3.5 flex flex-wrap gap-1.5">
+        {activities.slice(0, 3).map((a) => <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>)}
+      </div>
+      <div className="mt-5 flex items-center justify-between border-t border-[#ece1d9] pt-4">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${rate}/hr</span>
+        <span className="flex items-center gap-1 text-[10px] font-bold text-[#7f2e62] group-hover:underline">View profile <ChevronRight className="h-3 w-3" /></span>
+      </div>
+    </Link>
+  );
+}
+
+function HomeTrustPillar({ icon: Icon, title, body, accent }: { icon: typeof ShieldCheck; title: string; body: string; accent: string }) {
+  return (
+    <div className="rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
+      <div className={`grid h-11 w-11 place-items-center rounded-xl ${accent}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <h3 className="mt-5 font-serif text-2xl text-[#48213d]">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-[#725e69]">{body}</p>
+    </div>
+  );
+}
+
 function Home() {
   const health = useHealthCheck();
-  return <Shell><main className="page-enter">
-    <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#efe1dc]">
-      <div className="absolute -right-36 -top-44 h-[560px] w-[560px] rounded-full border-[55px] border-[#d8afc4]/50" /><div className="absolute right-12 top-24 h-20 w-20 rounded-full bg-[#dd8caf]/30 blur-2xl" />
-      <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-20 md:min-h-[650px] md:grid-cols-[1.02fr_.98fr] md:py-24 lg:px-8">
-        <div className="relative z-10 max-w-xl"><p className="mb-5 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]"><span className="h-2 w-2 rounded-full bg-[#a75c87]" />A more human kind of marketplace</p><h1 className="font-serif text-[62px] leading-[.9] tracking-[-.04em] text-[#48213d] md:text-[88px]">Good company,<br /><em className="text-[#8e416e]">on your terms.</em></h1><p className="mt-7 max-w-md text-[17px] leading-7 text-[#654c5f]">Book thoughtful, verified companions for the things you would rather not do alone. Dinner, a museum, a long walk — always platonic, always clear.</p><div className="mt-8 flex flex-wrap items-center gap-3"><Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-[#fff5eb] shadow-[0_10px_24px_rgba(127,46,98,.2)] transition hover:-translate-y-0.5 hover:bg-[#65234e]" data-testid="link-hero-explore">Find your kind of company <ArrowRight className="h-4 w-4" /></Link><Link href="/safety" className="inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-bold text-[#654c5f] transition hover:bg-[#e6d4d2]" data-testid="link-hero-safety"><ShieldCheck className="h-4 w-4" />See how safety works</Link></div><p className="mt-5 flex items-center gap-2 text-xs text-[#856c79]"><LockKeyhole className="h-3.5 w-3.5" />Your exact location is never shared publicly.</p></div>
-        <div className="relative mx-auto h-[390px] w-full max-w-[450px] md:h-[480px]">
-          <div className="absolute left-5 top-12 h-[310px] w-[275px] rotate-[-7deg] rounded-[28px] bg-[#d2a9bb] shadow-[0_24px_50px_rgba(85,38,71,.13)] md:h-[370px] md:w-[330px]" /><div className="absolute bottom-5 right-3 h-[265px] w-[255px] rotate-[8deg] rounded-[28px] bg-[#b7c4b3] shadow-[0_24px_50px_rgba(49,74,57,.13)] md:h-[310px] md:w-[290px]" />
-          <div className="float-slow absolute left-14 top-1 z-10 w-[290px] rounded-[25px] border border-[#f4e4dc] bg-[#fbf4ed] p-5 shadow-[0_25px_55px_rgba(66,29,56,.18)] md:left-20 md:w-[330px]"><div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">Verified companion</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div><div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">M</div><div><p className="font-serif text-2xl text-[#48213d]">Mara</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />Mission, San Francisco</p></div></div><div className="mt-6 flex flex-wrap gap-2"><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Art walks</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Good food</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Book club</span></div><div className="mt-7 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">From $28 / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></div></div>
-          <div className="absolute bottom-7 left-0 z-20 flex items-center gap-2 rounded-full border border-[#f4e4dc] bg-[#fbf4ed] px-4 py-3 shadow-lg"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#cad8cb] text-[#376448]"><Check className="h-4 w-4" /></span><span className="text-xs font-semibold text-[#543d50]">Safety plan included</span></div>
+  return (
+    <Shell>
+      <main className="page-enter">
+
+        {/* ── Hero ── */}
+        <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#efe1dc]">
+          <div className="absolute -right-36 -top-44 h-[560px] w-[560px] rounded-full border-[55px] border-[#d8afc4]/50" />
+          <div className="absolute right-12 top-24 h-20 w-20 rounded-full bg-[#dd8caf]/30 blur-2xl" />
+          <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-20 md:min-h-[650px] md:grid-cols-[1.02fr_.98fr] md:py-24 lg:px-8">
+            <div className="relative z-10 max-w-xl">
+              <p className="mb-5 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]"><span className="h-2 w-2 rounded-full bg-[#a75c87]" />A more human kind of marketplace</p>
+              <h1 className="font-serif text-[62px] leading-[.9] tracking-[-.04em] text-[#48213d] md:text-[88px]">Good company,<br /><em className="text-[#8e416e]">on your terms.</em></h1>
+              <p className="mt-7 max-w-md text-[17px] leading-7 text-[#654c5f]">Book thoughtful, verified companions for the things you would rather not do alone. Dinner, a museum, a long walk — always platonic, always clear.</p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-[#fff5eb] shadow-[0_10px_24px_rgba(127,46,98,.2)] transition hover:-translate-y-0.5 hover:bg-[#65234e]" data-testid="link-hero-explore">Find your kind of company <ArrowRight className="h-4 w-4" /></Link>
+                <Link href="/safety" className="inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-bold text-[#654c5f] transition hover:bg-[#e6d4d2]" data-testid="link-hero-safety"><ShieldCheck className="h-4 w-4" />See how safety works</Link>
+              </div>
+              <p className="mt-5 flex items-center gap-2 text-xs text-[#856c79]"><LockKeyhole className="h-3.5 w-3.5" />Your exact location is never shared publicly.</p>
+            </div>
+            <div className="relative mx-auto h-[390px] w-full max-w-[450px] md:h-[480px]">
+              <div className="absolute left-5 top-12 h-[310px] w-[275px] rotate-[-7deg] rounded-[28px] bg-[#d2a9bb] shadow-[0_24px_50px_rgba(85,38,71,.13)] md:h-[370px] md:w-[330px]" />
+              <div className="absolute bottom-5 right-3 h-[265px] w-[255px] rotate-[8deg] rounded-[28px] bg-[#b7c4b3] shadow-[0_24px_50px_rgba(49,74,57,.13)] md:h-[310px] md:w-[290px]" />
+              <div className="float-slow absolute left-14 top-1 z-10 w-[290px] rounded-[25px] border border-[#f4e4dc] bg-[#fbf4ed] p-5 shadow-[0_25px_55px_rgba(66,29,56,.18)] md:left-20 md:w-[330px]">
+                <div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">Verified companion</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div>
+                <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">M</div><div><p className="font-serif text-2xl text-[#48213d]">Maya</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />San Francisco, CA</p></div></div>
+                <div className="mt-3 flex items-center gap-1"><StarDisplay rating={5} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">4.9</span><span className="text-[10px] text-[#9b858e]">· 3 reviews</span></div>
+                <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Museum visits</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Coffee</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Gallery tours</span></div>
+                <div className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">$65 / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></div>
+              </div>
+              <div className="absolute bottom-7 left-0 z-20 flex items-center gap-2 rounded-full border border-[#f4e4dc] bg-[#fbf4ed] px-4 py-3 shadow-lg"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#cad8cb] text-[#376448]"><Check className="h-4 w-4" /></span><span className="text-xs font-semibold text-[#543d50]">Safety plan included</span></div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── The difference ── */}
+        <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
+          <SectionIntro eyebrow="The OnlyFavors difference" title="Connection without the guesswork." body="A considered way to find company — not a feed to scroll, a profile to perform, or a stranger to decode." />
+          <div className="grid gap-4 md:grid-cols-[1.15fr_.85fr]">
+            <div className="min-h-[270px] rounded-[24px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-10"><div className="flex items-start justify-between"><Shield className="h-7 w-7 text-[#d897b6]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#c695ae]">01 / Private by default</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Approximate areas.<br />No public addresses.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#d9c4cf]">We reveal only what helps you choose. Exact meeting details stay between you, your companion, and our trust team.</p></div>
+            <div className="min-h-[270px] rounded-[24px] bg-[#d9e1d7] p-8 text-[#31533f] md:p-10"><div className="flex items-start justify-between"><BadgeCheck className="h-7 w-7 text-[#477254]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#63816a]">02 / Carefully verified</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Real people.<br />Clear boundaries.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#53725d]">Every approved companion shares their way of working, the activities they enjoy, and what stays out of bounds.</p></div>
+          </div>
+        </section>
+
+        {/* ── Featured companions ── */}
+        <section className="border-t border-[#ddcfc6] bg-[#f8f2eb] py-20">
+          <div className="mx-auto max-w-7xl px-5 lg:px-8">
+            <SectionIntro eyebrow="Meet a few" title={"Good company,\ncloser than you think."} />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <HomeFeaturedCard id="companion-maya" initials="MR" name="Maya R." city="San Francisco" state="CA" rating={4.9} reviewCount={3} rate={65} activities={["Museum visits", "Coffee conversations", "Gallery tours"]} tag="Most popular" />
+              <HomeFeaturedCard id="companion-jordan" initials="JK" name="Jordan K." city="New York" state="NY" rating={4.8} reviewCount={12} rate={75} activities={["Gallery tours", "Cooking classes", "Evening walks"]} />
+              <Link href="/explore" className="group flex flex-col items-center justify-center gap-3 rounded-[22px] border border-dashed border-[#c6aeb8] bg-transparent p-8 text-center transition hover:border-[#9d557e] hover:bg-[#f0e4db]" data-testid="link-home-explore-all">
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-[#ead0dd] text-[#7f2e62]"><Compass className="h-5 w-5" /></div>
+                <p className="font-serif text-2xl text-[#48213d]">Browse all companions</p>
+                <p className="text-xs text-[#806c76]">Filter by city, activity, language, and more.</p>
+                <span className="mt-2 flex items-center gap-1 text-xs font-bold text-[#7f2e62]">Explore <ArrowRight className="h-3.5 w-3.5" /></span>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ── SafeSpot Network ── */}
+        <section className="border-y border-[#ddcfc6] bg-[#3d2038]">
+          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 md:grid-cols-[1fr_1fr] lg:px-8">
+            <div>
+              <p className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]"><ShieldCheck className="h-4 w-4" />Safety network</p>
+              <h2 className="font-serif text-5xl leading-[.93] text-[#f9efe5]">Every favor starts<br /><em>at a SafeSpot.</em></h2>
+              <p className="mt-6 max-w-sm text-[15px] leading-7 text-[#d9c4cf]">Verified public venues in every city — staff-aware, well-lit, and easy to leave. We never share exact addresses publicly.</p>
+              <div className="mt-6 flex items-center gap-6">
+                <div><p className="font-serif text-4xl text-[#f9efe5]">6+</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Verified venues</p></div>
+                <div className="h-10 w-px bg-[#5e3458]" />
+                <div><p className="font-serif text-4xl text-[#f9efe5]">6</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Cities</p></div>
+                <div className="h-10 w-px bg-[#5e3458]" />
+                <div><p className="font-serif text-4xl text-[#f9efe5]">∞</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">QR check-ins</p></div>
+              </div>
+              <Link href="/safespots" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#f9efe5] px-5 text-sm font-bold text-[#48213d] transition hover:bg-white" data-testid="link-home-safespots">Browse SafeSpots <ArrowRight className="h-4 w-4" /></Link>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {([['Café', Coffee, '#ead0dd', '#7f2e62'], ['Restaurant', UtensilsCrossed, '#d9e1d7', '#477254'], ['Library', Landmark, '#f0e4db', '#7a5a12'], ['Hotel', Building2, '#dce8f5', '#2a5280']] as const).map(([label, Icon, bg, color]) => (
+                <div key={label} className="rounded-[18px] p-5" style={{ background: 'rgba(255,245,235,0.06)' }}>
+                  <div className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: bg + '33' }}>
+                    <Icon className="h-5 w-5" style={{ color }} />
+                  </div>
+                  <p className="mt-3 font-serif text-xl text-[#f9efe5]">{label}</p>
+                  <p className="mt-1 text-[10px] text-[#c695ae]">Staff-aware · Easy exit</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── How it works ── */}
+        <section className="bg-[#f0e4db]">
+          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 md:grid-cols-[.9fr_1.1fr] lg:px-8">
+            <div>
+              <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A simple ritual</p>
+              <h2 className="font-serif text-5xl leading-[.95] text-[#48213d]">From "maybe"<br /><em>to "see you there."</em></h2>
+            </div>
+            <div className="space-y-3">
+              <Step n="01" icon={Compass} title="Browse by feeling" body="Filter by city, activity, language, or an instant booking preference." />
+              <Step n="02" icon={ClipboardCheck} title="Set boundaries together" body="Boundary receipts confirm what the favor includes before anything is booked." />
+              <Step n="03" icon={MessageSquare} title="Chat once the deposit clears" body="A private, masked thread opens — phone numbers and emails are blocked automatically." />
+              <Step n="04" icon={MapPin} title="Meet at a SafeSpot" body="Choose a verified public venue and keep the plan visible to your Trust Circle." />
+            </div>
+          </div>
+        </section>
+
+        {/* ── Trust pillars ── */}
+        <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
+          <SectionIntro eyebrow="Built-in safety" title="Four layers that protect every favor." />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <HomeTrustPillar icon={ShieldCheck} title="SafeSpot Network" body="Every booking starts at a verified public venue — no private addresses, ever." accent="bg-[#e8f0e8] text-[#477254]" />
+            <HomeTrustPillar icon={ClipboardCheck} title="Boundary Receipt" body="Both sides agree in writing before any booking is confirmed." accent="bg-[#ead0dd] text-[#7f2e62]" />
+            <HomeTrustPillar icon={Users} title="Trust Circle" body="Share your plan with up to 5 emergency contacts before you go." accent="bg-[#f3ead7] text-[#7a5a12]" />
+            <HomeTrustPillar icon={Star} title="Verified Reviews" body="Honest ratings from real bookings, written by the customers who were there." accent="bg-[#fdf3e3] text-[#bf8750]" />
+          </div>
+        </section>
+
+        {/* ── Companion CTA ── */}
+        <section className="mx-auto max-w-7xl px-5 pb-20 lg:px-8">
+          <div className="rounded-[28px] bg-[#d3e1d8] p-8 md:flex md:items-end md:justify-between md:p-12">
+            <div>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#50725d]">For the people behind the profiles</p>
+              <h2 className="mt-4 max-w-lg font-serif text-5xl leading-[.94] text-[#31533f]">Bring your good<br />energy to the room.</h2>
+              <p className="mt-5 max-w-md text-sm leading-6 text-[#53725d]">Set your pace, name your boundaries, and offer the kind of company you are proud to give. Earn on your schedule with full Stripe payouts.</p>
+            </div>
+            <Link href="/companion/apply" className="mt-8 inline-flex h-11 items-center gap-2 self-end rounded-full bg-[#31533f] px-5 text-sm font-bold text-[#eef6ef] transition hover:-translate-y-0.5 hover:bg-[#24442f]" data-testid="link-home-apply">Learn about applying <ArrowRight className="h-4 w-4" /></Link>
+          </div>
+        </section>
+
+        {/* ── Footer bar ── */}
+        <div className="border-t border-[#ddcfc6] bg-[#3d2038] px-5 py-5 text-center text-xs text-[#ddc4d0]">
+          <span className="inline-flex items-center gap-2"><LockKeyhole className="h-3.5 w-3.5" />OnlyFavors is for platonic connection. We do not facilitate dating or sexual services.</span>
+          <span className="ml-4 inline-flex items-center gap-1.5 text-[#c695ae]" data-testid="status-health"><span className="h-1.5 w-1.5 rounded-full bg-[#8fc69a]" />{health.data?.status === 'ok' ? 'Systems online' : 'Privacy systems ready'}</span>
         </div>
-      </div>
-    </section>
-    <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><SectionIntro eyebrow="The OnlyFavors difference" title="Connection without the guesswork." body="A considered way to find company — not a feed to scroll, a profile to perform, or a stranger to decode." /><div className="grid gap-4 md:grid-cols-[1.15fr_.85fr]"><div className="min-h-[270px] rounded-[24px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-10"><div className="flex items-start justify-between"><Shield className="h-7 w-7 text-[#d897b6]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#c695ae]">01 / Private by default</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Approximate areas.<br />No public addresses.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#d9c4cf]">We reveal only what helps you choose. Exact meeting details stay between you, your companion, and our trust team.</p></div><div className="min-h-[270px] rounded-[24px] bg-[#d9e1d7] p-8 text-[#31533f] md:p-10"><div className="flex items-start justify-between"><BadgeCheck className="h-7 w-7 text-[#477254]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#63816a]">02 / Carefully verified</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Real people.<br />Clear boundaries.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#53725d]">Every approved companion shares their way of working, the activities they enjoy, and what stays out of bounds.</p></div></div></section>
-    <section className="border-y border-[#ddcfc6] bg-[#f0e4db]"><div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 md:grid-cols-[.9fr_1.1fr] lg:px-8"><div><p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A simple ritual</p><h2 className="font-serif text-5xl leading-[.95] text-[#48213d]">From “maybe”<br /><em>to “see you there.”</em></h2></div><div className="space-y-3"><Step n="01" icon={Compass} title="Browse by feeling" body="Filter by city, activity, language, or an instant booking preference." /><Step n="02" icon={MessageSquare} title="Read the boundaries" body="Know how someone works before you ever send a request." /><Step n="03" icon={CalendarDays} title="Meet in a SafeSpot" body="Choose a public place and keep the plan visible to the people you trust." /></div></div></section>
-    <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="rounded-[28px] bg-[#d3e1d8] p-8 md:flex md:items-end md:justify-between md:p-12"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#50725d]">For the people behind the profiles</p><h2 className="mt-4 max-w-lg font-serif text-5xl leading-[.94] text-[#31533f]">Bring your good<br />energy to the room.</h2><p className="mt-5 max-w-md text-sm leading-6 text-[#53725d]">Set your pace, name your boundaries, and offer the kind of company you are proud to give.</p></div><Link href="/companion/apply" className="mt-8 inline-flex h-11 items-center gap-2 self-end rounded-full bg-[#31533f] px-5 text-sm font-bold text-[#eef6ef] transition hover:-translate-y-0.5 hover:bg-[#24442f]" data-testid="link-home-apply">Learn about applying <ArrowRight className="h-4 w-4" /></Link></div></section>
-    <div className="border-t border-[#ddcfc6] bg-[#3d2038] px-5 py-5 text-center text-xs text-[#ddc4d0]"><span className="inline-flex items-center gap-2"><LockKeyhole className="h-3.5 w-3.5" />OnlyFavors is for platonic connection. We do not facilitate dating or sexual services.</span><span className="ml-4 inline-flex items-center gap-1.5 text-[#c695ae]" data-testid="status-health"><span className="h-1.5 w-1.5 rounded-full bg-[#8fc69a]" />{health.data?.status === 'ok' ? 'Systems online' : 'Privacy systems ready'}</span></div>
-  </main></Shell>;
+
+      </main>
+    </Shell>
+  );
 }
 
 function Step({ n, icon: Icon, title, body }: { n: string; icon: typeof Compass; title: string; body: string }) {
