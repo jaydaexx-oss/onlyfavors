@@ -51,6 +51,7 @@ function Header() {
         <Link href="/companion/apply" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-apply">Become a companion</Link>
       </nav>
       <div className="hidden items-center gap-3 md:flex">
+        <SavedNavIcon />
         <Link href="/login" className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-login"><LogIn className="h-4 w-4" />Sign in</Link>
         <Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-[13px] font-bold text-[#fff5eb] shadow-[0_7px_18px_rgba(127,46,98,.18)] transition hover:-translate-y-0.5 hover:bg-[#65234e]" data-testid="link-find-companion">Find a companion <ArrowRight className="h-4 w-4" /></Link>
       </div>
@@ -59,6 +60,7 @@ function Header() {
     {open && <div className="border-t border-[#ddcfc6] bg-[#f8f1e9] px-5 py-4 md:hidden">
       <div className="flex flex-col gap-1">
         <Link href="/explore" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-explore">Explore companions</Link>
+        <Link href="/saved" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-saved">Saved companions</Link>
         <Link href="/safety" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safety">Safety center</Link>
         <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
         <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
@@ -71,12 +73,56 @@ function Footer() {
   return <footer className="border-t border-[#ddcfc6] bg-[#f0e4db]">
     <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
       <div><Brand /><p className="mt-4 max-w-xs text-sm leading-6 text-[#725e69]">Good company for the moments that matter. Built with privacy at the center.</p></div>
-      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/safespots" className="block hover:text-[#7f2e62]" data-testid="footer-link-safespots">SafeSpot Network</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link></div></div>
+      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/saved" className="block hover:text-[#7f2e62]" data-testid="footer-link-saved">Saved companions</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/safespots" className="block hover:text-[#7f2e62]" data-testid="footer-link-safespots">SafeSpot Network</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/login" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Contact support <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </div>
     <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-[#ddcfc6] px-5 py-5 text-[11px] text-[#927e87] md:flex-row md:justify-between lg:px-8"><span>© 2025 OnlyFavors, Inc.</span><span>Private by design. Human by nature.</span></div>
   </footer>;
+}
+
+/** Reads saved companion IDs from localStorage — shared hook used by nav + saved page */
+function useSavedCompanionIds() {
+  const [ids, setIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]'); }
+    catch { return []; }
+  });
+
+  // Sync across tabs and after save/unsave actions
+  useEffect(() => {
+    const sync = () => {
+      try { setIds(JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]')); }
+      catch { setIds([]); }
+    };
+    window.addEventListener('storage', sync);
+    // Poll every 800 ms so same-tab saves also update the nav badge
+    const t = setInterval(sync, 800);
+    return () => { window.removeEventListener('storage', sync); clearInterval(t); };
+  }, []);
+
+  const remove = useCallback((id: string) => {
+    setIds((prev) => {
+      const next = prev.filter((x) => x !== id);
+      try { localStorage.setItem('of_saved_companions', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  return { ids, remove };
+}
+
+function SavedNavIcon() {
+  const { ids } = useSavedCompanionIds();
+  return (
+    <Link href="/saved" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#654c5f] transition hover:bg-[#eee2d9] hover:text-[#7f2e62]" data-testid="link-nav-saved" aria-label="Saved companions">
+      <Heart className="h-4 w-4" />
+      {ids.length > 0 && (
+        <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7f2e62] font-mono text-[9px] font-bold text-white">
+          {ids.length > 9 ? '9+' : ids.length}
+        </span>
+      )}
+    </Link>
+  );
 }
 
 function Shell({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
@@ -1841,6 +1887,173 @@ function CompanionReviews({ companionId }: { companionId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Saved companions page
+// ---------------------------------------------------------------------------
+
+/** Loads a single companion by ID and renders it as a card, or a skeleton */
+function SavedCompanionCard({ id, onRemove }: { id: string; onRemove: (id: string) => void }) {
+  const query = useGetCompanion(id, {
+    query: { queryKey: getGetCompanionQueryKey(id), retry: false, staleTime: 120_000 },
+  });
+
+  if (query.isLoading) {
+    return (
+      <div className="animate-pulse rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+        <div className="flex items-start justify-between">
+          <div className="h-12 w-12 rounded-full bg-[#ead0dd]" />
+          <div className="h-8 w-8 rounded-full bg-[#f0e4db]" />
+        </div>
+        <div className="mt-4 h-6 w-32 rounded-lg bg-[#ead0dd]" />
+        <div className="mt-2 h-4 w-24 rounded-lg bg-[#f0e4db]" />
+        <div className="mt-4 flex gap-1.5">
+          <div className="h-7 w-20 rounded-full bg-[#f0e4db]" />
+          <div className="h-7 w-16 rounded-full bg-[#f0e4db]" />
+        </div>
+        <div className="mt-5 border-t border-[#ece1d9] pt-4">
+          <div className="h-4 w-28 rounded-lg bg-[#f0e4db]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (query.isError || !query.data) {
+    // Companion no longer available — show a placeholder removal card
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-[22px] border border-dashed border-[#c6aeb8] bg-[#fdf9f6] p-8 text-center">
+        <AlertTriangle className="h-8 w-8 text-[#c6aeb8]" />
+        <p className="text-sm font-semibold text-[#806c76]">Companion no longer available</p>
+        <button
+          type="button"
+          onClick={() => onRemove(id)}
+          className="mt-1 text-xs font-bold text-[#9d557e] underline"
+          data-testid={`button-remove-saved-${id}`}
+        >
+          Remove from saved
+        </button>
+      </div>
+    );
+  }
+
+  const c = query.data;
+  return (
+    <div className="group relative rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-1 hover:border-[#bc83a6] hover:shadow-[0_18px_34px_rgba(88,37,70,.09)]">
+      {/* Unsave button */}
+      <button
+        type="button"
+        onClick={() => onRemove(id)}
+        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-[#ead0dd] text-[#7f2e62] transition hover:bg-[#f0e4db] hover:text-[#9b858e]"
+        aria-label="Remove from saved"
+        title="Remove from saved"
+        data-testid={`button-unsave-${id}`}
+      >
+        <Heart className="h-3.5 w-3.5 fill-current" />
+      </button>
+
+      <Link href={`/companions/${c.id}`} className="block" data-testid={`link-saved-companion-${c.id}`}>
+        {/* Avatar */}
+        <Avatar companion={c} />
+        {/* Name */}
+        <div className="mt-4 flex items-center gap-2">
+          <h3 className="font-serif text-[26px] leading-none text-[#48213d]">{c.displayName}</h3>
+          {c.verified && <BadgeCheck className="h-4 w-4 text-[#7f2e62]" />}
+        </div>
+        {/* Location */}
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-[#806c76]">
+          <MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />{c.serviceArea}, {c.city}
+        </p>
+        {/* Rating */}
+        {c.rating > 0 && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <StarDisplay rating={Math.round(c.rating)} size="xs" />
+            <span className="font-mono text-[10px] font-bold text-[#48213d]">{c.rating.toFixed(1)}</span>
+            <span className="text-[10px] text-[#9b858e]">· {c.reviewCount} reviews</span>
+          </div>
+        )}
+        {/* Bio */}
+        <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-[#725e69]">
+          {c.biography || 'A thoughtful companion for time well spent.'}
+        </p>
+        {/* Activities */}
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {c.activities.slice(0, 3).map((a) => (
+            <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>
+          ))}
+        </div>
+        {/* Rate */}
+        <div className="mt-5 flex items-center justify-between border-t border-[#ece1d9] pt-4">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">{money(c.hourlyRate * 100)}/hr</span>
+          <span className="flex items-center gap-1 text-[10px] font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3 w-3" /></span>
+        </div>
+      </Link>
+    </div>
+  );
+}
+
+function Saved() {
+  const { ids, remove } = useSavedCompanionIds();
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Your shortlist</p>
+            <h1 className="mt-2 font-serif text-5xl leading-none text-[#48213d]">Saved companions</h1>
+            {ids.length > 0 && (
+              <p className="mt-3 text-sm text-[#806c76]">
+                {ids.length} {ids.length === 1 ? 'companion' : 'companions'} saved — tap the heart to remove.
+              </p>
+            )}
+          </div>
+          <Link
+            href="/explore"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm font-semibold text-[#654c5f] transition hover:border-[#7f2e62] hover:text-[#7f2e62]"
+            data-testid="link-saved-explore"
+          >
+            <Compass className="h-4 w-4" /> Browse more
+          </Link>
+        </div>
+
+        {/* Grid or empty state */}
+        {ids.length === 0 ? (
+          <div className="mt-16 flex flex-col items-center gap-5 text-center">
+            <div className="grid h-20 w-20 place-items-center rounded-full bg-[#ead0dd]">
+              <Heart className="h-8 w-8 text-[#7f2e62]" />
+            </div>
+            <h2 className="font-serif text-3xl text-[#48213d]">Nothing saved yet.</h2>
+            <p className="max-w-sm text-sm leading-6 text-[#806c76]">
+              Tap the heart on any companion card while browsing to add them here. Your shortlist stays private.
+            </p>
+            <Link
+              href="/explore"
+              className="mt-2 inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]"
+              data-testid="link-saved-empty-explore"
+            >
+              Find a companion <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {ids.map((id) => (
+              <SavedCompanionCard key={id} id={id} onRemove={remove} />
+            ))}
+          </div>
+        )}
+
+        {/* Subtle privacy note */}
+        {ids.length > 0 && (
+          <p className="mt-10 flex items-center gap-1.5 text-[11px] text-[#9b858e]">
+            <LockKeyhole className="h-3.5 w-3.5" />
+            Your saved list is stored only on this device and never shared with companions.
+          </p>
+        )}
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Companion profile editor
 // ---------------------------------------------------------------------------
 
@@ -3163,6 +3376,7 @@ function Router() {
         <Route path="/trust-circle" component={TrustCircleSetup} />
         <Route path="/safespots" component={SafeSpots} />
         <Route path="/safespots/:id" component={SafeSpotDetail} />
+        <Route path="/saved" component={Saved} />
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/operations" component={AdminOperations} />
         <Route component={NotFound} />
