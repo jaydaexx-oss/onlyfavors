@@ -31,6 +31,32 @@ export interface Companion {
   photoUrl?: string | null;
 }
 
+/**
+ * Server-calculated price breakdown. Never trust amounts from the browser. Example for a $100 favor: customer pays $105, companion receives $85, platform earns $20.
+ */
+export interface PriceQuote {
+  companionId: string;
+  durationHours: number;
+  /** Companion hourly rate × duration in cents */
+  subtotalCents: number;
+  /** 5% safety-and-service fee paid by the customer */
+  customerFeeCents: number;
+  /** What the customer pays (subtotal + 5% fee) */
+  totalCents: number;
+  /** What the companion receives (subtotal minus 15% commission) */
+  companionPayoutCents: number;
+  /** Gross platform revenue (5% + 15% = 20% of subtotal) */
+  platformRevenueCents: number;
+  /** Always 5 */
+  customerFeePercent: number;
+  /** Always 15 */
+  companionCommissionPercent: number;
+  /** Refundable deposit to unlock chat — always 1000 (= $10) */
+  depositCents: number;
+  /** The $10 deposit is credited toward the final booking total */
+  depositCreditedToFinal: boolean;
+}
+
 export interface CustomerDashboard {
   upcomingBookings: number;
   completedBookings: number;
@@ -82,8 +108,10 @@ export type BookingStatus = typeof BookingStatus[keyof typeof BookingStatus];
 export const BookingStatus = {
   draft: 'draft',
   requested: 'requested',
+  deposit_paid: 'deposit_paid',
   authorized: 'authorized',
   confirmed: 'confirmed',
+  completed: 'completed',
   cancelled: 'cancelled',
 } as const;
 
@@ -91,8 +119,63 @@ export interface Booking {
   id: string;
   status: BookingStatus;
   subtotalCents: number;
-  platformFeeCents: number;
+  customerFeeCents: number;
   totalCents: number;
+  companionPayoutCents: number;
+  platformRevenueCents: number;
+  depositCents: number;
+  depositCreditedToFinal: boolean;
+  /** @nullable */
+  stripePaymentIntentId?: string | null;
+}
+
+export interface DepositResult {
+  bookingId: string;
+  amountCents: number;
+  /** Stripe Payment Intent client secret — only returned to the authenticated customer */
+  clientSecret: string;
+  creditedToFinal: boolean;
+}
+
+export interface FavorRequestInput {
+  companionId: string;
+  activity: string;
+  preferredDate: string;
+  preferredDurationHours: number;
+  /**
+     * General location type e.g. café, museum, park — not a home address
+     * @nullable
+     */
+  locationType?: string | null;
+  /** @nullable */
+  accessibilityNeeds?: string | null;
+  /** @nullable */
+  dressCode?: string | null;
+  /**
+     * Structured questions only — no contact info, personal data, or off-platform contact
+     * @nullable
+     */
+  additionalQuestions?: string | null;
+}
+
+export type FavorRequestStatus = typeof FavorRequestStatus[keyof typeof FavorRequestStatus];
+
+
+export const FavorRequestStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  expired: 'expired',
+} as const;
+
+export interface FavorRequest {
+  id: string;
+  status: FavorRequestStatus;
+  companionId: string;
+  activity: string;
+  preferredDate: string;
+  preferredDurationHours: number;
+  createdAt?: string;
 }
 
 export type ListCompanionsParams = {
@@ -105,5 +188,10 @@ instantBook?: boolean;
 
 export type ListSafeSpotsParams = {
 city?: string;
+};
+
+export type GetBookingQuoteParams = {
+companionId: string;
+durationHours: number;
 };
 

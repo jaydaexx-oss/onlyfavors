@@ -137,7 +137,30 @@ export const ListSafeSpotsResponse = zod.array(ListSafeSpotsResponseItem)
 
 
 /**
- * @summary Create a server-priced booking intent
+ * @summary Get a server-calculated price quote — never trust browser amounts
+ */
+export const GetBookingQuoteQueryParams = zod.object({
+  "companionId": zod.coerce.string(),
+  "durationHours": zod.coerce.number()
+})
+
+export const GetBookingQuoteResponse = zod.object({
+  "companionId": zod.string(),
+  "durationHours": zod.number(),
+  "subtotalCents": zod.number().describe('Companion hourly rate × duration in cents'),
+  "customerFeeCents": zod.number().describe('5% safety-and-service fee paid by the customer'),
+  "totalCents": zod.number().describe('What the customer pays (subtotal + 5% fee)'),
+  "companionPayoutCents": zod.number().describe('What the companion receives (subtotal minus 15% commission)'),
+  "platformRevenueCents": zod.number().describe('Gross platform revenue (5% + 15% = 20% of subtotal)'),
+  "customerFeePercent": zod.number().describe('Always 5'),
+  "companionCommissionPercent": zod.number().describe('Always 15'),
+  "depositCents": zod.number().describe('Refundable deposit to unlock chat — always 1000 (= $10)'),
+  "depositCreditedToFinal": zod.boolean().describe('The $10 deposit is credited toward the final booking total')
+}).describe('Server-calculated price breakdown. Never trust amounts from the browser. Example for a $100 favor: customer pays $105, companion receives $85, platform earns $20.\n')
+
+
+/**
+ * @summary Create a booking intent with server-calculated pricing
  */
 export const CreateBookingIntentBody = zod.object({
   "companionId": zod.string(),
@@ -150,10 +173,70 @@ export const CreateBookingIntentBody = zod.object({
 
 export const CreateBookingIntentResponse = zod.object({
   "id": zod.string(),
-  "status": zod.enum(['draft', 'requested', 'authorized', 'confirmed', 'cancelled']),
+  "status": zod.enum(['draft', 'requested', 'deposit_paid', 'authorized', 'confirmed', 'completed', 'cancelled']),
   "subtotalCents": zod.number(),
-  "platformFeeCents": zod.number(),
-  "totalCents": zod.number()
+  "customerFeeCents": zod.number(),
+  "totalCents": zod.number(),
+  "companionPayoutCents": zod.number(),
+  "platformRevenueCents": zod.number(),
+  "depositCents": zod.number(),
+  "depositCreditedToFinal": zod.boolean(),
+  "stripePaymentIntentId": zod.string().nullish()
+})
+
+
+/**
+ * @summary Pay the refundable $10 deposit to unlock masked chat
+ */
+export const AuthorizeDepositParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AuthorizeDepositResponse = zod.object({
+  "bookingId": zod.string(),
+  "amountCents": zod.number(),
+  "clientSecret": zod.string().describe('Stripe Payment Intent client secret — only returned to the authenticated customer'),
+  "creditedToFinal": zod.boolean()
+})
+
+
+/**
+ * @summary Authorize full server-priced payment to confirm the booking
+ */
+export const AuthorizeFullPaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AuthorizeFullPaymentResponse = zod.object({
+  "bookingId": zod.string(),
+  "amountCents": zod.number(),
+  "clientSecret": zod.string().describe('Stripe Payment Intent client secret — only returned to the authenticated customer'),
+  "creditedToFinal": zod.boolean()
+})
+
+
+/**
+ * @summary Send a structured Favor Request to a companion — free, no chat yet
+ */
+export const CreateFavorRequestBody = zod.object({
+  "companionId": zod.string(),
+  "activity": zod.string(),
+  "preferredDate": zod.coerce.date(),
+  "preferredDurationHours": zod.number(),
+  "locationType": zod.string().nullish().describe('General location type e.g. café, museum, park — not a home address'),
+  "accessibilityNeeds": zod.string().nullish(),
+  "dressCode": zod.string().nullish(),
+  "additionalQuestions": zod.string().nullish().describe('Structured questions only — no contact info, personal data, or off-platform contact')
+})
+
+export const CreateFavorRequestResponse = zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['pending', 'accepted', 'declined', 'expired']),
+  "companionId": zod.string(),
+  "activity": zod.string(),
+  "preferredDate": zod.string(),
+  "preferredDurationHours": zod.number(),
+  "createdAt": zod.string().optional()
 })
 
 

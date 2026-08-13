@@ -17,7 +17,9 @@ tags:
   - name: safety
     description: Safety resources and SafeSpots
   - name: bookings
-    description: Booking lifecycle
+    description: Booking lifecycle and server-calculated pricing
+  - name: requests
+    description: Structured Favor Requests (pre-payment)
 paths:
   /healthz:
     get:
@@ -155,11 +157,36 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SafeSpot"
+  /bookings/quote:
+    get:
+      operationId: getBookingQuote
+      tags: [bookings]
+      summary: Get a server-calculated price quote — never trust browser amounts
+      parameters:
+        - in: query
+          name: companionId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: durationHours
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Server-calculated price breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceQuote"
+        "404":
+          description: Companion not found
   /bookings:
     post:
       operationId: createBookingIntent
       tags: [bookings]
-      summary: Create a server-priced booking intent
+      summary: Create a booking intent with server-calculated pricing
       requestBody:
         required: true
         content:
@@ -168,11 +195,75 @@ paths:
               $ref: "#/components/schemas/BookingInput"
       responses:
         "201":
-          description: Booking intent
+          description: Booking intent with full pricing breakdown
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Booking"
+        "401":
+          description: Authentication required
+  /bookings/{id}/deposit:
+    post:
+      operationId: authorizeDeposit
+      tags: [bookings]
+      summary: Pay the refundable $10 deposit to unlock masked chat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stripe Payment Intent client secret for the deposit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositResult"
+        "401":
+          description: Authentication required
+        "404":
+          description: Booking not found
+  /bookings/{id}/authorize:
+    post:
+      operationId: authorizeFullPayment
+      tags: [bookings]
+      summary: Authorize full server-priced payment to confirm the booking
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stripe Payment Intent client secret for full amount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositResult"
+        "401":
+          description: Authentication required
+        "404":
+          description: Booking not found
+  /favor-requests:
+    post:
+      operationId: createFavorRequest
+      tags: [requests]
+      summary: Send a structured Favor Request to a companion — free, no chat yet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavorRequestInput"
+      responses:
+        "201":
+          description: Favor Request sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavorRequest"
         "401":
           description: Authentication required
 components:
@@ -238,6 +329,55 @@ components:
             type: string
         photoUrl:
           type: ["string", "null"]
+    PriceQuote:
+      type: object
+      description: >
+        Server-calculated price breakdown. Never trust amounts from the browser.
+        Example for a $100 favor: customer pays $105, companion receives $85, platform earns $20.
+      required:
+        - companionId
+        - durationHours
+        - subtotalCents
+        - customerFeeCents
+        - totalCents
+        - companionPayoutCents
+        - platformRevenueCents
+        - customerFeePercent
+        - companionCommissionPercent
+        - depositCents
+        - depositCreditedToFinal
+      properties:
+        companionId:
+          type: string
+        durationHours:
+          type: number
+        subtotalCents:
+          type: number
+          description: Companion hourly rate × duration in cents
+        customerFeeCents:
+          type: number
+          description: 5% safety-and-service fee paid by the customer
+        totalCents:
+          type: number
+          description: What the customer pays (subtotal + 5% fee)
+        companionPayoutCents:
+          type: number
+          description: What the companion receives (subtotal minus 15% commission)
+        platformRevenueCents:
+          type: number
+          description: Gross platform revenue (5% + 15% = 20% of subtotal)
+        customerFeePercent:
+          type: number
+          description: Always 5
+        companionCommissionPercent:
+          type: number
+          description: Always 15
+        depositCents:
+          type: number
+          description: Refundable deposit to unlock chat — always 1000 (= $10)
+        depositCreditedToFinal:
+          type: boolean
+          description: The $10 deposit is credited toward the final booking total
     CustomerDashboard:
       type: object
       required: [upcomingBookings, completedBookings, savedCompanions, safetyPlans]
@@ -321,17 +461,81 @@ components:
           type: string
     Booking:
       type: object
-      required: [id, status, subtotalCents, platformFeeCents, totalCents]
+      required: [id, status, subtotalCents, customerFeeCents, totalCents, companionPayoutCents, platformRevenueCents, depositCents, depositCreditedToFinal]
       properties:
         id:
           type: string
         status:
           type: string
-          enum: [draft, requested, authorized, confirmed, cancelled]
+          enum: [draft, requested, deposit_paid, authorized, confirmed, completed, cancelled]
         subtotalCents:
           type: number
-        platformFeeCents:
+        customerFeeCents:
           type: number
         totalCents:
           type: number
-
+        companionPayoutCents:
+          type: number
+        platformRevenueCents:
+          type: number
+        depositCents:
+          type: number
+        depositCreditedToFinal:
+          type: boolean
+        stripePaymentIntentId:
+          type: ["string", "null"]
+    DepositResult:
+      type: object
+      required: [bookingId, amountCents, clientSecret, creditedToFinal]
+      properties:
+        bookingId:
+          type: string
+        amountCents:
+          type: number
+        clientSecret:
+          type: string
+          description: Stripe Payment Intent client secret — only returned to the authenticated customer
+        creditedToFinal:
+          type: boolean
+    FavorRequestInput:
+      type: object
+      required: [companionId, activity, preferredDate, preferredDurationHours]
+      properties:
+        companionId:
+          type: string
+        activity:
+          type: string
+        preferredDate:
+          type: string
+          format: date
+        preferredDurationHours:
+          type: number
+        locationType:
+          type: ["string", "null"]
+          description: General location type e.g. café, museum, park — not a home address
+        accessibilityNeeds:
+          type: ["string", "null"]
+        dressCode:
+          type: ["string", "null"]
+        additionalQuestions:
+          type: ["string", "null"]
+          description: Structured questions only — no contact info, personal data, or off-platform contact
+    FavorRequest:
+      type: object
+      required: [id, status, companionId, activity, preferredDate, preferredDurationHours]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, declined, expired]
+        companionId:
+          type: string
+        activity:
+          type: string
+        preferredDate:
+          type: string
+        preferredDurationHours:
+          type: number
+        createdAt:
+          type: string

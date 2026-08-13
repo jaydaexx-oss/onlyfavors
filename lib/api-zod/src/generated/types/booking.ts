@@ -11,6 +11,12 @@ export interface Booking {
   id: string;
   status: BookingStatus;
   subtotalCents: number;
-  platformFeeCents: number;
+  customerFeeCents: number;
   totalCents: number;
+  companionPayoutCents: number;
+  platformRevenueCents: number;
+  depositCents: number;
+  depositCreditedToFinal: boolean;
+  /** @nullable */
+  stripePaymentIntentId?: string | null;
 }

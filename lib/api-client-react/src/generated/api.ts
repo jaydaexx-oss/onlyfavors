@@ -26,9 +26,14 @@ import type {
   Companion,
   CompanionDashboard,
   CustomerDashboard,
+  DepositResult,
+  FavorRequest,
+  FavorRequestInput,
+  GetBookingQuoteParams,
   HealthStatus,
   ListCompanionsParams,
   ListSafeSpotsParams,
+  PriceQuote,
   SafeSpot,
   SafetyResources
 } from './api.schemas';
@@ -692,6 +697,90 @@ export function useListSafeSpots<TData = Awaited<ReturnType<typeof listSafeSpots
 
 
 
+export const getGetBookingQuoteUrl = (params: GetBookingQuoteParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bookings/quote?${stringifiedParams}` : `/api/bookings/quote`
+}
+
+/**
+ * @summary Get a server-calculated price quote — never trust browser amounts
+ */
+export const getBookingQuote = async (params: GetBookingQuoteParams, options?: Parameters<typeof customFetch>[1]): Promise<PriceQuote> => {
+
+  return customFetch<PriceQuote>(getGetBookingQuoteUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBookingQuoteQueryKey = (params?: GetBookingQuoteParams,) => {
+    return [
+    `/api/bookings/quote`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBookingQuoteQueryOptions = <TData = Awaited<ReturnType<typeof getBookingQuote>>, TError = ErrorType<void>>(params: GetBookingQuoteParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookingQuote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBookingQuoteQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBookingQuote>>> = ({ signal }) => getBookingQuote(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBookingQuote>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBookingQuoteQueryResult = NonNullable<Awaited<ReturnType<typeof getBookingQuote>>>
+export type GetBookingQuoteQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a server-calculated price quote — never trust browser amounts
+ */
+
+export function useGetBookingQuote<TData = Awaited<ReturnType<typeof getBookingQuote>>, TError = ErrorType<void>>(
+ params: GetBookingQuoteParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookingQuote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBookingQuoteQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getCreateBookingIntentUrl = () => {
 
 
@@ -701,7 +790,7 @@ export const getCreateBookingIntentUrl = () => {
 }
 
 /**
- * @summary Create a server-priced booking intent
+ * @summary Create a booking intent with server-calculated pricing
  */
 export const createBookingIntent = async (bookingInput: BookingInput, options?: Parameters<typeof customFetch>[1]): Promise<Booking> => {
 
@@ -750,7 +839,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateBookingIntentMutationError = ErrorType<void>
 
     /**
- * @summary Create a server-priced booking intent
+ * @summary Create a booking intent with server-calculated pricing
  */
 export const useCreateBookingIntent = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBookingIntent>>, TError,{data: BodyType<BookingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -761,5 +850,218 @@ export const useCreateBookingIntent = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateBookingIntentMutationOptions(options));
+    }
+
+export const getAuthorizeDepositUrl = (id: string,) => {
+
+
+
+
+  return `/api/bookings/${id}/deposit`
+}
+
+/**
+ * @summary Pay the refundable $10 deposit to unlock masked chat
+ */
+export const authorizeDeposit = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<DepositResult> => {
+
+  return customFetch<DepositResult>(getAuthorizeDepositUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAuthorizeDepositMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authorizeDeposit>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authorizeDeposit>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['authorizeDeposit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authorizeDeposit>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  authorizeDeposit(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthorizeDepositMutationResult = NonNullable<Awaited<ReturnType<typeof authorizeDeposit>>>
+
+    export type AuthorizeDepositMutationError = ErrorType<void>
+
+    /**
+ * @summary Pay the refundable $10 deposit to unlock masked chat
+ */
+export const useAuthorizeDeposit = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authorizeDeposit>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof authorizeDeposit>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAuthorizeDepositMutationOptions(options));
+    }
+
+export const getAuthorizeFullPaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/bookings/${id}/authorize`
+}
+
+/**
+ * @summary Authorize full server-priced payment to confirm the booking
+ */
+export const authorizeFullPayment = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<DepositResult> => {
+
+  return customFetch<DepositResult>(getAuthorizeFullPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAuthorizeFullPaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authorizeFullPayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authorizeFullPayment>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['authorizeFullPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authorizeFullPayment>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  authorizeFullPayment(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthorizeFullPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof authorizeFullPayment>>>
+
+    export type AuthorizeFullPaymentMutationError = ErrorType<void>
+
+    /**
+ * @summary Authorize full server-priced payment to confirm the booking
+ */
+export const useAuthorizeFullPayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authorizeFullPayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof authorizeFullPayment>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAuthorizeFullPaymentMutationOptions(options));
+    }
+
+export const getCreateFavorRequestUrl = () => {
+
+
+
+
+  return `/api/favor-requests`
+}
+
+/**
+ * @summary Send a structured Favor Request to a companion — free, no chat yet
+ */
+export const createFavorRequest = async (favorRequestInput: FavorRequestInput, options?: Parameters<typeof customFetch>[1]): Promise<FavorRequest> => {
+
+  return customFetch<FavorRequest>(getCreateFavorRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(favorRequestInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFavorRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFavorRequest>>, TError,{data: BodyType<FavorRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFavorRequest>>, TError,{data: BodyType<FavorRequestInput>}, TContext> => {
+
+const mutationKey = ['createFavorRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFavorRequest>>, {data: BodyType<FavorRequestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFavorRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFavorRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createFavorRequest>>>
+    export type CreateFavorRequestMutationBody = BodyType<FavorRequestInput>
+    export type CreateFavorRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a structured Favor Request to a companion — free, no chat yet
+ */
+export const useCreateFavorRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFavorRequest>>, TError,{data: BodyType<FavorRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFavorRequest>>,
+        TError,
+        {data: BodyType<FavorRequestInput>},
+        TContext
+      > => {
+      return useMutation(getCreateFavorRequestMutationOptions(options));
     }
 

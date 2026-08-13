@@ -12,7 +12,9 @@ export type BookingStatus = typeof BookingStatus[keyof typeof BookingStatus];
 export const BookingStatus = {
   draft: 'draft',
   requested: 'requested',
+  deposit_paid: 'deposit_paid',
   authorized: 'authorized',
   confirmed: 'confirmed',
+  completed: 'completed',
   cancelled: 'cancelled',
 } as const;

@@ -1,1 +1,4 @@
 - [OnlyFavors production boundaries](onlyfavors-production-boundaries.md) — public discovery must fail closed until approved Supabase records and privacy-safe fields exist.
+- [OnlyFavors pricing model](onlyfavors-pricing.md) — 5% customer fee + 15% companion commission = 20% gross, server-enforced, never from browser; $10 refundable deposit unlocks chat.
+- [Zod format:date coercion](zod-date-coercion.md) — Orval generates zod.coerce.date() for format:date fields; parsed values are Date objects, not strings; must serialize before Drizzle inserts.
+- [TS project reference build order](ts-project-refs.md) — api-server's tsconfig references lib/db; run tsc -p tsconfig.json inside lib/db first or api-server typecheck can't find db exports.
