@@ -5,7 +5,7 @@ import {
   AlertTriangle, ArrowLeft, ArrowRight, BadgeCheck, Bell, Building2, CalendarDays, Check, ChevronDown, ChevronRight,
   CircleAlert, ClipboardCheck, Clock3, Coffee, Compass, EyeOff, FileText, Heart, HeartHandshake,
   KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Map, MapPin, Menu, MessageSquare,
-  Navigation2, PanelLeft, Pencil, Plus, RefreshCw, Search, Send, Shield, ShieldCheck, SlidersHorizontal,
+  Navigation2, PanelLeft, Pencil, Plus, RefreshCw, Search, Send, Share2, Shield, ShieldCheck, SlidersHorizontal,
   Sparkles, Star, Sunrise, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap, Lock,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
@@ -24,7 +24,7 @@ import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import NotFound from '@/pages/not-found';
+// NotFound defined inline below to match design system
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 
 const queryClient = new QueryClient();
@@ -63,6 +63,8 @@ function Header() {
         <Link href="/explore" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-explore">Explore companions</Link>
         <Link href="/saved" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-saved">Saved companions</Link>
         <Link href="/pricing" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-pricing">Pricing</Link>
+        <Link href="/about" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-about">About</Link>
+        <Link href="/help" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-help">Help centre</Link>
         <Link href="/safety" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safety">Safety center</Link>
         <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
         <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
@@ -76,8 +78,8 @@ function Footer() {
     <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
       <div><Brand /><p className="mt-4 max-w-xs text-sm leading-6 text-[#725e69]">Good company for the moments that matter. Built with privacy at the center.</p></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/saved" className="block hover:text-[#7f2e62]" data-testid="footer-link-saved">Saved companions</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/safespots" className="block hover:text-[#7f2e62]" data-testid="footer-link-safespots">SafeSpot Network</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link></div></div>
-      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/pricing" className="block hover:text-[#7f2e62]" data-testid="footer-link-pricing">Pricing</Link><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link></div></div>
-      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/login" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Contact support <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
+      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/about" className="block hover:text-[#7f2e62]" data-testid="footer-link-about">About</Link><Link href="/help" className="block hover:text-[#7f2e62]" data-testid="footer-link-help">Help centre</Link><Link href="/pricing" className="block hover:text-[#7f2e62]" data-testid="footer-link-pricing">Pricing</Link><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link></div></div>
+      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/help" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Help centre <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </div>
     <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-[#ddcfc6] px-5 py-5 text-[11px] text-[#927e87] md:flex-row md:justify-between lg:px-8"><span>© 2025 OnlyFavors, Inc.</span><span>Private by design. Human by nature.</span></div>
   </footer>;
@@ -501,7 +503,7 @@ function Step({ n, icon: Icon, title, body }: { n: string; icon: typeof Compass;
   return <div className="group flex items-center gap-4 rounded-2xl border border-[#dfd2c9] bg-[#f8f1e9] p-4 transition hover:-translate-y-0.5 hover:border-[#c89bb5]"><span className="font-mono text-[10px] text-[#a47e8f]">{n}</span><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></div><div><h3 className="text-sm font-bold text-[#543d50]">{title}</h3><p className="mt-0.5 text-xs leading-5 text-[#806c76]">{body}</p></div><ChevronRight className="ml-auto h-4 w-4 text-[#b0929f] transition group-hover:translate-x-1" /></div>;
 }
 
-function CompanionCard({ companion, saved = false, onSave }: { companion: Companion; saved?: boolean; onSave?: (id: string) => void }) {
+function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: { companion: Companion; saved?: boolean; onSave?: (id: string) => void; onActivityFilter?: (act: string) => void }) {
   return (
     <Link href={`/companions/${companion.id}`} className="group relative block rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#bc83a6] hover:shadow-[0_18px_34px_rgba(88,37,70,.09)]" data-testid={`card-companion-${companion.id}`}>
       {/* Avatar + save */}
@@ -527,6 +529,13 @@ function CompanionCard({ companion, saved = false, onSave }: { companion: Compan
       <p className="mt-1.5 flex items-center gap-1 text-xs text-[#806c76]">
         <MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />{companion.serviceArea}, {companion.city}
       </p>
+      {companion.rating > 0 && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <StarDisplay rating={Math.round(companion.rating)} size="xs" />
+          <span className="font-mono text-[10px] font-bold text-[#48213d]">{companion.rating.toFixed(1)}</span>
+          <span className="text-[10px] text-[#9b858e]">· {companion.reviewCount} reviews</span>
+        </div>
+      )}
       {/* Availability + response time */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {(companion as any).availableNow && (
@@ -540,7 +549,11 @@ function CompanionCard({ companion, saved = false, onSave }: { companion: Compan
       <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-[#725e69]">{companion.biography || 'A thoughtful companion for time well spent.'}</p>
       {/* Activities */}
       <div className="mt-4 flex min-h-[28px] flex-wrap gap-1.5">
-        {companion.activities.slice(0, 3).map((a) => <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>)}
+        {companion.activities.slice(0, 3).map((a) => onActivityFilter
+          ? <button key={a} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onActivityFilter(a); }}
+              className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a] transition-colors hover:bg-[#ead0dd]">{a}</button>
+          : <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>
+        )}
       </div>
       {/* Pricing */}
       <div className="mt-5 flex items-center justify-between border-t border-[#ece1d9] pt-4">
@@ -557,7 +570,7 @@ function CompanionCard({ companion, saved = false, onSave }: { companion: Compan
 function Explore() {
   // Filters
   const [city, setCity] = useState('');
-  const [activity, setActivity] = useState('');
+  const [activity, setActivity] = useState(() => { try { return new URLSearchParams(window.location.search).get('activity') ?? ''; } catch { return ''; } });
   const [language, setLanguage] = useState('');
   const [maxRate, setMaxRate] = useState('');
   const [instant, setInstant] = useState(false);
@@ -569,6 +582,7 @@ function Explore() {
     catch { return new Set(); }
   });
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc'>('best');
   const [filters, setFilters] = useState(false);
 
   // View: list or map
@@ -618,17 +632,20 @@ function Explore() {
     ...(instant ? { instantBook: true } : {}),
   }), [city, activity, language, maxRate, instant]);
 
-  const query = useListCompanions(params, { query: { queryKey: getListCompanionsQueryKey(params) } });
+  const query = useListCompanions(params, { query: { queryKey: getListCompanionsQueryKey(params), retry: false } });
   const spotsQuery = useListSafeSpots(city ? { city } : undefined, {
-    query: { queryKey: getListSafeSpotsQueryKey(city ? { city } : undefined) },
+    query: { queryKey: getListSafeSpotsQueryKey(city ? { city } : undefined), retry: false },
   });
 
   const companions = query.data ?? [];
   const safeSpots = spotsQuery.data ?? [];
 
-  const shownCompanions = (availNow || timeWindow)
-    ? companions.filter((c) => (c as any).availableNow)
-    : companions;
+  const baseCompanions = (availNow || timeWindow) ? companions.filter((c) => (c as any).availableNow) : companions;
+  const shownCompanions = [...baseCompanions].sort((a, b) => {
+    if (sortBy === 'price_asc') return a.hourlyRate - b.hourlyRate;
+    if (sortBy === 'price_desc') return b.hourlyRate - a.hourlyRate;
+    return (b.rating ?? 0) - (a.rating ?? 0); // 'best' — highest rated first
+  });
 
   return (
     <Shell>
@@ -737,12 +754,24 @@ function Explore() {
         </div>
 
         {/* Results header */}
-        <div className="mt-8 flex items-center justify-between border-b border-[#dfd2c9] pb-4">
-          <p className="font-mono text-[10px] uppercase tracking-[.16em] text-[#9b858e]">
+        <div className="mt-8 flex flex-wrap items-center gap-3 border-b border-[#dfd2c9] pb-4">
+          <p className="flex-1 font-mono text-[10px] uppercase tracking-[.16em] text-[#9b858e]">
             {query.isLoading ? 'Searching…'
               : view === 'map' ? `${safeSpots.length} SafeSpots · ${shownCompanions.length} companions`
               : `${shownCompanions.length} approved companions`}
           </p>
+          {view === 'list' && (
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="h-8 rounded-full border border-[#dfd2c9] bg-[#fbf7f1] px-3 font-mono text-[10px] uppercase tracking-[.1em] text-[#654c5f] focus:outline-none"
+              data-testid="select-sort-by"
+            >
+              <option value="best">Best rated</option>
+              <option value="price_asc">Price: low → high</option>
+              <option value="price_desc">Price: high → low</option>
+            </select>
+          )}
           {(city || activity || language || maxRate || instant || nearMe || availNow || timeWindow || customDate) && (
             <button type="button"
               onClick={() => { setCity(''); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); setNearMe(false); setAvailNow(false); setUserCoords(null); setTimeWindow(null); setCustomDate(''); }}
@@ -805,7 +834,7 @@ function Explore() {
                   action={<Button variant="outline" onClick={() => { setCity(''); setActivity(''); setAvailNow(false); }} testId="button-browse-all">Browse all areas</Button>} />
               : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {shownCompanions.map((companion) => (
-                    <CompanionCard key={companion.id} companion={companion} saved={savedIds.has(companion.id)} onSave={handleSave} />
+                    <CompanionCard key={companion.id} companion={companion} saved={savedIds.has(companion.id)} onSave={handleSave} onActivityFilter={(a) => setActivity(a)} />
                   ))}
                 </div>
             }
@@ -825,13 +854,128 @@ function Explore() {
   );
 }
 
+const REPORT_REASONS = [
+  'Inappropriate messages',
+  'Request to meet privately',
+  'Fake or misleading profile',
+  'Safety concern during booking',
+  'Other',
+];
+
+function ReportButton({ companionId, companionName }: { companionId: string; companionName: string }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!reason) return;
+    setLoading(true);
+    try {
+      await fetch(`/api/companions/${companionId}/report`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, note }),
+      });
+      setDone(true);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}
+        className="text-[10px] font-semibold text-[#b09aa8] underline-offset-2 hover:text-[#7f2e62] hover:underline"
+        data-testid="button-report-concern">
+        Report a concern
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOpen(false)}>
+          <div className="relative w-full max-w-md rounded-[24px] bg-white p-8 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setOpen(false)} className="absolute right-5 top-5 text-[#9b858e] hover:text-[#48213d]"><X className="h-5 w-5" /></button>
+            {done ? (
+              <div className="py-4 text-center">
+                <ShieldCheck className="mx-auto h-10 w-10 text-[#477254]" />
+                <h3 className="mt-4 font-serif text-2xl text-[#48213d]">Thank you for letting us know.</h3>
+                <p className="mt-3 text-sm leading-6 text-[#725e69]">Our trust team will review this within 24 hours. Your identity is kept private.</p>
+                <button type="button" onClick={() => setOpen(false)}
+                  className="mt-6 inline-flex h-10 items-center rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white">Close</button>
+              </div>
+            ) : (
+              <form onSubmit={submit}>
+                <p className="font-mono text-[10px] uppercase tracking-[.15em] text-[#9d557e]">Safety concern</p>
+                <h3 className="mt-2 font-serif text-2xl text-[#48213d]">Report a concern</h3>
+                <p className="mt-1 text-xs text-[#725e69]">About {companionName}. Reviewed by our trust team within 24 hours.</p>
+                <div className="mt-5 space-y-2">
+                  {REPORT_REASONS.map((r) => (
+                    <label key={r} className={`flex cursor-pointer items-center gap-3 rounded-[12px] border p-3 transition ${reason === r ? 'border-[#7f2e62] bg-[#fbf0f7]' : 'border-[#dfd2c9] hover:border-[#c695ae]'}`}>
+                      <input type="radio" name="reason" value={r} checked={reason === r} onChange={() => setReason(r)} className="sr-only" />
+                      <span className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 transition ${reason === r ? 'border-[#7f2e62] bg-[#7f2e62]' : 'border-[#c4a5b5]'}`} />
+                      <span className="text-sm text-[#48213d]">{r}</span>
+                    </label>
+                  ))}
+                </div>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)}
+                  placeholder="Optional: additional context for our team"
+                  rows={3} className="mt-4 w-full resize-none rounded-[12px] border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-3 text-sm outline-none placeholder:text-[#b09aa8] focus:border-[#9d557e]" />
+                <button type="submit" disabled={!reason || loading}
+                  className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#7f2e62] text-sm font-bold text-white disabled:opacity-40"
+                  data-testid="button-submit-report">
+                  {loading ? 'Sending…' : 'Submit report'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ShareButton() {
+  const [copied, setCopied] = useState(false);
+  async function share() {
+    const url = window.location.href;
+    if (navigator.share) { try { await navigator.share({ title: document.title, url }); return; } catch {} }
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+  }
+  return (
+    <button type="button" onClick={share}
+      className="flex items-center gap-1.5 text-xs font-semibold text-[#9b858e] transition hover:text-[#7f2e62]"
+      data-testid="button-share-profile">
+      {copied ? <Check className="h-3.5 w-3.5 text-[#477254]" /> : <Share2 className="h-3.5 w-3.5" />}
+      {copied ? 'Link copied' : 'Share profile'}
+    </button>
+  );
+}
+
+type AvailDay = { day: string; hours: string };
+function CompanionAvailability({ availability }: { availability: AvailDay[] }) {
+  if (!availability?.length) return null;
+  return (
+    <div className="mt-10 border-t border-[#dfd2c9] pt-8">
+      <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Typical availability</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {availability.map((a) => (
+          <div key={a.day} className="rounded-[14px] border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-3">
+            <p className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#9d557e]">{a.day}</p>
+            <p className="mt-1 text-xs text-[#654c5f]">{a.hours}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11px] text-[#9b858e]">Actual availability confirmed at time of booking.</p>
+    </div>
+  );
+}
+
 function Profile() {
   const { id = '' } = useParams<{ id: string }>();
   const query = useGetCompanion(id, { query: { queryKey: getGetCompanionQueryKey(id), enabled: Boolean(id) } });
   if (query.isLoading) return <Shell><main className="mx-auto max-w-6xl px-5 py-16"><LoadingState /></main></Shell>;
   if (query.isError || !query.data) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => query.refetch()} /></main></Shell>;
   const c = query.data;
-  return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <span key={x} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62]">{x}</span>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionReviews companionId={c.id} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />Identity verified by OnlyFavors</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div><Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link><p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p></aside></div></main></Shell>;
+  return <Shell><main className="page-enter mx-auto max-w-6xl px-5 py-10 lg:px-8 lg:py-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <Link key={x} href={`/explore?activity=${encodeURIComponent(x)}`} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62] transition-colors hover:bg-[#c695ae] hover:text-white">{x}</Link>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionReviews companionId={c.id} /><CompanionAvailability availability={(c as any).availability ?? []} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />Identity verified by OnlyFavors</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div><Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link><p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p><div className="mt-5 flex items-center justify-center border-t border-[#ece1d9] pt-4"><ShareButton /></div>{(c as any).memberSince && <p className="mt-3 text-center text-[10px] text-[#9b858e]">Member since {(c as any).memberSince} · {(c as any).totalBookings ?? 0} bookings</p>}<div className="mt-4 flex justify-center"><ReportButton companionId={c.id} companionName={c.displayName} /></div></aside></div></main></Shell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -2040,6 +2184,161 @@ function CompanionReviews({ companionId }: { companionId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// About page
+// ---------------------------------------------------------------------------
+
+function About() {
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-5xl px-5 py-16 lg:px-8">
+        <div className="mb-16">
+          <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Our story</p>
+          <h1 className="mt-3 max-w-2xl font-serif text-6xl leading-none text-[#48213d]">
+            Built for people who<br /><em>want good company.</em>
+          </h1>
+          <p className="mt-6 max-w-xl text-base leading-7 text-[#654c5f]">
+            OnlyFavors started with a simple observation: loneliness is widespread, and the ways most people have to address it are either awkward, expensive, or both. We built a quieter alternative.
+          </p>
+        </div>
+
+        <div className="grid gap-10 border-t border-[#dfd2c9] pt-12 md:grid-cols-2">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Our mission</p>
+            <h2 className="mt-4 font-serif text-4xl text-[#48213d]">Connection, without the complexity.</h2>
+            <p className="mt-4 max-w-md text-sm leading-7 text-[#654c5f]">
+              We believe meaningful time together shouldn't require a perfect social network, an unlimited calendar, or an excuse. OnlyFavors makes it simple, safe, and dignified to say "I'd like some company today."
+            </p>
+          </div>
+          <div className="space-y-4">
+            {[
+              { icon: ShieldCheck, title: 'Safety by design', body: 'Every companion is identity-verified. Every meeting happens in a public SafeSpot. Boundaries are documented before anyone books.' },
+              { icon: EyeOff, title: 'Privacy first', body: 'Companions appear as service-area circles, never live pins. Phone numbers and emails are stripped from all messages.' },
+              { icon: Star, title: 'Genuine quality', body: 'We review every companion application personally. Ratings come from real bookings. No fake profiles, no hidden reviews.' },
+            ].map(({ icon: Icon, title, body }) => (
+              <div key={title} className="flex gap-4 rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#7f2e62]" />
+                <div>
+                  <p className="text-sm font-bold text-[#48213d]">{title}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#725e69]">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-16 rounded-[28px] bg-[#48213d] p-10 md:p-14">
+          <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#d4a0bd]">What we believe</p>
+          <div className="mt-8 grid gap-8 md:grid-cols-3">
+            {[
+              { n: '01', title: 'Dignity over optics', body: "No one should have to explain why they want company. We don't ask, and we don't judge." },
+              { n: '02', title: 'Consent at every step', body: 'Boundary receipts, clear pricing, and mutual opt-in before anything is confirmed.' },
+              { n: '03', title: 'Companions as professionals', body: 'Companions set their own rates, keep 85% of every booking, and are treated as the skilled people they are.' },
+            ].map(({ n, title, body }) => (
+              <div key={n}>
+                <p className="font-mono text-[10px] text-[#c695ae]">{n}</p>
+                <h3 className="mt-3 font-serif text-2xl text-[#f9efe5]">{title}</h3>
+                <p className="mt-3 text-sm leading-6 text-[#c4a5b5]">{body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-16 flex flex-wrap items-center gap-4">
+          <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white" data-testid="link-about-explore">
+            Browse companions <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link href="/companion/apply" className="inline-flex h-12 items-center gap-2 rounded-full border border-[#dfd2c9] px-6 text-sm font-bold text-[#654c5f] hover:bg-[#f0e4db]" data-testid="link-about-apply">
+            Become a companion
+          </Link>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Help / FAQ page
+// ---------------------------------------------------------------------------
+
+type HelpSectionDef = { title: string; icon: React.ElementType; items: { q: string; a: string }[] };
+
+function Help() {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const sections: HelpSectionDef[] = [
+    { title: 'Booking', icon: CalendarDays, items: [
+      { q: 'How do I book a companion?', a: "Browse the directory, open a companion's profile, and click \"Plan time with [name].\" Choose an activity, date, duration, and a public SafeSpot. The companion reviews and accepts before anything is charged." },
+      { q: 'What is a SafeSpot?', a: "SafeSpots are verified, well-lit public venues — coffee shops, museums, hotel lobbies — that OnlyFavors has vetted for companion meetups. Every booking must start at a SafeSpot." },
+      { q: 'Can I book same-day?', a: "Companions with instant booking enabled can be booked same-day. For others, allow at least 24 hours for the companion to review." },
+      { q: 'What happens if the companion declines?', a: "Your deposit is refunded in full within 5–10 business days. You'll be notified as soon as a decision is made." },
+    ]},
+    { title: 'Payments', icon: WalletCards, items: [
+      { q: 'What does the $10 deposit cover?', a: "The deposit unlocks the private, masked chat thread so you can discuss details. It is credited toward your total when the companion accepts — or fully refunded if they decline." },
+      { q: 'When am I charged the full amount?', a: "The full amount is authorised when the companion accepts. The hold is captured at booking completion, not before." },
+      { q: 'What is the 5% service fee?', a: "It covers identity verification, insurance, SafeSpot maintenance, and 24/7 trust team access. Always shown upfront — no surprises." },
+      { q: 'How do refunds work?', a: "Cancellations before companion acceptance receive a full deposit refund. After acceptance, our cancellation policy applies. Refunds appear in 5–10 business days." },
+    ]},
+    { title: 'Safety', icon: ShieldCheck, items: [
+      { q: 'How are companions verified?', a: "Every companion submits a government ID and passes a background check. Their location is shown as a service-area circle — never a home address." },
+      { q: 'What is a Boundary Receipt?', a: "Before every booking, both parties agree to a documented list of activities, comfort levels, and limits. This is stored securely and referenced if a dispute arises." },
+      { q: 'What is the Trust Circle?', a: "Up to 3 contacts who receive automatic check-in alerts during your booking. Configure it from your Safety page or workspace." },
+      { q: 'What if I feel unsafe during a booking?', a: 'Open FavorMode and tap "I need help." This alerts your Trust Circle and our 24/7 safety team simultaneously.' },
+    ]},
+    { title: 'For companions', icon: UsersRound, items: [
+      { q: 'How do I apply to become a companion?', a: "Visit \"Become a companion\" and complete the application. We review every application personally — typically within 3–5 business days." },
+      { q: 'How much do companions earn?', a: "Companions keep 85% of every booking. You set your own hourly rate; OnlyFavors takes a 15% commission to cover verification, insurance, and payment processing." },
+      { q: 'How do payouts work?', a: "Payouts go directly to your bank via Stripe. Set up from Companion Workspace → Earnings. Funds typically arrive within 2–5 business days of booking completion." },
+      { q: 'Can I control my availability and activities?', a: "Yes — your profile, rates, activities, languages, and boundaries are all under your control. Update anytime from your Companion Workspace → Edit Profile." },
+    ]},
+  ];
+
+  return (
+    <Shell>
+      <main className="page-enter mx-auto max-w-3xl px-5 py-16 lg:px-8">
+        <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Support</p>
+        <h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Help centre</h1>
+        <p className="mt-4 text-sm leading-6 text-[#725e69]">Everything you need to know about using OnlyFavors.</p>
+
+        <div className="mt-12 space-y-10">
+          {sections.map((section) => (
+            <div key={section.title}>
+              <div className="mb-4 flex items-center gap-3">
+                <section.icon className="h-5 w-5 text-[#7f2e62]" />
+                <h2 className="font-serif text-2xl text-[#48213d]">{section.title}</h2>
+              </div>
+              <div className="space-y-2">
+                {section.items.map((item) => {
+                  const id = `${section.title}-${item.q}`;
+                  const isOpen = openId === id;
+                  return (
+                    <div key={id} className="overflow-hidden rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1]">
+                      <button type="button" onClick={() => setOpenId(isOpen ? null : id)}
+                        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                        data-testid={`help-q-${id.replace(/\W+/g, '-').toLowerCase().slice(0, 40)}`}>
+                        <span className="text-sm font-semibold text-[#48213d]">{item.q}</span>
+                        <ChevronDown className={`h-4 w-4 shrink-0 text-[#9b858e] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isOpen && (
+                        <div className="border-t border-[#ece1d9] px-5 py-4 text-sm leading-6 text-[#654c5f]">{item.a}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-14 rounded-[22px] bg-[#d9e1d7] p-8">
+          <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#477254]">Still have questions?</p>
+          <h3 className="mt-3 font-serif text-3xl text-[#31533f]">We're here.</h3>
+          <p className="mt-3 text-sm leading-6 text-[#53725d]">Our trust team monitors messages around the clock. Reach us at <strong>help@onlyfavors.com</strong> — we respond within one business day.</p>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Companion earnings dashboard
 // ---------------------------------------------------------------------------
 
@@ -3173,11 +3472,58 @@ function BookingStatus() {
               <ShieldCheck className="h-4 w-4" />Safety plan
             </Link>
           </div>
+          {!['completed', 'cancelled'].includes(b.status) && <CancelBookingButton bookingId={b.id} />}
         </div>
 
         <BookingChat bookingId={b.id} status={b.status} />
       </main>
     </Shell>
+  );
+}
+
+function CancelBookingButton({ bookingId }: { bookingId: string }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const qc = useQueryClient();
+  async function doCancel() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Customer requested cancellation' }),
+      });
+      if (res.ok) { await qc.invalidateQueries({ queryKey: ['bookings'] }); setDone(true); }
+    } finally { setLoading(false); setOpen(false); }
+  }
+  if (done) return (
+    <div className="mt-4 rounded-[14px] bg-[#f0e4db] p-4 text-xs leading-5 text-[#654c5f]">
+      Booking cancelled. Any deposit will be refunded within 5–10 business days.
+    </div>
+  );
+  if (!open) return (
+    <button type="button" onClick={() => setOpen(true)}
+      className="mt-4 text-xs font-semibold text-[#9b858e] underline-offset-2 hover:text-[#7f2e62] hover:underline"
+      data-testid="button-cancel-booking">
+      Need to cancel?
+    </button>
+  );
+  return (
+    <div className="mt-4 rounded-[16px] border border-[#f0d5d5] bg-[#fdf6f6] p-4">
+      <p className="text-sm font-semibold text-[#5a2020]">Cancel this booking?</p>
+      <p className="mt-1 text-xs leading-5 text-[#725e69]">Deposits are refunded within 5–10 business days. The companion will be notified.</p>
+      <div className="mt-3 flex gap-3">
+        <button type="button" onClick={doCancel} disabled={loading}
+          className="inline-flex h-9 items-center rounded-full bg-[#a83232] px-4 text-xs font-bold text-white disabled:opacity-50"
+          data-testid="button-confirm-cancel">
+          {loading ? 'Cancelling…' : 'Yes, cancel'}
+        </button>
+        <button type="button" onClick={() => setOpen(false)}
+          className="inline-flex h-9 items-center rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#654c5f]">
+          Keep booking
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -3953,6 +4299,26 @@ function CompanionApplicationCard({ app, onDecision }: { app: CompanionApplicati
   );
 }
 
+function NotFound() {
+  return (
+    <Shell>
+      <main className="page-enter mx-auto flex min-h-[70vh] max-w-2xl flex-col items-center justify-center px-5 py-24 text-center lg:px-8">
+        <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">404</p>
+        <h1 className="mt-3 font-serif text-6xl leading-none text-[#48213d]">This page<br /><em>doesn't exist.</em></h1>
+        <p className="mt-6 max-w-sm text-sm leading-6 text-[#725e69]">The link may have moved or expired. The companion directory is still wide open.</p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white" data-testid="link-404-explore">
+            Browse companions <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link href="/" className="inline-flex h-12 items-center gap-2 rounded-full border border-[#dfd2c9] px-6 text-sm font-bold text-[#654c5f] hover:bg-[#f0e4db]" data-testid="link-404-home">
+            Home
+          </Link>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
 function Router() {
   const [location] = useLocation();
   return (
@@ -3980,6 +4346,8 @@ function Router() {
         <Route path="/safespots/:id" component={SafeSpotDetail} />
         <Route path="/saved" component={Saved} />
         <Route path="/dashboard/companion/earnings" component={CompanionEarnings} />
+        <Route path="/about" component={About} />
+        <Route path="/help" component={Help} />
         <Route path="/pricing" component={Pricing} />
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/operations" component={AdminOperations} />

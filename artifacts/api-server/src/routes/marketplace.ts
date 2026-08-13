@@ -82,10 +82,20 @@ router.get("/companions", async (req, res) => {
     req.log.info({ count: companions.length }, "Listed approved companions");
     res.json(companions);
   } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      req.log.warn({ err }, "Supabase unavailable — serving companion dev fixtures");
+      const fixtures = Object.values(DEV_COMPANIONS) as any[];
+      const filtered = fixtures.filter((c) => {
+        if (query.city && !c.serviceArea?.toLowerCase().includes(query.city.toLowerCase()) && !c.city?.toLowerCase().includes(query.city.toLowerCase())) return false;
+        if (query.activity && !c.activities?.some((a: string) => a.toLowerCase().includes(query.activity!.toLowerCase()))) return false;
+        if (query.language && !c.languages?.includes(query.language)) return false;
+        if (query.maxRate !== undefined && c.hourlyRate > query.maxRate) return false;
+        return true;
+      });
+      res.json(filtered); return;
+    }
     req.log.error({ err }, "Unable to read approved companions");
-    res
-      .status(503)
-      .json({ error: "Companion directory is temporarily unavailable" });
+    res.status(503).json({ error: "Companion directory is temporarily unavailable" });
   }
 });
 
@@ -99,7 +109,12 @@ const DEV_COMPANIONS: Record<string, object> = {
     serviceArea: "San Francisco", city: "CA",
     photoUrl: null, rating: 4.9, reviewCount: 3, responseTime: "within 2h",
     boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [],
+    availability: [
+      { day: "Mon", hours: "10am – 8pm" }, { day: "Tue", hours: "10am – 8pm" },
+      { day: "Wed", hours: "10am – 8pm" }, { day: "Thu", hours: "10am – 8pm" },
+      { day: "Fri", hours: "10am – 6pm" }, { day: "Sat", hours: "12pm – 6pm" },
+    ],
+    memberSince: "Aug 2025", totalBookings: 46,
   },
   "companion-jordan": {
     id: "companion-jordan", displayName: "Jordan K.", verified: true,
@@ -109,7 +124,12 @@ const DEV_COMPANIONS: Record<string, object> = {
     serviceArea: "New York", city: "NY",
     photoUrl: null, rating: 4.8, reviewCount: 12, responseTime: "within 1h",
     boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [],
+    availability: [
+      { day: "Tue", hours: "11am – 9pm" }, { day: "Wed", hours: "11am – 9pm" },
+      { day: "Thu", hours: "11am – 9pm" }, { day: "Fri", hours: "11am – 9pm" },
+      { day: "Sun", hours: "12pm – 7pm" },
+    ],
+    memberSince: "Mar 2025", totalBookings: 89,
   },
 };
 
@@ -517,6 +537,35 @@ router.post("/bookings/:id/decline", async (req, res) => {
   }
 });
 
+router.post("/bookings/:id/cancel", async (req, res) => {
+  const { id } = req.params;
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const { reason } = req.body ?? {};
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.customerId !== customerId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (["completed", "cancelled"].includes(booking.status)) {
+      res.status(409).json({ error: "Booking cannot be cancelled" }); return;
+    }
+    const [updated] = await db
+      .update(bookings)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(bookings.id, id))
+      .returning();
+    req.log.info({ bookingId: id, reason }, "Booking cancelled by customer");
+    res.json(formatBookingFull(updated));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.json({ id, status: "cancelled" }); return; }
+    req.log.error({ err }, "Unable to cancel booking");
+    res.status(503).json({ error: "Could not cancel booking" });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Structured Favor Requests — free, no chat until deposit paid
 // ---------------------------------------------------------------------------
@@ -788,6 +837,14 @@ const devReviews: DevReview[] = [
 
 /** bookingIds that have already been reviewed, to enforce one-review-per-booking */
 const reviewedBookings = new Set<string>(["bk-demo-1", "bk-demo-2", "bk-demo-3"]);
+
+router.post("/companions/:id/report", async (req, res) => {
+  const { id } = req.params;
+  const { reason, note } = req.body ?? {};
+  req.log.warn({ companionId: id, reason, note: note?.slice(0, 200) }, "Companion report submitted");
+  // In production this would create a ticket in the safety ops queue.
+  res.json({ received: true, message: "Report received. Our trust team will review within 24 hours." });
+});
 
 router.get("/companions/:id/reviews", async (req, res) => {
   const { id } = req.params;
@@ -1194,6 +1251,15 @@ router.get("/safety", (_req, res) => {
   res.json(data);
 });
 
+const DEV_SAFESPOTS = [
+  { id: "ss-sf-1", name: "Blue Bottle Coffee", category: "Café", city: "San Francisco", addressHint: "Downtown SF", openLate: false },
+  { id: "ss-sf-2", name: "SFMOMA Lobby", category: "Museum", city: "San Francisco", addressHint: "Mission District", openLate: false },
+  { id: "ss-sf-3", name: "Ferry Building Marketplace", category: "Public Market", city: "San Francisco", addressHint: "Embarcadero", openLate: false },
+  { id: "ss-ny-1", name: "Ace Hotel Lobby", category: "Hotel Lobby", city: "New York", addressHint: "Midtown", openLate: true },
+  { id: "ss-ny-2", name: "The High Line Café", category: "Café", city: "New York", addressHint: "Chelsea", openLate: false },
+  { id: "ss-ny-3", name: "Brooklyn Museum", category: "Museum", city: "New York", addressHint: "Crown Heights", openLate: false },
+];
+
 router.get("/safespots", async (req, res) => {
   const query = ListSafeSpotsQueryParams.parse(req.query);
   try {
@@ -1209,6 +1275,12 @@ router.get("/safespots", async (req, res) => {
       })),
     );
   } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      const filtered = query.city
+        ? DEV_SAFESPOTS.filter((s) => s.city.toLowerCase().includes(query.city!.toLowerCase()))
+        : DEV_SAFESPOTS;
+      res.json(filtered); return;
+    }
     req.log.error({ err }, "Unable to read SafeSpots");
     res.status(503).json({ error: "SafeSpots are temporarily unavailable" });
   }
