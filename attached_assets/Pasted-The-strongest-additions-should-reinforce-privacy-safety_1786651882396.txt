@@ -1,0 +1,130 @@
+The strongest additions should reinforce privacy, safety and genuine human connection. Avoid turning it into another overloaded dating marketplace.
+Signature features
+SafeSpot Network
+Partner with cafés, hotels and public venues. Approved locations display an OnlyFavors shield and provide:
+QR arrival check-in
+Staff awareness
+Clearly marked meeting points
+Emergency assistance
+Venue discounts
+This could become a distinctive, visible part of the brand.
+Boundary Receipt
+Before booking, both people approve:
+Activity and location
+Start and end time
+Transportation expectations
+Physical-contact boundaries
+Photography permission
+Alcohol expectations
+Topics or behaviors to avoid
+Changes require both people to approve again.
+Trust Circle
+Users select trusted contacts who can receive:
+Booking details
+Companion’s verified identity
+Live check-in status
+Missed-check-in alerts
+Emergency location sharing
+Exact location should be collected only during the booking and deleted afterward.
+Protected ChatChat unlocks only after an accepted request and payment authorization
+Phone numbers and emails remain hidden
+Disappearing media
+Optional watermarks on profile photos
+Easy blocking and reporting
+Reported conversations can be reviewed by the safety team
+
+Don’t promise end-to-end encryption if moderation staff need to investigate reported messages.
+Discreet Exit
+A user can press “Help me leave” during a booking. The app can:
+Send a believable cancellation notification
+Alert a trusted contact
+Provide directions to the nearest SafeSpot
+Contact emergency services when explicitly requested
+End location sharing after confirming safety
+Features that improve retention
+Favorite Circle: Privately save and rebook trusted companions
+Favor Again: Repeat a successful experience in two taps
+Voice Introductions: Short personality-focused audio prompts
+Shared Itinerary: Venue, tickets, dress code and meeting instructions
+Duo Favors: Book two companions or attend as a small group
+Gift a Favor: Purchase a safe, activity-specific gift card
+Availability Now: Show companions available within the next few hours
+Reliability Score: Based on attendance and communication—not popularity or appearance
+Private Feedback: “Did you feel respected and safe?” never shown publicly
+Accessibility Preferences: Mobility, sensory, communication and venue requirements
+Companion protections
+Companions need equal protection:
+Customers verified before requesting
+Complete control over activities and boundaries
+Decline requests without ranking penalties
+Block particular dates, areas or users
+Cancellation compensation
+Harassment detection and rapid reporting
+Optional public alias
+Approximate location only
+Automatic payout after safe checkout
+Private customer-risk history reviewed by moderators
+Additional revenue
+Later, OnlyFavors can earn from:
+$99/year optional Plus membership
+Venue partnerships
+Event-ticket and restaurant referrals
+Gift cards
+Corporate event companion packages
+Concierge matching
+Cancellation protection
+Never sell profile placement as “best match,” and never charge for essential privacy or emergency features.
+If we prioritize only three signature additions, I’d choose SafeSpot Network, Boundary Receipt and Trust Circle. Together they give OnlyFavors a safety system competitors cannot copy with a simple UI update.
+
+
+Wednesday 1:40 PM
+
+
+
+
+
+
+
+
+i think adding location is the best?
+
+
+
+
+
+
+Wednesday 1:41 PM
+
+
+
+
+
+
+Yes—location could be OnlyFavors’ best feature, provided it is designed as a safety tool rather than a people-tracking map.
+Use a location ladder:
+Before booking: Show only city, neighborhood and approximate distance.
+After acceptance: Reveal the agreed public venue—not either person’s address.
+During the favor: Enable temporary check-ins and optional live sharing.
+After checkout: Stop sharing automatically and delete precise location after a short, disclosed retention period.
+During an emergency: Share exact location with the user’s trusted contact or emergency services.
+Strong location features could include:
+Near Me: Find available companions within a chosen radius
+SafeSpot Map: Recommended cafés, hotels and public venues
+Meet Here: Both users approve the meeting point
+Geofenced Check-In: Confirm arrival without sharing the route taken
+Trust Circle Link: Temporary booking map for selected contacts
+Missed Check-In Alert: Notify trusted contacts if someone does not respond
+Walk Me There: Continue safety sharing until the person reaches transportation
+Expiring Location Links: Automatically become unusable after the booking
+Important restrictions:
+Never display companions as live pins
+Never expose home or work addresses
+Never track people outside active bookings
+Never sell or use precise location for advertising
+Require clear consent from both sides
+Let either person stop ordinary sharing immediately
+Use an obvious indicator whenever location is active
+The signature interface could be a mulberry map with mint SafeSpots, showing:
+Three verified companions available near Waikīkī this evening
+
+That feels useful and safe without revealing anyone’s precise whereabouts.
