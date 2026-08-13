@@ -62,6 +62,7 @@ function Header() {
       <div className="flex flex-col gap-1">
         <Link href="/explore" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-explore">Explore companions</Link>
         <Link href="/saved" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-saved">Saved companions</Link>
+        <Link href="/pricing" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-pricing">Pricing</Link>
         <Link href="/safety" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safety">Safety center</Link>
         <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
         <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
@@ -75,7 +76,7 @@ function Footer() {
     <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
       <div><Brand /><p className="mt-4 max-w-xs text-sm leading-6 text-[#725e69]">Good company for the moments that matter. Built with privacy at the center.</p></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/saved" className="block hover:text-[#7f2e62]" data-testid="footer-link-saved">Saved companions</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/safespots" className="block hover:text-[#7f2e62]" data-testid="footer-link-safespots">SafeSpot Network</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link></div></div>
-      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link></div></div>
+      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/pricing" className="block hover:text-[#7f2e62]" data-testid="footer-link-pricing">Pricing</Link><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/login" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Contact support <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </div>
     <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-[#ddcfc6] px-5 py-5 text-[11px] text-[#927e87] md:flex-row md:justify-between lg:px-8"><span>© 2025 OnlyFavors, Inc.</span><span>Private by design. Human by nature.</span></div>
@@ -2039,6 +2040,289 @@ function CompanionReviews({ companionId }: { companionId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Pricing page
+// ---------------------------------------------------------------------------
+
+const PRICING_FAQS = [
+  {
+    q: 'When is the 5% fee charged?',
+    a: 'The safety & service fee is added on top of the companion\'s hourly rate at checkout. You see the exact total — companion rate + fee — before any payment is taken. No surprises at the end.',
+  },
+  {
+    q: 'Is the $10 deposit refundable?',
+    a: 'Yes. The deposit is fully credited toward your booking total when you complete payment after your companion accepts. If your companion declines, the full $10 is returned to your original payment method within 5–10 business days.',
+  },
+  {
+    q: 'How quickly do companions get paid?',
+    a: 'Companion payouts are initiated within 24 hours of a booking completing. Standard bank transfer times apply (typically 2–5 business days). Companions connect their bank account once via Stripe — no manual invoicing required.',
+  },
+  {
+    q: 'Are prices ever negotiated outside the platform?',
+    a: 'No, and companions are not permitted to accept off-platform payment. All rates are set by the companion in their profile and are non-negotiable per booking. This protects both sides and keeps every transaction covered by our dispute resolution.',
+  },
+  {
+    q: 'What happens if a booking is cancelled?',
+    a: 'Cancellation policy depends on notice given. Cancellations more than 48 hours before the booking are fully refunded including the deposit. Within 48 hours, the deposit is non-refundable. Companions who cancel receive no payout for that booking.',
+  },
+  {
+    q: 'Is the companion\'s hourly rate all-inclusive?',
+    a: 'The hourly rate covers the companion\'s time. Customers cover any out-of-pocket expenses for the activity itself — museum tickets, restaurant bills, etc. — unless otherwise agreed in the booking notes.',
+  },
+];
+
+function PricingFaq({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b border-[#ece1d9]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-4 py-5 text-left"
+        data-testid={`faq-${q.slice(0, 20).replace(/\s/g, '-').toLowerCase()}`}
+      >
+        <span className="text-sm font-semibold text-[#48213d]">{q}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[#9d557e] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <p className="pb-5 text-sm leading-6 text-[#725e69]">{a}</p>}
+    </div>
+  );
+}
+
+function Pricing() {
+  // Worked example state
+  const [exRate, setExRate] = useState(65);
+  const [exHours, setExHours] = useState(3);
+  const subtotal = exRate * exHours;
+  const customerFee = Math.round(subtotal * 0.05 * 100) / 100;
+  const customerTotal = subtotal + customerFee;
+  const platformCommission = Math.round(subtotal * 0.15 * 100) / 100;
+  const companionPayout = subtotal - platformCommission;
+
+  return (
+    <Shell>
+      <main className="page-enter">
+
+        {/* ── Hero ── */}
+        <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#3d2038]">
+          <div className="absolute -right-40 -top-40 h-[600px] w-[600px] rounded-full border-[60px] border-white/5" />
+          <div className="absolute right-24 bottom-0 h-32 w-32 rounded-full bg-[#9d557e]/20 blur-3xl" />
+          <div className="mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-24">
+            <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Transparent by design</p>
+            <h1 className="font-serif text-[60px] leading-[.92] text-[#f9efe5] md:text-[80px]">Simple, honest<br /><em>pricing.</em></h1>
+            <p className="mt-6 max-w-lg text-[17px] leading-7 text-[#d9c4cf]">No hidden markups. Every fee is shown before you pay, calculated server-side so the number you see is the number you pay.</p>
+            <div className="mt-8 flex items-center gap-3">
+              <p className="flex items-center gap-2 rounded-full border border-[#5e3458] bg-[#4a2842] px-4 py-2 text-xs text-[#d9c4cf]">
+                <LockKeyhole className="h-3.5 w-3.5 text-[#c695ae]" />All amounts are calculated on our server — your browser never sets prices.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Two-column cards ── */}
+        <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+          <div className="grid gap-5 md:grid-cols-2">
+
+            {/* Customer card */}
+            <div className="rounded-[28px] border border-[#dfd2c9] bg-[#fbf7f1] p-8 md:p-10">
+              <div className="flex items-start justify-between">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#ead0dd] text-[#7f2e62]">
+                  <Users className="h-5 w-5" />
+                </div>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-[#9b858e]">For customers</span>
+              </div>
+              <h2 className="mt-8 font-serif text-4xl leading-none text-[#48213d]">Pay the rate.<br />Plus a small fee.</h2>
+              <p className="mt-4 text-sm leading-6 text-[#725e69]">You pay the companion's hourly rate plus a 5% safety & service fee that covers identity verification, insurance, and our 24/7 trust team.</p>
+              <div className="mt-8 space-y-3">
+                {[
+                  ['Companion hourly rate', 'Set by the companion, shown on their profile'],
+                  ['Safety & service fee', '5% of the booking subtotal'],
+                  ['Deposit to unlock chat', '$10 — fully credited to your total'],
+                ].map(([label, desc]) => (
+                  <div key={label} className="flex items-start gap-3 rounded-[16px] bg-[#f5ede6] p-4">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />
+                    <div>
+                      <p className="text-sm font-semibold text-[#48213d]">{label}</p>
+                      <p className="mt-0.5 text-xs text-[#806c76]">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Link href="/explore" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-pricing-explore">
+                Find a companion <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            {/* Companion card */}
+            <div className="rounded-[28px] bg-[#d3e1d8] p-8 md:p-10">
+              <div className="flex items-start justify-between">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#b5cdb7] text-[#31533f]">
+                  <WalletCards className="h-5 w-5" />
+                </div>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-[#63816a]">For companions</span>
+              </div>
+              <h2 className="mt-8 font-serif text-4xl leading-none text-[#31533f]">Keep 85%<br />of every booking.</h2>
+              <p className="mt-4 text-sm leading-6 text-[#53725d]">OnlyFavors takes a 15% commission to cover payment processing, background checks, SafeSpot maintenance, and ongoing support. The rest goes directly to you.</p>
+              <div className="mt-8 space-y-3">
+                {[
+                  ['You set your rate', 'Any hourly rate you choose — update anytime'],
+                  ['15% platform commission', 'Deducted automatically — no invoicing'],
+                  ['Direct bank payouts', 'Via Stripe — typically 2–5 business days'],
+                ].map(([label, desc]) => (
+                  <div key={label} className="flex items-start gap-3 rounded-[16px] bg-[#c3d6c5] p-4">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#31533f]" />
+                    <div>
+                      <p className="text-sm font-semibold text-[#31533f]">{label}</p>
+                      <p className="mt-0.5 text-xs text-[#53725d]">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Link href="/companion/apply" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#31533f] px-5 text-sm font-bold text-[#eef6ef] transition hover:bg-[#24442f]" data-testid="link-pricing-apply">
+                Apply to join <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Worked example ── */}
+        <section className="border-y border-[#ddcfc6] bg-[#f0e4db]">
+          <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+            <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">See it in action</p>
+                <h2 className="mt-2 font-serif text-4xl text-[#48213d]">A real example.</h2>
+              </div>
+              {/* Sliders */}
+              <div className="flex flex-wrap gap-6">
+                <label className="flex flex-col gap-1">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-[#9b858e]">Hourly rate</span>
+                  <div className="flex items-center gap-2">
+                    <input type="range" min={30} max={150} step={5} value={exRate} onChange={(e) => setExRate(Number(e.target.value))}
+                      className="accent-[#7f2e62]" data-testid="slider-rate" />
+                    <span className="w-12 text-right text-sm font-bold text-[#48213d]">${exRate}/hr</span>
+                  </div>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-[#9b858e]">Duration</span>
+                  <div className="flex items-center gap-2">
+                    <input type="range" min={1} max={8} step={1} value={exHours} onChange={(e) => setExHours(Number(e.target.value))}
+                      className="accent-[#7f2e62]" data-testid="slider-hours" />
+                    <span className="w-12 text-right text-sm font-bold text-[#48213d]">{exHours} hr{exHours > 1 ? 's' : ''}</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Customer column */}
+              <div className="rounded-[22px] border border-[#dfd2c9] bg-white p-6">
+                <p className="mb-5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]"><Users className="h-3.5 w-3.5" />Customer pays</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between text-[#654c5f]">
+                    <span>{exHours} hr × ${exRate}/hr</span>
+                    <span>{money(subtotal * 100)}</span>
+                  </div>
+                  <div className="flex justify-between text-[#9b858e]">
+                    <span>Safety & service fee (5%)</span>
+                    <span>+{money(customerFee * 100)}</span>
+                  </div>
+                </div>
+                <div className="my-4 border-t border-[#ece1d9]" />
+                <div className="flex items-end justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Total charged</span>
+                  <span className="font-serif text-4xl text-[#48213d]" data-testid="example-customer-total">{money(customerTotal * 100)}</span>
+                </div>
+              </div>
+
+              {/* Companion column */}
+              <div className="rounded-[22px] border border-[#c3d6c5] bg-[#d3e1d8] p-6">
+                <p className="mb-5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[.15em] text-[#63816a]"><WalletCards className="h-3.5 w-3.5" />Companion receives</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between text-[#53725d]">
+                    <span>Booking subtotal</span>
+                    <span>{money(subtotal * 100)}</span>
+                  </div>
+                  <div className="flex justify-between text-[#63816a]">
+                    <span>Platform commission (15%)</span>
+                    <span>−{money(platformCommission * 100)}</span>
+                  </div>
+                </div>
+                <div className="my-4 border-t border-[#b5cdb7]" />
+                <div className="flex items-end justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#63816a]">Your payout</span>
+                  <span className="font-serif text-4xl text-[#31533f]" data-testid="example-companion-payout">{money(companionPayout * 100)}</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-5 flex items-center gap-2 text-[11px] text-[#9b858e]">
+              <LockKeyhole className="h-3.5 w-3.5" />
+              This is a client-side illustration. Actual booking amounts are calculated and locked server-side at time of booking.
+            </p>
+          </div>
+        </section>
+
+        {/* ── Deposit section ── */}
+        <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+          <div className="grid gap-10 md:grid-cols-[1fr_1fr] md:items-center">
+            <div>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Before you commit</p>
+              <h2 className="mt-3 font-serif text-4xl leading-none text-[#48213d]">The $10 deposit<br />unlocks the conversation.</h2>
+              <p className="mt-4 text-sm leading-7 text-[#725e69]">Not ready to book a full session? A refundable $10 deposit opens a private, masked chat thread with your companion — no phone numbers, no emails, no exposure. The deposit is credited in full when you complete payment after the companion accepts.</p>
+              <p className="mt-4 text-sm leading-7 text-[#725e69]">If the companion declines, you get the full $10 back. No questions, no hold.</p>
+            </div>
+            <div className="space-y-3">
+              {[
+                { step: '01', title: 'Pay $10 deposit', desc: 'Refundable. Charged only to unlock the chat — not a booking commitment.' },
+                { step: '02', title: 'Chat privately', desc: 'A masked thread opens. Phone numbers and emails are stripped automatically.' },
+                { step: '03', title: 'Companion accepts', desc: 'Pay the remaining balance (deposit credited). Booking is confirmed.' },
+                { step: '04', title: 'Companion declines', desc: 'Full $10 returned to your original payment method within 5–10 days.' },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="flex items-start gap-4 rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-4">
+                  <span className="mt-0.5 font-mono text-[10px] text-[#a47e8f]">{step}</span>
+                  <div>
+                    <p className="text-sm font-bold text-[#48213d]">{title}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-[#806c76]">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── FAQ ── */}
+        <section className="border-t border-[#ddcfc6] bg-[#fbf7f1]">
+          <div className="mx-auto max-w-3xl px-5 py-16 lg:px-8">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Common questions</p>
+            <h2 className="mt-3 font-serif text-4xl text-[#48213d]">Pricing, answered.</h2>
+            <div className="mt-10">
+              {PRICING_FAQS.map((f) => <PricingFaq key={f.q} {...f} />)}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Bottom CTA ── */}
+        <section className="border-t border-[#ddcfc6] bg-[#3d2038]">
+          <div className="mx-auto flex max-w-7xl flex-col items-center gap-4 px-5 py-16 text-center lg:px-8">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Ready when you are</p>
+            <h2 className="font-serif text-4xl text-[#f9efe5]">Spend the afternoon.<br /><em>We'll handle the numbers.</em></h2>
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              <Link href="/explore" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#f9efe5] px-5 text-sm font-bold text-[#48213d] transition hover:bg-white" data-testid="link-pricing-cta-explore">
+                Find a companion <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link href="/companion/apply" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#5e3458] px-5 text-sm font-bold text-[#f9efe5] transition hover:bg-[#4a2842]" data-testid="link-pricing-cta-apply">
+                Become a companion
+              </Link>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Saved companions page
 // ---------------------------------------------------------------------------
 
@@ -3529,6 +3813,7 @@ function Router() {
         <Route path="/safespots" component={SafeSpots} />
         <Route path="/safespots/:id" component={SafeSpotDetail} />
         <Route path="/saved" component={Saved} />
+        <Route path="/pricing" component={Pricing} />
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/operations" component={AdminOperations} />
         <Route component={NotFound} />
