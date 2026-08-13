@@ -194,6 +194,50 @@ router.post("/bookings", async (req, res) => {
   }
 });
 
+router.get("/bookings", async (req, res) => {
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!customerId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  try {
+    const rows = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.customerId, customerId));
+    res.json(rows.map(formatBookingFull));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Unable to list bookings");
+    res.status(503).json({ error: "Bookings temporarily unavailable" });
+  }
+});
+
+router.get("/bookings/:id", async (req, res) => {
+  const { id } = req.params;
+  const customerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!customerId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.customerId !== customerId) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    res.json(formatBookingFull(booking));
+  } catch (err: any) {
+    if (isMissingTableError(err)) { res.status(404).json({ error: "Booking not found" }); return; }
+    req.log.error({ err }, "Unable to load booking");
+    res.status(503).json({ error: "Booking temporarily unavailable" });
+  }
+});
+
 router.post("/bookings/:id/deposit", async (req, res) => {
   const { id } = AuthorizeDepositParams.parse(req.params);
   const customerId =
@@ -646,6 +690,51 @@ function mapCompanionRow(row: {
     biography: row.biography ?? null,
     boundaries: row.boundaries ?? [],
     photoUrl: row.photo_url ?? null,
+  };
+}
+
+function formatBookingFull(b: {
+  id: string;
+  status: string;
+  customerId: string;
+  companionId: string;
+  activity: string;
+  date: string;
+  startTime: string;
+  durationHours: string;
+  safeSpotId: string | null;
+  subtotalCents: number;
+  customerFeeCents: number;
+  totalCents: number;
+  companionPayoutCents: number;
+  platformRevenueCents: number;
+  depositCents: number;
+  depositPaidAt: Date | null;
+  confirmedAt: Date | null;
+  authorizedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: b.id,
+    status: b.status,
+    companionId: b.companionId,
+    activity: b.activity,
+    date: b.date,
+    startTime: b.startTime,
+    durationHours: Number(b.durationHours),
+    safeSpotId: b.safeSpotId,
+    subtotalCents: b.subtotalCents,
+    customerFeeCents: b.customerFeeCents,
+    totalCents: b.totalCents,
+    companionPayoutCents: b.companionPayoutCents,
+    platformRevenueCents: b.platformRevenueCents,
+    depositCents: b.depositCents,
+    depositPaidAt: b.depositPaidAt?.toISOString() ?? null,
+    confirmedAt: b.confirmedAt?.toISOString() ?? null,
+    authorizedAt: b.authorizedAt?.toISOString() ?? null,
+    createdAt: b.createdAt.toISOString(),
+    updatedAt: b.updatedAt.toISOString(),
   };
 }
 
