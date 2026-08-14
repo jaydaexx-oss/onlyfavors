@@ -2451,4 +2451,19 @@ router.get('/bookings/search', async (req, res) => {
   }
 });
 
+// ─── Customer preferences ────────────────────────────────────────────────────
+const customerPrefsStore = new Map<string, Record<string, unknown>>();
+
+router.post("/customer/preferences", (req, res) => {
+  const userId = (req as any).userId ?? "dev-preview-customer";
+  const prefs = req.body as Record<string, unknown>;
+  customerPrefsStore.set(userId, prefs);
+  res.json({ ok: true });
+});
+
+router.get("/customer/preferences", (req, res) => {
+  const userId = (req as any).userId ?? "dev-preview-customer";
+  res.json({ ok: true, prefs: customerPrefsStore.get(userId) ?? {} });
+});
+
 export default router;
