@@ -100,7 +100,15 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-export function dashboardPath(user: SessionUser | null): string {
+export async function confirmAge() {
+  const res = await fetch("/api/auth/confirm-age", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmed: true }),
+  });
+  if (!res.ok) throw new Error("Could not confirm age");
+}
   if (!user) return "/login";
   if (user.roles.includes("admin")) return "/admin/operations";
   if (user.roles.includes("companion")) return "/dashboard/companion";

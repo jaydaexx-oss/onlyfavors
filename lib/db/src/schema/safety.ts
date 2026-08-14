@@ -18,6 +18,7 @@ export const trustedContacts = pgTable("trusted_contacts", {
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  relation: text("relation"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -19,12 +19,13 @@ import {
   companionApplications,
   companionProfiles,
   incidentReports,
+  notifications,
   platformSettings,
   reviews as reviewRows,
   safespotApplications,
   safespots,
 } from "@workspace/db/schema";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, and, inArray, sql } from "drizzle-orm";
 import {
   getApprovedCompanion,
   getApprovedCompanions,
@@ -34,6 +35,7 @@ import {
 import { calculatePrice } from "../lib/pricing";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 import { getActorId, requireAdmin, writeAudit } from "../lib/auth";
+import { resolveCompanionId, resolveCompanionProfile } from "../lib/companionIdentity";
 
 const router: IRouter = Router();
 
@@ -51,6 +53,18 @@ function isMissingTableError(err: unknown): boolean {
   if (msg((e.cause as any)?.message)) return true;
   if ((e.cause as any)?.code === "42P01") return true; // undefined_table
   return false;
+}
+
+async function notifyAccount(
+  accountId: string | null | undefined,
+  payload: { kind: string; title: string; body: string; href: string; audience: "customer" | "companion" },
+) {
+  if (!accountId) return;
+  try {
+    await db.insert(notifications).values({ accountId, ...payload });
+  } catch {
+    /* notifications table may not exist yet */
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -116,49 +130,52 @@ router.get("/companions", async (req, res) => {
 // In-memory set of companions who have paused new booking requests
 const pausedRequestsSet = new Set<string>();
 
-router.get("/companion/requests/paused", (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-  res.json({ paused: pausedRequestsSet.has(companionId) });
+// In-memory fallbacks used only when the companion_profiles table is missing.
+const pausedRequestsSet = new Set<string>();
+const availableTodaySet = new Set<string>();
+
+router.get("/companion/requests/paused", async (req, res) => {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
+  res.json({ paused: profile.paused });
 });
 
-router.post("/companion/requests/pause", (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const { paused } = req.body ?? {};
-  if (paused) {
-    pausedRequestsSet.add(companionId);
-  } else {
-    pausedRequestsSet.delete(companionId);
+router.post("/companion/requests/pause", async (req, res) => {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
+  const paused = Boolean(req.body?.paused);
+  try {
+    await db.update(companionProfiles).set({ paused, updatedAt: new Date() }).where(eq(companionProfiles.id, profile.id));
+  } catch (err) {
+    if (!isMissingTableError(err) && process.env.NODE_ENV !== "development") {
+      req.log.error({ err }, "Pause update failed");
+      res.status(503).json({ error: "Could not update pause state" }); return;
+    }
+    if (paused) pausedRequestsSet.add(profile.id); else pausedRequestsSet.delete(profile.id);
   }
-  req.log.info({ companionId, paused }, "Companion request pause updated");
-  res.json({ paused: pausedRequestsSet.has(companionId) });
+  res.json({ paused });
 });
 
-// In-memory set of companions who have marked themselves "available today"
-const availableTodaySet = new Set<string>(['companion-maya']); // Maya available by default for demo
-
-router.get("/companion/availability/today", (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-  res.json({ available: availableTodaySet.has(companionId) });
+router.get("/companion/availability/today", async (req, res) => {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
+  res.json({ available: profile.availableToday || availableTodaySet.has(profile.id) });
 });
 
-router.post("/companion/availability/today", (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const { available } = req.body ?? {};
-  if (available) {
-    availableTodaySet.add(companionId);
-  } else {
-    availableTodaySet.delete(companionId);
+router.post("/companion/availability/today", async (req, res) => {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
+  const available = Boolean(req.body?.available);
+  try {
+    await db.update(companionProfiles).set({ availableToday: available, updatedAt: new Date() }).where(eq(companionProfiles.id, profile.id));
+  } catch (err) {
+    if (!isMissingTableError(err) && process.env.NODE_ENV !== "development") {
+      req.log.error({ err }, "Availability update failed");
+      res.status(503).json({ error: "Could not update availability" }); return;
+    }
+    if (available) availableTodaySet.add(profile.id); else availableTodaySet.delete(profile.id);
   }
-  req.log.info({ companionId, available }, "Companion availability updated");
-  res.json({ available: availableTodaySet.has(companionId) });
+  res.json({ available });
 });
 
 /** Dev companion fixtures — shown when Supabase is unavailable */
@@ -511,20 +528,20 @@ router.get("/bookings", async (req, res) => {
 
 router.get("/bookings/:id", async (req, res) => {
   const { id } = req.params;
-  const customerId =
-    getActorId(req, "customer");
-  if (!customerId) {
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
-    if (!booking || booking.customerId !== customerId) {
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" });
       return;
     }
     res.json(formatBookingFull(booking));
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (process.env.NODE_ENV === "development") {
       const fixture = DEV_BOOKING_FIXTURES[id];
       if (fixture) { res.json(fixture); return; }
@@ -532,6 +549,62 @@ router.get("/bookings/:id", async (req, res) => {
     if (isMissingTableError(err)) { res.status(404).json({ error: "Booking not found" }); return; }
     req.log.error({ err }, "Unable to load booking");
     res.status(503).json({ error: "Booking temporarily unavailable" });
+  }
+});
+
+router.get("/bookings/:id/session", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) {
+    res.status(401).json({ error: "Authentication required" }); return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!["confirmed", "authorized", "deposit_paid"].includes(booking.status)) {
+      res.status(409).json({ error: "This favor is not active yet" }); return;
+    }
+    const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
+    let venue = { name: "Public SafeSpot", hint: "Exact meeting details are shared after confirmation." };
+    if (booking.safeSpotId) {
+      const [spot] = await db.select().from(safespots).where(eq(safespots.id, booking.safeSpotId)).limit(1);
+      if (spot) venue = { name: spot.name, hint: spot.addressHint };
+    }
+    const [checkIn] = await db.select().from(checkIns).where(eq(checkIns.bookingId, id)).limit(1);
+    res.json({
+      id: booking.id,
+      status: booking.status,
+      activity: booking.activity,
+      date: booking.date,
+      startTime: booking.startTime,
+      durationHours: Number(booking.durationHours),
+      companion: {
+        name: profile?.displayName ?? "Your companion",
+        boundaries: profile?.boundaries ?? ["Platonic only", "Public spaces only"],
+      },
+      venue,
+      checkedInAt: checkIn?.createdAt?.toISOString() ?? null,
+    });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({
+        id,
+        status: "confirmed",
+        activity: "Coffee conversation",
+        date: new Date().toISOString().slice(0, 10),
+        startTime: "10:00",
+        durationHours: 2,
+        companion: { name: "Your companion", boundaries: ["Platonic only", "Public spaces only"] },
+        venue: { name: "Public SafeSpot", hint: "Approximate meeting area only until you arrive." },
+        checkedInAt: null,
+      });
+      return;
+    }
+    req.log.error({ err }, "Favor session failed");
+    res.status(503).json({ error: "Could not load this favor" });
   }
 });
 
@@ -657,7 +730,8 @@ router.post("/bookings/:id/authorize", async (req, res) => {
     // Full payment: customer pays totalCents.
     // When companion has a Stripe Connect account, platform keeps application_fee_amount
     // and the rest is transferred to the companion's account automatically.
-    const companionAccountId = devCompanionStripeAccounts.get(booking.companionId);
+    const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
+    const companionAccountId = profile?.stripeAccountId ?? devCompanionStripeAccounts.get(booking.companionId);
     const pi = await stripe.paymentIntents.create({
       amount: booking.totalCents,
       currency: "usd",
@@ -717,8 +791,7 @@ router.post("/bookings/:id/authorize", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.get("/companion/bookings", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const rows = await db
@@ -739,8 +812,7 @@ router.get("/companion/bookings", async (req, res) => {
 
 router.get("/companion/bookings/:id", async (req, res) => {
   const { id } = req.params;
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
@@ -761,8 +833,7 @@ router.get("/companion/bookings/:id", async (req, res) => {
 
 router.post("/bookings/:id/accept", async (req, res) => {
   const { id } = req.params;
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
@@ -777,6 +848,13 @@ router.post("/bookings/:id/accept", async (req, res) => {
       .set({ status: "confirmed", confirmedAt: new Date(), updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
+    await notifyAccount(booking.customerId, {
+      kind: "booking_accepted",
+      title: "Booking confirmed",
+      body: "Your companion accepted. Favor Mode opens at the scheduled start time.",
+      href: `/booking/${id}`,
+      audience: "customer",
+    });
     res.json(formatBookingFull(updated));
   } catch (err: any) {
     // Dev fallback: mutate fixture in-memory
@@ -799,8 +877,7 @@ router.post("/bookings/:id/accept", async (req, res) => {
 
 router.post("/bookings/:id/decline", async (req, res) => {
   const { id } = req.params;
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
@@ -815,6 +892,13 @@ router.post("/bookings/:id/decline", async (req, res) => {
       .set({ status: "cancelled", updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
+    await notifyAccount(booking.customerId, {
+      kind: "booking_declined",
+      title: "Booking not available",
+      body: "Your companion could not take this date. You can browse others nearby.",
+      href: "/explore",
+      audience: "customer",
+    });
     res.json(formatBookingFull(updated));
   } catch (err: any) {
     // Dev fallback: mutate fixture in-memory
@@ -880,9 +964,9 @@ router.post("/bookings/:id/extend", async (req, res) => {
 
 router.post("/bookings/:id/complete", async (req, res) => {
   const { id } = req.params;
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   // Dev fallback — mutate fixture
   if (process.env.NODE_ENV === "development") {
@@ -902,7 +986,7 @@ router.post("/bookings/:id/complete", async (req, res) => {
 
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
-    if (!booking || booking.companionId !== companionId) {
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
     if (!["confirmed", "deposit_paid"].includes(booking.status)) {
@@ -926,35 +1010,50 @@ router.post("/bookings/:id/complete", async (req, res) => {
 router.post("/bookings/:id/checkin", async (req, res) => {
   const { id } = req.params;
   const { venue } = req.body ?? {};
-  const actorId = getActorId(req, "customer");
-  if (!actorId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const kind = String(req.body?.kind ?? "arrival").slice(0, 40) || "arrival";
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
 
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
-    if (booking.customerId !== actorId && booking.companionId !== actorId) {
+    if (booking.customerId !== customerId && booking.companionId !== companionId) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
     if (!["confirmed", "deposit_paid", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "Check-in not available for this booking" }); return;
     }
-    const existing = await db.select().from(checkIns).where(eq(checkIns.bookingId, id)).limit(1);
+    const existing = await db.select().from(checkIns).where(and(eq(checkIns.bookingId, id), eq(checkIns.kind, kind))).limit(1);
     if (existing[0]) {
-      res.json({ bookingId: id, checkedInAt: existing[0].createdAt, venue: existing[0].venue, alreadyRecorded: true });
+      res.json({ bookingId: id, checkedInAt: existing[0].createdAt, venue: existing[0].venue, kind, alreadyRecorded: true });
       return;
     }
+    const accountId = req.user?.id ?? customerId ?? null;
     const [row] = await db.insert(checkIns).values({
       bookingId: id,
-      accountId: actorId,
+      accountId,
       venue: venue ? String(venue).slice(0, 120) : null,
-      kind: "arrival",
+      kind,
     }).returning();
-    req.log.info({ bookingId: id, venue }, "SafeSpot check-in");
-    res.json({ bookingId: id, checkedInAt: row.createdAt, venue: row.venue });
+    await notifyAccount(accountId, {
+      kind: "safety",
+      title: kind === "ok" ? "All-clear recorded" : "Check-in recorded",
+      body: venue
+        ? `${kind === "ok" ? "An all-clear" : "Arrival"} at ${String(venue).slice(0, 80)} was saved to this booking.`
+        : "Your SafeSpot check-in was recorded.",
+      href: `/favor/${id}`,
+      audience: booking.customerId === customerId ? "customer" : "companion",
+    });
+    req.log.info({ bookingId: id, venue, kind }, "SafeSpot check-in");
+    res.json({ bookingId: id, checkedInAt: row.createdAt, venue: row.venue, kind });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
       checkedInBookings.add(id);
-      res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue });
+      res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue, kind });
       return;
     }
     req.log.error({ err }, "Check-in failed");
@@ -1092,8 +1191,7 @@ router.get("/dashboard/customer", async (req, res) => {
 });
 
 router.get("/dashboard/companion", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -1369,21 +1467,35 @@ router.post("/bookings/:id/review", async (req, res) => {
       res.status(403).json({ error: "Reviews are only available after a booking is completed" }); return;
     }
 
-    const review: DevReview = {
-      id: crypto.randomUUID(),
+    const existingReview = await db.select().from(reviewRows).where(eq(reviewRows.bookingId, id)).limit(1);
+    if (existingReview[0]) {
+      res.status(409).json({ error: "You have already reviewed this booking" }); return;
+    }
+
+    const [review] = await db.insert(reviewRows).values({
       bookingId: id,
       companionId: booking.companionId,
       customerId,
       rating,
-      comment: comment ? String(comment).trim() : "",
-      createdAt: new Date().toISOString(),
-    };
+      comment: comment ? String(comment).trim().slice(0, 300) : null,
+    }).returning();
 
-    devReviews.push(review);
-    reviewedBookings.add(id);
+    const stats = await db
+      .select({
+        avg: sql<number>`avg(${reviewRows.rating})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(reviewRows)
+      .where(eq(reviewRows.companionId, booking.companionId));
+    await db.update(companionProfiles).set({
+      rating: String(Number(stats[0]?.avg ?? rating).toFixed(2)),
+      reviewCount: Number(stats[0]?.count ?? 1),
+      updatedAt: new Date(),
+    }).where(eq(companionProfiles.id, booking.companionId));
+
     req.log.info({ bookingId: id, rating }, "Review submitted");
     res.status(201).json(review);
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isMissingTableError(err)) {
       // Dev: booking table missing — accept review against fixture's companion
       const fixtureBooking = DEV_BOOKING_FIXTURES[id] as any;
@@ -1445,132 +1557,73 @@ const DEV_EARNINGS_TRANSACTIONS: EarningsTransaction[] = [
 ];
 
 router.get("/companion/earnings", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const lifetimeCents = DEV_EARNINGS_MONTHS.reduce((s, m) => s + m.earningsCents, 0);
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const thisMonthCents = DEV_EARNINGS_MONTHS.find((m) => m.month === currentMonth)?.earningsCents ?? 0;
-  const pendingCents = DEV_EARNINGS_TRANSACTIONS
-    .filter((t) => t.status === 'pending' || t.status === 'processing')
-    .reduce((s, t) => s + t.netCents, 0);
-  const thisYearCents = DEV_EARNINGS_MONTHS
-    .filter((m) => m.month.startsWith(String(new Date().getFullYear())))
-    .reduce((s, m) => s + m.earningsCents, 0);
-
-  res.json({
-    lifetimeCents, thisMonthCents, pendingCents, thisYearCents,
-    monthlyBreakdown: DEV_EARNINGS_MONTHS,
-    recentTransactions: DEV_EARNINGS_TRANSACTIONS.slice(0, 8),
-    totalBookings: DEV_EARNINGS_MONTHS.reduce((s, m) => s + m.bookingCount, 0),
-  });
+  try {
+    const rows = await db.select().from(bookings).where(eq(bookings.companionId, companionId));
+    const completed = rows.filter((b) => b.status === "completed");
+    const pending = rows.filter((b) => ["authorized", "confirmed", "deposit_paid"].includes(b.status));
+    const months = new Map<string, { month: string; label: string; earningsCents: number; bookingCount: number }>();
+    for (const row of completed) {
+      const month = row.date.slice(0, 7);
+      const existing = months.get(month) ?? {
+        month,
+        label: new Date(`${month}-01`).toLocaleString("en-US", { month: "short" }),
+        earningsCents: 0,
+        bookingCount: 0,
+      };
+      existing.earningsCents += row.companionPayoutCents;
+      existing.bookingCount += 1;
+      months.set(month, existing);
+    }
+    const monthlyBreakdown = [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    res.json({
+      lifetimeCents: completed.reduce((s, b) => s + b.companionPayoutCents, 0),
+      thisMonthCents: monthlyBreakdown.find((m) => m.month === currentMonth)?.earningsCents ?? 0,
+      pendingCents: pending.reduce((s, b) => s + b.companionPayoutCents, 0),
+      thisYearCents: completed.filter((b) => b.date.startsWith(String(new Date().getFullYear()))).reduce((s, b) => s + b.companionPayoutCents, 0),
+      monthlyBreakdown,
+      recentTransactions: completed.slice(-8).reverse().map((b) => ({
+        id: b.id,
+        bookingId: b.id,
+        date: b.completedAt?.toISOString() ?? b.updatedAt.toISOString(),
+        activity: b.activity,
+        durationHours: Number(b.durationHours),
+        grossCents: b.subtotalCents,
+        commissionCents: b.subtotalCents - b.companionPayoutCents,
+        netCents: b.companionPayoutCents,
+        status: "paid",
+      })),
+      totalBookings: completed.length,
+    });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({
+        lifetimeCents: 0, thisMonthCents: 0, pendingCents: 0, thisYearCents: 0,
+        monthlyBreakdown: [], recentTransactions: [], totalBookings: 0,
+      });
+      return;
+    }
+    req.log.error({ err }, "Earnings lookup failed");
+    res.status(503).json({ error: "Earnings temporarily unavailable" });
+  }
 });
 
 // ---------------------------------------------------------------------------
 // Notifications — in-app alerts for booking events and messages
 // ---------------------------------------------------------------------------
 
-type NotifKind = 'booking_request' | 'booking_accepted' | 'booking_declined' | 'new_message' | 'payout_ready';
-
-type DevNotif = {
-  id: string;
-  kind: NotifKind;
-  title: string;
-  body: string;
-  href: string;
-  createdAt: string;
-  read: boolean;
-  /** 'customer' | 'companion' — which role sees this */
-  audience: 'customer' | 'companion';
-};
-
-const devNotifications: DevNotif[] = [
-  {
-    id: 'notif-1',
-    kind: 'booking_request',
-    title: 'New booking request',
-    body: 'A customer wants to book 3 hours on Saturday. Review and respond.',
-    href: '/dashboard/companion',
-    createdAt: new Date(Date.now() - 12 * 60_000).toISOString(),
-    read: false,
-    audience: 'companion',
-  },
-  {
-    id: 'notif-2',
-    kind: 'new_message',
-    title: 'New message',
-    body: 'Your customer sent a message — tap to reply.',
-    href: '/dashboard/companion',
-    createdAt: new Date(Date.now() - 38 * 60_000).toISOString(),
-    read: false,
-    audience: 'companion',
-  },
-  {
-    id: 'notif-3',
-    kind: 'payout_ready',
-    title: 'Payout on its way',
-    body: '$110.50 is being transferred to your connected bank account.',
-    href: '/dashboard/companion',
-    createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
-    read: true,
-    audience: 'companion',
-  },
-  {
-    id: 'notif-4',
-    kind: 'booking_accepted',
-    title: 'Booking confirmed',
-    body: 'Your companion accepted the request. Complete payment to lock it in.',
-    href: '/dashboard/customer',
-    createdAt: new Date(Date.now() - 25 * 60_000).toISOString(),
-    read: false,
-    audience: 'customer',
-  },
-  {
-    id: 'notif-5',
-    kind: 'new_message',
-    title: 'New message',
-    body: 'Your companion replied to your question.',
-    href: '/dashboard/customer',
-    createdAt: new Date(Date.now() - 55 * 60_000).toISOString(),
-    read: false,
-    audience: 'customer',
-  },
-  {
-    id: 'notif-6',
-    kind: 'booking_declined',
-    title: 'Booking not available',
-    body: "Your companion couldn't take this date. Browse others nearby.",
-    href: '/explore',
-    createdAt: new Date(Date.now() - 5 * 3600_000).toISOString(),
-    read: true,
-    audience: 'customer',
-  },
-];
-
-/** Mark individual notification read (toggled by front-end) */
-const readNotifIds = new Set<string>();
-
-router.get("/notifications", (req, res) => {
-  // Role detection: companions see companion audience, everyone else sees customer
-  const isCompanion = req.query.role === 'companion';
-  const audience: 'customer' | 'companion' = isCompanion ? 'companion' : 'customer';
-  const items = devNotifications
-    .filter((n) => n.audience === audience)
-    .map((n) => ({ ...n, read: n.read || readNotifIds.has(n.id) }))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  res.json(items);
+router.get("/notifications", (_req, res) => {
+  res.json([]);
 });
 
-router.post("/notifications/read-all", (req, res) => {
-  const isCompanion = req.body?.role === 'companion';
-  const audience: 'customer' | 'companion' = isCompanion ? 'companion' : 'customer';
-  devNotifications.filter((n) => n.audience === audience).forEach((n) => readNotifIds.add(n.id));
+router.post("/notifications/read-all", (_req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/notifications/:id/read", (req, res) => {
-  readNotifIds.add(req.params.id);
+router.post("/notifications/:id/read", (_req, res) => {
   res.json({ ok: true });
 });
 
@@ -1663,8 +1716,7 @@ router.put("/companion/profile", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/companion/profile/photo", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
+  const companionId = await resolveCompanionId(req);
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const { photoDataUrl } = req.body ?? {};
@@ -1679,11 +1731,21 @@ router.post("/companion/profile/photo", async (req, res) => {
     res.status(400).json({ error: "Image must be under 5 MB" }); return;
   }
 
-  const existing = devCompanionProfiles.get(companionId) ?? DEFAULT_DEV_PROFILE;
-  const updated = { ...existing, photoUrl: photoDataUrl };
-  devCompanionProfiles.set(companionId, updated);
-  req.log.info({ companionId }, "Companion profile photo updated");
-  res.json({ photoUrl: photoDataUrl });
+  try {
+    await db.update(companionProfiles).set({ photoUrl: photoDataUrl, updatedAt: new Date() }).where(eq(companionProfiles.id, companionId));
+    req.log.info({ companionId }, "Companion profile photo updated");
+    res.json({ photoUrl: photoDataUrl });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      const existing = devCompanionProfiles.get(companionId) ?? DEFAULT_DEV_PROFILE;
+      const updated = { ...existing, photoUrl: photoDataUrl };
+      devCompanionProfiles.set(companionId, updated);
+      res.json({ photoUrl: photoDataUrl });
+      return;
+    }
+    req.log.error({ err }, "Photo update failed");
+    res.status(503).json({ error: "Could not save photo" });
+  }
 });
 
 const DEV_COMPANION_APPLICATIONS = [
@@ -2237,18 +2299,17 @@ router.get("/safespots/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/companion/stripe/onboard", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+  const companionId = profile.id;
 
   try {
     const stripe = await getUncachableStripeClient();
 
-    // Reuse existing account if already created (idempotent)
-    let accountId = devCompanionStripeAccounts.get(companionId);
+    let accountId = profile.stripeAccountId ?? devCompanionStripeAccounts.get(companionId);
     if (!accountId) {
       const account = await stripe.accounts.create({
         type: "express",
@@ -2256,7 +2317,12 @@ router.post("/companion/stripe/onboard", async (req, res) => {
         capabilities: { transfers: { requested: true } },
       });
       accountId = account.id;
-      devCompanionStripeAccounts.set(companionId, accountId);
+      try {
+        await db.update(companionProfiles).set({ stripeAccountId: accountId, updatedAt: new Date() }).where(eq(companionProfiles.id, companionId));
+      } catch (err) {
+        if (!isMissingTableError(err)) throw err;
+        devCompanionStripeAccounts.set(companionId, accountId);
+      }
     }
 
     // Build return/refresh URLs from the incoming request origin
@@ -2293,15 +2359,15 @@ router.post("/companion/stripe/onboard", async (req, res) => {
 });
 
 router.get("/companion/stripe/status", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+  const companionId = profile.id;
 
   try {
-    const accountId = devCompanionStripeAccounts.get(companionId);
+    const accountId = profile.stripeAccountId ?? devCompanionStripeAccounts.get(companionId);
     if (!accountId) {
       res.json({ status: "not_started" });
       return;

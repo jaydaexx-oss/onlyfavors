@@ -28,18 +28,23 @@ function fmt(seconds: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-// Demo booking data — replaced by real API data once Task #1 auth lands
-const DEMO = {
-  companion: { name: 'Leilani K.', activity: 'Evening walk & coffee', city: 'Waikīkī' },
-  venue: { name: 'The Surfjack Hotel Café', hint: 'Pool deck entrance, ask for the OF table' },
-  totalMinutes: 120,
-  boundaries: ['Platonic only', 'No photography without asking', 'Public spaces only'],
+// Live booking data is loaded from the authenticated session API.
+type LiveFavor = {
+  companionName: string;
+  activity: string;
+  venueName: string;
+  venueHint: string;
+  boundaries: string[];
+  totalMinutes: number;
 };
 
 type TrustContact = { id: string; name: string; phone: string; relation: string };
 
 export default function FavorMode() {
   const { id } = useParams<{ id: string }>();
+  const [live, setLive] = useState<LiveFavor | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [checkedIn, setCheckedIn] = useState(false);
 
   // Timer
   const [elapsed, setElapsed] = useState(0);
@@ -48,14 +53,42 @@ export default function FavorMode() {
     return () => clearInterval(t);
   }, []);
 
-  // Trust Circle — read from localStorage (persisted by TrustCircleSetup page)
-  const [trustContacts] = useState<TrustContact[]>(() => {
-    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
-    catch { return []; }
-  });
+  const [trustContacts, setTrustContacts] = useState<TrustContact[]>([]);
+  useEffect(() => {
+    fetch('/api/trust-circle', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setTrustContacts)
+      .catch(() => setTrustContacts([]));
+  }, []);
 
-  // Safety state
-  const [checkedIn, setCheckedIn] = useState(false);
+  useEffect(() => {
+    if (!id) { setLoadError('This favor is missing a booking.'); return; }
+    fetch(`/api/bookings/${id}/session`, { credentials: 'include' })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({})) as { error?: string } & Record<string, unknown>;
+        if (!res.ok) throw new Error(body.error ?? 'Could not load this favor');
+        return body as {
+          activity: string;
+          durationHours: number;
+          checkedInAt: string | null;
+          companion: { name: string; boundaries: string[] };
+          venue: { name: string; hint: string };
+        };
+      })
+      .then((data) => {
+        setLive({
+          companionName: data.companion?.name ?? 'Your companion',
+          activity: data.activity ?? 'Favor',
+          venueName: data.venue?.name ?? 'SafeSpot',
+          venueHint: data.venue?.hint ?? '',
+          boundaries: data.companion?.boundaries?.length ? data.companion.boundaries : ['Platonic only', 'Public spaces only'],
+          totalMinutes: Math.round(Number(data.durationHours ?? 2) * 60),
+        });
+        if (data.checkedInAt) setCheckedIn(true);
+      })
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Could not load this favor'));
+  }, [id]);
+
   const [showQr, setShowQr] = useState(false);
   const [safeSignalSent, setSafeSignalSent] = useState(false);
   const [showExit, setShowExit] = useState(false);
@@ -68,9 +101,42 @@ export default function FavorMode() {
   const [bonusMinutes, setBonusMinutes] = useState(0);
   const [extending, setExtending] = useState<number | null>(null);
 
-  const totalMinutes = DEMO.totalMinutes + bonusMinutes;
+  const totalMinutes = (live?.totalMinutes ?? 120) + bonusMinutes;
   const progress = Math.min(elapsed / (totalMinutes * 60), 1);
   const remainingMin = Math.max(0, totalMinutes - Math.floor(elapsed / 60));
+
+  const postCheckIn = async (kind: 'arrival' | 'ok') => {
+    if (!id || !live) return;
+    await fetch(`/api/bookings/${id}/checkin`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue: live.venueName, kind }),
+    });
+  };
+
+  if (loadError) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#1f0c1b] px-6 text-[#f9efe5]">
+        <div className="max-w-sm text-center">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#c695ae]">Favor Mode</p>
+          <h1 className="mt-3 font-serif text-3xl">Could not open this favor</h1>
+          <p className="mt-3 text-sm leading-6 text-[#d9c4cf]">{loadError}</p>
+          <Link href="/" className="mt-6 inline-flex rounded-full bg-[#8F294C] px-5 py-2.5 text-sm font-bold text-white">
+            Back home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!live) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#1f0c1b] text-[#f9efe5]">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-[#c695ae]">Loading this favor…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#1f0c1b] text-[#f9efe5]">
@@ -81,7 +147,7 @@ export default function FavorMode() {
             <span className="grid h-9 w-9 place-items-center rounded-[13px] bg-[#7f2e62] text-sm font-bold text-[#fff5eb]">of</span>
             <div>
               <p className="text-[10px] font-mono uppercase tracking-widest text-[#c695ae]">Favor in progress</p>
-              <p className="text-sm font-bold">{DEMO.companion.name}</p>
+              <p className="text-sm font-bold">{live.companionName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -149,8 +215,8 @@ export default function FavorMode() {
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-bold text-[#f9efe5]">{DEMO.venue.name}</p>
-              <p className="mt-0.5 text-xs text-[#d9c4cf]">{DEMO.venue.hint}</p>
+              <p className="font-bold text-[#f9efe5]">{live.venueName}</p>
+              <p className="mt-0.5 text-xs text-[#d9c4cf]">{live.venueHint}</p>
               <p className="mt-1 text-[10px] text-[#3dbd8c] font-semibold">Verified SafeSpot</p>
             </div>
           </div>
@@ -175,12 +241,16 @@ export default function FavorMode() {
               {checkedIn ? 'Checked in ✓' : 'Check in'}
             </p>
             <p className="mt-0.5 text-[10px] text-[#d9c4cf]">
-              {checkedIn ? 'Contacts notified' : 'Scan at SafeSpot'}
+              {checkedIn ? 'Arrival recorded' : 'Scan at SafeSpot'}
             </p>
           </button>
 
           <button
-            onClick={() => setSafeSignalSent(true)}
+            onClick={async () => {
+              if (safeSignalSent) return;
+              try { await postCheckIn('ok'); } catch {}
+              setSafeSignalSent(true);
+            }}
             className={`rounded-[20px] p-5 text-left transition-all ${
               safeSignalSent
                 ? 'bg-[#477254]/20 ring-2 ring-[#4d8c60]'
@@ -196,7 +266,7 @@ export default function FavorMode() {
               {safeSignalSent ? 'Signal sent ✓' : "I'm safe"}
             </p>
             <p className="mt-0.5 text-[10px] text-[#d9c4cf]">
-              {safeSignalSent ? 'All quiet' : 'Ping Trust Circle'}
+              {safeSignalSent ? 'Check-in saved' : 'Record an all-clear'}
             </p>
           </button>
         </div>
@@ -244,7 +314,7 @@ export default function FavorMode() {
         <div className="rounded-[20px] bg-[#2d1228] p-5">
           <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Active boundaries</p>
           <ul className="mt-4 space-y-2">
-            {DEMO.boundaries.map((b) => (
+            {live.boundaries.map((b) => (
               <li key={b} className="flex items-center gap-2 text-sm text-[#d9c4cf]">
                 <Check className="h-4 w-4 shrink-0 text-[#3dbd8c]" />
                 {b}
@@ -334,7 +404,7 @@ export default function FavorMode() {
             <div className="mt-6 space-y-3">
               {/* Opens Google Maps walking directions to nearest transit */}
               <a
-                href={`https://www.google.com/maps/search/transit+station+near+${encodeURIComponent(DEMO.venue.name)}`}
+                href={`https://www.google.com/maps/search/transit+station+near+${encodeURIComponent(live.venueName)}`}
                 target="_blank" rel="noopener noreferrer"
                 className="flex w-full items-center justify-between rounded-[16px] bg-[#7f2e62] p-4 text-sm font-bold text-white"
                 data-testid="button-exit-walk">
@@ -359,8 +429,10 @@ export default function FavorMode() {
                   setShowExit(false);
                   setCompleting(true);
                   try {
-                    await fetch(`/api/bookings/${id ?? 'demo'}/complete`, {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    await fetch(`/api/bookings/${id}/complete`, {
+                      method: 'POST',
+                      credentials: 'include',
+                      headers: { 'Content-Type': 'application/json' },
                     });
                   } catch {}
                   setCompletedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -393,8 +465,9 @@ export default function FavorMode() {
                   onClick={async () => {
                     setExtending(min);
                     try {
-                      await fetch(`/api/bookings/${id ?? 'demo'}/extend`, {
+                      await fetch(`/api/bookings/${id}/extend`, {
                         method: 'POST',
+                        credentials: 'include',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ extraMinutes: min }),
                       });
@@ -439,7 +512,7 @@ export default function FavorMode() {
             <div className="mt-6 flex justify-center">
               <div className="rounded-[20px] bg-white p-5">
                 <QRCodeSVG
-                  value={`${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/checkin?booking=${id ?? 'demo'}&venue=${encodeURIComponent(DEMO.venue.name)}&ts=${Date.now()}`}
+                  value={`${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/checkin?booking=${id}&venue=${encodeURIComponent(live.venueName)}&ts=${Date.now()}`}
                   size={180}
                   level="M"
                   includeMargin={false}
@@ -453,7 +526,11 @@ export default function FavorMode() {
 
             <div className="mt-6 space-y-3">
               <button
-                onClick={() => { setCheckedIn(true); setShowQr(false); }}
+                onClick={async () => {
+                  try { await postCheckIn('arrival'); } catch {}
+                  setCheckedIn(true);
+                  setShowQr(false);
+                }}
                 className="flex w-full items-center justify-center gap-2 rounded-full bg-[#3dbd8c] px-5 py-3 text-sm font-bold text-white"
                 data-testid="button-confirm-checkin"
               >
@@ -479,8 +556,11 @@ export default function FavorMode() {
               onClick={async () => {
                 setCompleting(true);
                 try {
-                  const bookingId = id ?? 'demo';
-                  await fetch(`/api/bookings/${bookingId}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                  await fetch(`/api/bookings/${id}/complete`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                  });
                 } catch {}
                 setCompletedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
                 setCompleted(true);
@@ -513,8 +593,8 @@ export default function FavorMode() {
 
             {/* Memory details */}
             <div className="mt-6 rounded-[18px] border border-[#4a2040] bg-[#2d1128] p-5">
-              <p className="font-serif text-2xl text-[#f9efe5]">{DEMO.companion.activity}</p>
-              <p className="mt-1 text-xs text-[#9d7e8e]">with {DEMO.companion.name} · {DEMO.venue.name}</p>
+              <p className="font-serif text-2xl text-[#f9efe5]">{live.activity}</p>
+              <p className="mt-1 text-xs text-[#9d7e8e]">with {live.companionName} · {live.venueName}</p>
               <div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#4a2040] pt-5">
                 <div className="text-center">
                   <p className="font-mono text-[9px] uppercase tracking-wider text-[#6b4560]">Duration</p>

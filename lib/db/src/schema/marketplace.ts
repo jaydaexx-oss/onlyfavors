@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { accounts } from "./accounts";
@@ -113,15 +114,17 @@ export const safespotApplications = pgTable("safespot_applications", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const savedCompanions = pgTable("saved_companions", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  accountId: text("account_id")
-    .notNull()
-    .references(() => accounts.id),
-  companionId: text("companion_id")
-    .notNull()
-    .references(() => companionProfiles.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const savedCompanions = pgTable(
+  "saved_companions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    companionId: text("companion_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("saved_companions_account_companion_idx").on(table.accountId, table.companionId)],
+);

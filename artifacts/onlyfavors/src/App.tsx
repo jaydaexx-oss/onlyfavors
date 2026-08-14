@@ -24,7 +24,7 @@ import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { AuthProvider, dashboardPath, requestOtp, useAuth, verifyOtp } from '@/lib/auth-session';
+import { AuthProvider, confirmAge, dashboardPath, requestOtp, useAuth, verifyOtp } from '@/lib/auth-session';
 // NotFound defined inline below to match design system
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 
@@ -113,34 +113,66 @@ function Footer() {
   </footer>;
 }
 
-/** Reads saved companion IDs from localStorage — shared hook used by nav + saved page */
+/** Saved companions — server-backed when signed in, localStorage when not. */
 function useSavedCompanionIds() {
+  const { user } = useAuth();
   const [ids, setIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]'); }
     catch { return []; }
   });
 
-  // Sync across tabs and after save/unsave actions
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/saved', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: string[]) => {
+        if (!Array.isArray(list)) return;
+        setIds(list);
+        try { localStorage.setItem('of_saved_companions', JSON.stringify(list)); } catch {}
+      })
+      .catch(() => {});
+  }, [user]);
+
   useEffect(() => {
     const sync = () => {
       try { setIds(JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]')); }
       catch { setIds([]); }
     };
     window.addEventListener('storage', sync);
-    // Poll every 800 ms so same-tab saves also update the nav badge
-    const t = setInterval(sync, 800);
-    return () => { window.removeEventListener('storage', sync); clearInterval(t); };
+    return () => window.removeEventListener('storage', sync);
   }, []);
 
-  const remove = useCallback((id: string) => {
+  const persistLocal = (next: string[]) => {
+    try { localStorage.setItem('of_saved_companions', JSON.stringify(next)); } catch {}
+  };
+
+  const add = useCallback(async (id: string) => {
     setIds((prev) => {
-      const next = prev.filter((x) => x !== id);
-      try { localStorage.setItem('of_saved_companions', JSON.stringify(next)); } catch {}
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      persistLocal(next);
       return next;
     });
-  }, []);
+    if (user) await fetch(`/api/saved/${id}`, { method: 'POST', credentials: 'include' });
+  }, [user]);
 
-  return { ids, remove };
+  const remove = useCallback(async (id: string) => {
+    setIds((prev) => {
+      const next = prev.filter((x) => x !== id);
+      persistLocal(next);
+      return next;
+    });
+    if (user) await fetch(`/api/saved/${id}`, { method: 'DELETE', credentials: 'include' });
+  }, [user]);
+
+  const toggle = useCallback(async (id: string) => {
+    const has = ids.includes(id);
+    if (has) await remove(id);
+    else await add(id);
+    return !has;
+  }, [ids, add, remove]);
+
+  return { ids, add, remove, toggle };
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +196,7 @@ function useNotifications(role: 'customer' | 'companion') {
   return useQuery<Notif[]>({
     queryKey: ['notifications', role],
     queryFn: async () => {
-      const res = await fetch(`/api/notifications?role=${role}`);
+      const res = await fetch(`/api/notifications?role=${role}`, { credentials: 'include' });
       if (!res.ok) return [];
       return res.json();
     },
@@ -205,6 +237,7 @@ function NotificationBell({ role = 'customer' }: { role?: 'customer' | 'companio
   const markAllRead = async () => {
     await fetch('/api/notifications/read-all', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
     });
@@ -212,7 +245,7 @@ function NotificationBell({ role = 'customer' }: { role?: 'customer' | 'companio
   };
 
   const markRead = async (id: string) => {
-    await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+    await fetch(`/api/notifications/${id}/read`, { method: 'POST', credentials: 'include' });
     qc.invalidateQueries({ queryKey: ['notifications', role] });
   };
 
@@ -1621,10 +1654,8 @@ function Explore() {
   const [availNow, setAvailNow] = useState(false);
   const [timeWindow, setTimeWindow] = useState<'now' | 'tonight' | 'weekend' | null>(null);
   const [customDate, setCustomDate] = useState('');
-  const [savedIds, setSavedIds] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]')); }
-    catch { return new Set(); }
-  });
+  const { ids: savedIdList, toggle: toggleSaved } = useSavedCompanionIds();
+  const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc'>('best');
   const [filters, setFilters] = useState(false);
@@ -1654,20 +1685,14 @@ function Explore() {
     );
   }, [nearMe]);
 
-  const handleSave = useCallback((id: string) => {
-    setSavedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        setSaveToast(id);
-        setTimeout(() => setSaveToast((t) => (t === id ? null : t)), 3500);
-      }
-      try { localStorage.setItem('of_saved_companions', JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  }, []);
+  const handleSave = useCallback(async (id: string) => {
+    const wasSaved = savedIds.has(id);
+    await toggleSaved(id);
+    if (!wasSaved) {
+      setSaveToast(id);
+      setTimeout(() => setSaveToast((t) => (t === id ? null : t)), 3500);
+    }
+  }, [savedIds, toggleSaved]);
 
   const params = useMemo(() => ({
     ...(city ? { city } : {}),
@@ -2998,33 +3023,45 @@ function CompanionInbox() {
 type TrustContact = { id: string; name: string; phone: string; relation: string };
 
 function useTrustCircle() {
-  const [contacts, setContacts] = useState<TrustContact[]>(() => {
-    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
-    catch { return []; }
+  const { user } = useAuth();
+  const query = useQuery<TrustContact[]>({
+    queryKey: ['trust-circle'],
+    queryFn: async () => {
+      const res = await fetch('/api/trust-circle', { credentials: 'include' });
+      if (res.status === 401) {
+        try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
+        catch { return []; }
+      }
+      if (!res.ok) throw new Error('Could not load Trust Circle');
+      return res.json();
+    },
+    enabled: Boolean(user),
+    retry: false,
   });
-  const add = useCallback((c: Omit<TrustContact, 'id'>) => {
-    setContacts((prev) => {
-      const next = [...prev, { ...c, id: crypto.randomUUID() }].slice(0, 3);
-      try { localStorage.setItem('of_trust_circle', JSON.stringify(next)); } catch {}
-      return next;
+  const qc = useQueryClient();
+  const add = useCallback(async (c: Omit<TrustContact, 'id'>) => {
+    const res = await fetch('/api/trust-circle', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c),
     });
-  }, []);
-  const remove = useCallback((id: string) => {
-    setContacts((prev) => {
-      const next = prev.filter((c) => c.id !== id);
-      try { localStorage.setItem('of_trust_circle', JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, []);
-  return { contacts, add, remove };
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? 'Could not add contact');
+    }
+    await qc.invalidateQueries({ queryKey: ['trust-circle'] });
+  }, [qc]);
+  const remove = useCallback(async (id: string) => {
+    await fetch(`/api/trust-circle/${id}`, { method: 'DELETE', credentials: 'include' });
+    await qc.invalidateQueries({ queryKey: ['trust-circle'] });
+  }, [qc]);
+  return { contacts: query.data ?? [], add, remove, loading: query.isLoading };
 }
 
 /** Inline panel shown on the booking confirmation screen. */
 function TrustCircleBookingPanel() {
-  const [contacts] = useState<TrustContact[]>(() => {
-    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
-    catch { return []; }
-  });
+  const { contacts } = useTrustCircle();
   const hasContacts = contacts.length > 0;
   return (
     <div className={`rounded-[16px] p-4 ${hasContacts ? 'bg-[#e8f0e8]' : 'bg-[#f3ead7]'}`}>
@@ -3064,13 +3101,15 @@ function TrustCircleSetup() {
   const [relation, setRelation] = useState('Friend');
   const [addedName, setAddedName] = useState<string | null>(null);
 
-  const handleAdd = (e: FormEvent) => {
+  const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim() || contacts.length >= 3) return;
-    add({ name: name.trim(), phone: phone.trim(), relation });
-    setAddedName(name.trim());
-    setName(''); setPhone(''); setRelation('Friend');
-    setTimeout(() => setAddedName(null), 3500);
+    try {
+      await add({ name: name.trim(), phone: phone.trim(), relation });
+      setAddedName(name.trim());
+      setName(''); setPhone(''); setRelation('Friend');
+      setTimeout(() => setAddedName(null), 3500);
+    } catch {}
   };
 
   return (
@@ -4135,40 +4174,12 @@ function CompanionReviews({ companionId }: { companionId: string }) {
 // ---------------------------------------------------------------------------
 
 function LiveActivityTicker() {
-  const EVENTS = [
-    { text: 'Coffee with Jordan in New York', ago: '2m ago', icon: Coffee },
-    { text: 'Gallery tour booked in San Francisco', ago: '5m ago', icon: Landmark },
-    { text: 'Museum visit confirmed in Chicago', ago: '11m ago', icon: Building2 },
-    { text: 'Walk and conversation in Seattle', ago: '18m ago', icon: Navigation2 },
-    { text: 'Cooking class requested in Austin', ago: '24m ago', icon: UtensilsCrossed },
-    { text: 'New companion joined in Boston', ago: '31m ago', icon: UserPlus },
-    { text: 'Dining experience completed in LA', ago: '45m ago', icon: UtensilsCrossed },
-    { text: 'Architecture walk booked in Chicago', ago: '52m ago', icon: Landmark },
-    { text: 'Bookstore visit in Portland confirmed', ago: '58m ago', icon: Search },
-    { text: 'Farmers market tour in Denver', ago: '1h ago', icon: Navigation2 },
-    { text: 'Jazz evening requested in New York', ago: '1h ago', icon: Star },
-    { text: 'Gift card sent to a friend in Miami', ago: '1h ago', icon: HeartHandshake },
-    { text: '5-star review left in San Francisco', ago: '2h ago', icon: Star },
-    { text: 'Cooking class completed in Austin', ago: '2h ago', icon: UtensilsCrossed },
-    { text: 'Trust Circle updated before a favor', ago: '2h ago', icon: ShieldCheck },
-    { text: 'SafeSpot check-in verified in Seattle', ago: '3h ago', icon: MapPin },
-    { text: 'New companion approved in Washington D.C.', ago: '3h ago', icon: UserPlus },
-    { text: 'Evening walk in Boston confirmed', ago: '4h ago', icon: Navigation2 },
-  ];
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setIdx((i) => (i + 1) % EVENTS.length), 3200);
-    return () => clearInterval(id);
-  }, [EVENTS.length]);
-  const e = EVENTS[idx];
-  const Icon = e.icon;
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 text-sm text-[#725e69]">
       <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#ead0dd] text-[#7f2e62]">
-        <Icon className="h-3 w-3" />
+        <LockKeyhole className="h-3 w-3" />
       </div>
-      <span className="flex-1 truncate text-xs">{e.text}</span>
-      <span className="shrink-0 font-mono text-[9px] text-[#9b858e]">{e.ago}</span>
+      <span className="flex-1 truncate text-xs">Bookings stay private. We never show a live feed of other people's favors.</span>
     </div>
   );
 }
@@ -5301,23 +5312,14 @@ function PressPage() {
           </div>
         </section>
 
-        {/* Media coverage strip */}
         <section className="border-b border-[#5e3458] px-5 py-8 lg:px-8" style={{ background: 'rgba(255,245,235,0.06)' }}>
           <div className="mx-auto max-w-7xl">
-            <p className="mb-5 font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#c695ae]">As seen in</p>
-            <div className="flex flex-wrap items-center gap-6">
-              {[
-                { name: 'TechCrunch', quote: '"The safety-first platonic marketplace nobody knew they needed."' },
-                { name: 'The Atlantic', quote: '"Quietly redefining what companionship can look like online."' },
-                { name: 'Forbes', quote: '"One of the most thoughtfully designed trust systems in the gig economy."' },
-                { name: 'Wired', quote: '"Privacy-first in a way most social apps only claim to be."' },
-              ].map(({ name, quote }) => (
-                <div key={name} className="min-w-[200px] flex-1 rounded-[16px] border border-[#5e3458] bg-white/5 p-4" data-testid={`press-coverage-${name.toLowerCase().replace(/\W+/g, '-')}`}>
-                  <p className="font-mono text-[10px] font-bold text-[#e8b4d0]">{name}</p>
-                  <p className="mt-2 text-[11px] italic leading-5 text-[#d9c4cf]">{quote}</p>
-                </div>
-              ))}
-            </div>
+            <p className="mb-3 font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Press</p>
+            <p className="max-w-2xl text-sm leading-6 text-[#d9c4cf]">
+              For interviews, fact-checking, or brand assets, write to{' '}
+              <a href="mailto:press@onlyfavors.com" className="font-bold text-[#f9efe5] underline">press@onlyfavors.com</a>.
+              We only list coverage after it is published.
+            </p>
           </div>
         </section>
 
@@ -5330,12 +5332,12 @@ function PressPage() {
               <h2 className="mt-2 font-serif text-4xl text-[#48213d]">About OnlyFavors</h2>
               <div className="mt-6 space-y-4">
                 {[
-                  ['Founded', '2025 · San Francisco, CA'],
+                  ['Founded', '2025'],
                   ['Mission', 'Make platonic companionship safe, accessible, and stigma-free.'],
                   ['Model', 'Two-sided marketplace — verified companions, privacy-first customers.'],
                   ['Safety', 'Every booking starts at a verified SafeSpot. Boundary receipts required.'],
-                  ['Coverage', 'Available in 47+ cities across the US. Growing weekly.'],
-                  ['Companions', '1,200+ verified and background-checked.'],
+                  ['Coverage', 'Launching city by city as companions and SafeSpots are approved.'],
+                  ['Companions', 'Every live profile is approved. We do not publish invented counts.'],
                 ].map(([label, value]) => (
                   <div key={label} className="flex gap-4 rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-4">
                     <span className="w-24 shrink-0 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#9b858e]">{label}</span>
@@ -5556,26 +5558,25 @@ function CitiesIndex() {
 }
 
 function NotificationsPage() {
-  const NOTIFS = [
-    { id: 'n1',  kind: 'booking',  icon: CalendarDays, title: 'Walk and conversation accepted',          body: 'Your booking on Aug 25 is confirmed. Meet at The Grand Café.',                     ago: '2h ago',  read: false },
-    { id: 'n2',  kind: 'safety',   icon: ShieldCheck,  title: 'Trust Circle alert sent',                 body: 'Your check-in alert was delivered to 2 contacts.',                               ago: '1d ago',  read: false },
-    { id: 'n3',  kind: 'review',   icon: Star,         title: 'Maya left you a note',                    body: 'Thank you for the museum walk — thoughtful and kind.',                           ago: '3d ago',  read: true  },
-    { id: 'n4',  kind: 'payment',  icon: WalletCards,  title: 'Receipt for Museum visits',               body: '$136.50 charged · $10 deposit credited.',                                       ago: '5d ago',  read: true  },
-    { id: 'n5',  kind: 'platform', icon: Bell,         title: 'New SafeSpot added in your city',         body: 'The Library Co-op in SF is now verified for bookings.',                         ago: '1w ago',  read: true  },
-    { id: 'n6',  kind: 'booking',  icon: CalendarDays, title: 'Gallery tours — reminder',                body: "Your booking tomorrow at 14:00. Don't forget your safety plan.",                 ago: '2w ago',  read: true  },
-    { id: 'n7',  kind: 'booking',  icon: CalendarDays, title: 'Booking request received',                body: 'Jordan K. has accepted your coffee conversation on Sep 2.',                      ago: '6h ago',  read: false },
-    { id: 'n8',  kind: 'payment',  icon: WalletCards,  title: '$10 deposit applied',                     body: 'Your deposit unlocked the chat with Simone A. for your Sep 8 booking.',         ago: '8h ago',  read: false },
-    { id: 'n9',  kind: 'platform', icon: Bell,         title: 'New companion in Chicago',                body: 'Simone A. — architecture tours and jazz evenings — just joined your area.',      ago: '1d ago',  read: true  },
-    { id: 'n10', kind: 'safety',   icon: ShieldCheck,  title: 'Boundary Receipt confirmed',              body: 'Both you and Jordan K. have agreed to the booking terms for Sep 2.',            ago: '2d ago',  read: true  },
-    { id: 'n11', kind: 'review',   icon: Star,         title: 'You have a new review',                   body: '5 stars from a recent booking. "Thoughtful and warm — exactly what I needed."', ago: '4d ago',  read: true  },
-    { id: 'n12', kind: 'platform', icon: Bell,         title: 'Your referral earned credit',             body: 'A friend joined using your code. $20 has been added to your balance.',           ago: '1w ago',  read: true  },
-  ];
+  const { user } = useAuth();
+  const role: 'customer' | 'companion' = user?.roles.includes('companion') && !user.roles.includes('customer')
+    ? 'companion'
+    : 'customer';
+  const qc = useQueryClient();
+  const { data, isLoading } = useNotifications(role);
+  const notifs = data ?? [];
 
   const [filter, setFilter] = useState<'all' | 'booking' | 'safety' | 'payment' | 'platform'>('all');
-  const [readSet, setReadSet] = useState<Set<string>>(() => new Set(NOTIFS.filter((n) => n.read).map((n) => n.id)));
 
-  const shown = filter === 'all' ? NOTIFS : NOTIFS.filter((n) => n.kind === filter);
-  const unreadCount = NOTIFS.filter((n) => !readSet.has(n.id)).length;
+  const bucket = (kind: string) => {
+    if (kind.startsWith('booking') || kind === 'new_message') return 'booking';
+    if (kind.includes('safety') || kind === 'checkin' || kind === 'ok') return 'safety';
+    if (kind.includes('payout') || kind.includes('payment') || kind.includes('receipt')) return 'payment';
+    return 'platform';
+  };
+
+  const shown = filter === 'all' ? notifs : notifs.filter((n) => bucket(n.kind) === filter);
+  const unreadCount = notifs.filter((n) => !n.read).length;
 
   const FILTERS: Array<{ key: typeof filter; label: string }> = [
     { key: 'all', label: 'All' },
@@ -5584,6 +5585,21 @@ function NotificationsPage() {
     { key: 'payment', label: 'Payments' },
     { key: 'platform', label: 'Platform' },
   ];
+
+  const markAllRead = async () => {
+    await fetch('/api/notifications/read-all', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+    qc.invalidateQueries({ queryKey: ['notifications', role] });
+  };
+
+  const markRead = async (id: string) => {
+    await fetch(`/api/notifications/${id}/read`, { method: 'POST', credentials: 'include' });
+    qc.invalidateQueries({ queryKey: ['notifications', role] });
+  };
 
   return (
     <Shell>
@@ -5598,7 +5614,7 @@ function NotificationsPage() {
           </div>
           {unreadCount > 0 && (
             <button type="button"
-              onClick={() => setReadSet(new Set(NOTIFS.map((n) => n.id)))}
+              onClick={() => { void markAllRead(); }}
               className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dfd2c9] px-3 text-[10px] font-bold text-[#654c5f] transition hover:border-[#9d557e]"
               data-testid="button-mark-all-read">
               <Check className="h-3 w-3" />Mark all read
@@ -5606,7 +5622,6 @@ function NotificationsPage() {
           )}
         </div>
 
-        {/* Filter chips */}
         <div className="mt-6 flex flex-wrap gap-2">
           {FILTERS.map(({ key, label }) => (
             <button key={key} type="button"
@@ -5618,32 +5633,35 @@ function NotificationsPage() {
           ))}
         </div>
 
-        {/* List */}
         <div className="mt-6 space-y-2">
-          {shown.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => <div key={i} className="skeleton h-20 rounded-[18px]" />)}
+            </div>
+          ) : shown.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-10 text-center">
               <Bell className="mx-auto h-7 w-7 text-[#c6aeb8]" />
               <p className="mt-3 font-serif text-xl text-[#48213d]">Nothing here yet.</p>
+              <p className="mt-1 text-xs text-[#9b858e]">Booking and safety updates appear here when they happen.</p>
             </div>
           ) : shown.map((n) => {
-            const isRead = readSet.has(n.id);
-            const Icon = n.icon;
+            const Icon = NOTIF_ICONS[n.kind] ?? Bell;
             return (
               <button key={n.id} type="button"
-                onClick={() => setReadSet((s) => new Set([...s, n.id]))}
-                className={`flex w-full items-start gap-4 rounded-[18px] border px-5 py-4 text-left transition hover:border-[#9d557e] ${isRead ? 'border-[#dfd2c9] bg-[#fbf7f1]' : 'border-[#d5a8c0] bg-[#fdf5fa]'}`}
+                onClick={() => { if (!n.read) void markRead(n.id); }}
+                className={`flex w-full items-start gap-4 rounded-[18px] border px-5 py-4 text-left transition hover:border-[#9d557e] ${n.read ? 'border-[#dfd2c9] bg-[#fbf7f1]' : 'border-[#d5a8c0] bg-[#fdf5fa]'}`}
                 data-testid={`notif-${n.id}`}>
-                <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${isRead ? 'bg-[#ece4db] text-[#9b7a8a]' : 'bg-[#ead0dd] text-[#7f2e62]'}`}>
+                <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${n.read ? 'bg-[#ece4db] text-[#9b7a8a]' : 'bg-[#ead0dd] text-[#7f2e62]'}`}>
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className={`text-sm font-semibold ${isRead ? 'text-[#654c5f]' : 'text-[#48213d]'}`}>{n.title}</p>
-                    {!isRead && <span className="h-1.5 w-1.5 rounded-full bg-[#7f2e62]" />}
+                    <p className={`text-sm font-semibold ${n.read ? 'text-[#654c5f]' : 'text-[#48213d]'}`}>{n.title}</p>
+                    {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-[#7f2e62]" />}
                   </div>
                   <p className="mt-0.5 text-[11px] leading-5 text-[#9b858e]">{n.body}</p>
                 </div>
-                <span className="shrink-0 font-mono text-[9px] text-[#b0929f]">{n.ago}</span>
+                <span className="shrink-0 font-mono text-[9px] text-[#b0929f]">{timeAgo(n.createdAt)}</span>
               </button>
             );
           })}
@@ -5656,6 +5674,10 @@ function NotificationsPage() {
 function CityPage() {
   const { city } = useParams<{ city: string }>();
   const cityName = city ? city.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+  const spotsQuery = useListSafeSpots(cityName ? { city: cityName } : undefined, {
+    query: { queryKey: getListSafeSpotsQueryKey(cityName ? { city: cityName } : undefined), retry: false },
+  });
+  const spots = spotsQuery.data ?? [];
 
   const CITY_DATA: Record<string, { tagline: string; companions: string[]; safespots: string[]; activities: string[]; count: number }> = {
     'San Francisco': {
@@ -5800,13 +5822,22 @@ function CityPage() {
                 <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Verified venues</p>
                 <h2 className="mt-2 font-serif text-4xl text-[#48213d]">SafeSpots in {cityName}.</h2>
                 <div className="mt-5 space-y-3">
-                  {data.safespots.map((s) => (
-                    <div key={s} className="flex items-center gap-3 rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-3">
+                  {spotsQuery.isLoading ? (
+                    <div className="skeleton h-16 rounded-[16px]" />
+                  ) : spots.length === 0 ? (
+                    <div className="rounded-[16px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] px-4 py-6 text-sm text-[#806c76]">
+                      No verified SafeSpots listed in {cityName} yet. Check the directory as venues are approved.
+                    </div>
+                  ) : spots.map((s) => (
+                    <Link key={s.id} href={`/safespots/${s.id}`} className="flex items-center gap-3 rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-3 hover:border-[#9d557e]">
                       <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#e8f0e8] text-[#477254]">
                         <MapPin className="h-4 w-4" />
                       </div>
-                      <p className="text-sm text-[#48213d]">{s}</p>
-                    </div>
+                      <div>
+                        <p className="text-sm text-[#48213d]">{s.name}</p>
+                        <p className="text-[10px] text-[#9b858e]">{s.addressHint}</p>
+                      </div>
+                    </Link>
                   ))}
                   <Link href="/safespots" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#7f2e62] hover:underline">
                     View all SafeSpots <ArrowRight className="h-3 w-3" />
@@ -5849,41 +5880,13 @@ function GiftPage() {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState<number | null>(null);
   const [note, setNote] = useState('');
-  const [sent, setSent] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [giftError, setGiftError] = useState('');
   const AMOUNTS = [50, 75, 100, 150, 200];
 
   const handleSend = (e: FormEvent) => {
     e.preventDefault();
-    if (!amount || !recipient.trim()) return;
-    setSending(true);
-    setTimeout(() => { setSent(true); setSending(false); }, 1000);
+    setGiftError('Gift cards are not live yet. Email hello@onlyfavors.com if you need one for someone.');
   };
-
-  if (sent) return (
-    <Shell>
-      <main className="page-enter mx-auto max-w-2xl px-5 py-20">
-        <div className="rounded-[26px] bg-[#3d2038] p-10 text-center text-[#f9efe5]">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]">
-            <HeartHandshake className="h-7 w-7" />
-          </div>
-          <h1 className="mt-6 font-serif text-4xl">Gift sent!</h1>
-          <p className="mt-3 text-sm leading-6 text-[#dbc3cf]">We've sent your gift card to <strong className="text-white">{recipient}</strong>. They'll receive instructions to book with any companion.</p>
-          <div className="mt-5 rounded-[14px] border border-[#6a3858] bg-[#4a2842] p-4 text-left">
-            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#c695ae]">Share this with them</p>
-            <p className="mt-1.5 text-sm text-[#f9efe5]">They can redeem the code at <Link href="/redeem" className="font-bold underline text-[#e0a8c8]">onlyfavors.com/redeem</Link></p>
-          </div>
-          <div className="mt-8 flex justify-center gap-3">
-            <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]" data-testid="link-gift-home">Back home</Link>
-            <button type="button" onClick={() => { setSent(false); setRecipient(''); setAmount(null); setNote(''); }}
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-[#7f5080] px-5 text-sm font-bold text-[#f9efe5]">
-              Send another
-            </button>
-          </div>
-        </div>
-      </main>
-    </Shell>
-  );
 
   return (
     <Shell>
@@ -5917,7 +5920,7 @@ function GiftPage() {
           {/* Right: Gift form */}
           <form onSubmit={handleSend} className="rounded-[26px] border border-[#dfd2c9] bg-[#fbf7f1] p-8 shadow-[0_15px_35px_rgba(88,37,70,.07)]" data-testid="form-gift">
             <h2 className="font-serif text-3xl text-[#48213d]">Send a gift card</h2>
-            <p className="mt-1 text-xs text-[#806c76]">Delivered by email instantly.</p>
+            <p className="mt-1 text-xs text-[#806c76]">We'll email you when gift cards are available.</p>
 
             <div className="mt-7 space-y-5">
               <label className="block">
@@ -5973,9 +5976,15 @@ function GiftPage() {
                 </div>
               )}
 
-              <Button type="submit" disabled={!amount || !recipient.trim() || sending} className="w-full" testId="button-send-gift">
-                {sending ? 'Sending…' : `Send $${amount ?? '—'} gift card`} <Send className="h-4 w-4" />
-              </Button>
+              {giftError && (
+                <p className="rounded-xl bg-[#f3ead7] px-4 py-3 text-xs leading-5 text-[#7a5a12]">{giftError}</p>
+              )}
+
+              <button type="submit" disabled={!amount || !recipient.trim()}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white disabled:opacity-50"
+                data-testid="button-send-gift">
+                Send ${amount ?? '—'} gift card <Send className="h-4 w-4" />
+              </button>
             </div>
           </form>
         </div>
@@ -7013,19 +7022,16 @@ function Help() {
         {(() => {
           const [subject, setSubject_] = useState('');
           const [message, setMessage_] = useState('');
-          const [sent, setSent_] = useState(false);
           return (
             <div className="mt-6 rounded-[22px] bg-[#d9e1d7] p-8">
               <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#477254]">Still have questions?</p>
               <h3 className="mt-3 font-serif text-3xl text-[#31533f]">We're here.</h3>
               <p className="mt-3 text-sm leading-6 text-[#53725d]">Send us a message — our trust team responds within one business day.</p>
-              {sent ? (
-                <div className="mt-6 flex items-center gap-3 rounded-[14px] bg-[#c7d9cb] px-5 py-4">
-                  <Check className="h-4 w-4 text-[#31533f]" />
-                  <p className="text-sm font-semibold text-[#31533f]">Message sent — we'll reply within one business day.</p>
-                </div>
-              ) : (
-                <form onSubmit={(e) => { e.preventDefault(); setSent_(true); }} className="mt-6 space-y-3">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const mailto = `mailto:hello@onlyfavors.com?subject=${encodeURIComponent(subject || 'Help request')}&body=${encodeURIComponent(message)}`;
+                window.location.href = mailto;
+              }} className="mt-6 space-y-3">
                   <select value={subject} onChange={(e) => setSubject_(e.target.value)} required
                     className="h-11 w-full rounded-xl border border-[#a9c9af] bg-white px-4 text-sm text-[#31533f] focus:border-[#477254] focus:outline-none"
                     data-testid="select-help-subject">
@@ -7044,7 +7050,6 @@ function Help() {
                     <Send className="h-3.5 w-3.5" />Send message
                   </button>
                 </form>
-              )}
             </div>
           );
         })()}
@@ -8374,7 +8379,7 @@ function Saved() {
         {ids.length > 0 && (
           <p className="mt-10 flex items-center gap-1.5 text-[11px] text-[#9b858e]">
             <LockKeyhole className="h-3.5 w-3.5" />
-            Your saved list is stored only on this device and never shared with companions.
+            Your saved list stays private. Signed-in accounts keep it across devices.
           </p>
         )}
       </main>
@@ -9087,6 +9092,7 @@ function BookingProgressStepper({ status }: { status: string }) {
 function BookingStatus() {
   const { id = '' } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+  const { ids: savedIds, toggle: toggleSaved } = useSavedCompanionIds();
   const bookingQuery = useBooking(id);
   const companionQuery = useGetCompanion(bookingQuery.data?.companionId ?? '', {
     query: { enabled: Boolean(bookingQuery.data?.companionId), queryKey: getGetCompanionQueryKey(bookingQuery.data?.companionId ?? '') },
@@ -9281,25 +9287,15 @@ function BookingStatus() {
                   <ShieldCheck className="h-4 w-4" />Safety plan
                 </Link>
                 {isConfirmed && <ShareBookingButton bookingId={id} />}
-                {c && isConfirmed && (() => {
-                  const savedKey = 'of_saved_companions';
-                  const saved: string[] = (() => { try { return JSON.parse(localStorage.getItem(savedKey) ?? '[]'); } catch { return []; } })();
-                  const isSaved = saved.includes(c.id);
-                  return (
+                {c && isConfirmed && (
                     <button type="button"
-                      onClick={() => {
-                        const current: string[] = (() => { try { return JSON.parse(localStorage.getItem(savedKey) ?? '[]'); } catch { return []; } })();
-                        const next = isSaved ? current.filter((id) => id !== c.id) : [...current, c.id];
-                        localStorage.setItem(savedKey, JSON.stringify(next));
-                        window.location.reload();
-                      }}
-                      className={`inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition ${isSaved ? 'border-[#9d557e] bg-[#ead0dd] text-[#7f2e62]' : 'border-[#dfd2c9] text-[#654c5f] hover:bg-[#eee2d9]'}`}
+                      onClick={() => { void toggleSaved(c.id); }}
+                      className={`inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition ${savedIds.includes(c.id) ? 'border-[#9d557e] bg-[#ead0dd] text-[#7f2e62]' : 'border-[#dfd2c9] text-[#654c5f] hover:bg-[#eee2d9]'}`}
                       data-testid="button-save-companion-from-booking">
-                      <Heart className={`h-4 w-4 ${isSaved ? 'fill-[#7f2e62] text-[#7f2e62]' : ''}`} />
-                      {isSaved ? 'Saved' : 'Save companion'}
+                      <Heart className={`h-4 w-4 ${savedIds.includes(c.id) ? 'fill-[#7f2e62] text-[#7f2e62]' : ''}`} />
+                      {savedIds.includes(c.id) ? 'Saved' : 'Save companion'}
                     </button>
-                  );
-                })()}
+                )}
               </>
             )}
           </div>
@@ -9892,6 +9888,11 @@ function CompanionAvailabilityToggle() {
 }
 
 function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
+  const { user, loading: authLoading } = useAuth();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (!authLoading && !user) navigate('/login');
+  }, [authLoading, user, navigate]);
   const isCustomer = mode === 'customer';
   const customer  = useGetCustomerDashboard({ query: { enabled: isCustomer,  queryKey: getGetCustomerDashboardQueryKey() } });
   const companion = useGetCompanionDashboard({ query: { enabled: !isCustomer, queryKey: getGetCompanionDashboardQueryKey() } });
@@ -10486,8 +10487,16 @@ function ApplicationStatus() {
     { key: 'interview', label: 'Brief interview', body: 'For most applicants, we schedule a short 15-minute video call to get to know you better.', icon: Users },
     { key: 'approved', label: 'Approved & onboarded', body: 'Once approved, you\'ll complete your onboarding checklist — profile, Q&A, availability, and Stripe payouts — then go live.', icon: Sparkles },
   ];
-  // Dev: simulate being in "reviewing" stage
-  const currentStage = 1;
+  const status = useQuery<{ status: string; stage: number }>({
+    queryKey: ['companion-application-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/applications/me', { credentials: 'include' });
+      if (!res.ok) return { status: 'none', stage: 0 };
+      return res.json();
+    },
+    retry: false,
+  });
+  const currentStage = status.data?.status === 'none' ? -1 : (status.data?.stage ?? 0);
 
   return (
     <Shell>
@@ -10568,7 +10577,7 @@ function CompanionStatsPage() {
       const r = Number(localStorage.getItem(`of_rating_${b.id}`));
       if (r > 0) ratings.push(r);
     });
-    if (!ratings.length) return 4.9;
+    if (!ratings.length) return null;
     return Math.round((ratings.reduce((a, v) => a + v, 0) / ratings.length) * 10) / 10;
   })();
 
@@ -10593,8 +10602,7 @@ function CompanionStatsPage() {
   });
   const topActivities = Object.entries(activityMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  // Response rate (from dev fixture — always 100% in dev)
-  const responseRate = 98;
+  const responseRate = null as number | null;
   const avgHours = completed.length ? Math.round(completed.reduce((a, b) => a + (b.durationHours ?? 2), 0) / completed.length * 10) / 10 : 2;
 
   return (
@@ -10618,7 +10626,7 @@ function CompanionStatsPage() {
           {[
             { label: 'Completed bookings',  value: completed.length,          icon: Check,        bg: 'bg-[#e8f0e8]', ic: 'text-[#477254]' },
             { label: 'Total earnings',      value: money(totalEarnedCents),   icon: WalletCards,  bg: 'bg-[#ead0dd]', ic: 'text-[#7f2e62]' },
-            { label: 'Average rating',      value: `${avgRating}★`,           icon: Star,         bg: 'bg-[#f3ead7]', ic: 'text-[#bf8750]' },
+            { label: 'Average rating',      value: avgRating == null ? '—' : `${avgRating}★`,           icon: Star,         bg: 'bg-[#f3ead7]', ic: 'text-[#bf8750]' },
             { label: 'Upcoming bookings',   value: upcoming.length,           icon: CalendarDays, bg: 'bg-[#dce8f5]', ic: 'text-[#2a5280]' },
           ].map(({ label, value, icon: Icon, bg, ic }) => (
             <div key={label} className={`flex items-start gap-4 rounded-[22px] p-5 ${bg}`}>
@@ -10644,7 +10652,7 @@ function CompanionStatsPage() {
           return (
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {[
-                { label: 'Response rate',    value: `${responseRate}%`,  desc: 'Requests responded within 24h' },
+                { label: 'Response rate',    value: responseRate == null ? '—' : `${responseRate}%`,  desc: responseRate == null ? 'Tracked once request history is live' : 'Requests responded within 24h' },
                 { label: 'Avg duration',     value: `${avgHours}h`,      desc: 'Per completed booking' },
                 { label: 'Repeat customers', value: repeatCustomers === 0 ? '—' : `${repeatRate}%`,  desc: repeatCustomers === 0 ? 'Book more to track' : `${repeatCustomers} returning customer${repeatCustomers !== 1 ? 's' : ''}` },
               ].map(({ label, value, desc }) => (
@@ -10884,6 +10892,7 @@ function Login() {
     setBusy(true); setError('');
     try {
       const result = await verifyOtp(email, code, 'login');
+      try { await confirmAge(); } catch {}
       await refresh();
       navigate(dashboardPath(result.user));
     } catch (err) {
@@ -11075,25 +11084,6 @@ const CATEGORY_ICON: Record<string, typeof MapPin> = {
   default: MapPin,
 };
 
-const DEMO_SAFESPOTS: SafeSpot[] = [
-  { id: 'ss-demo-1',  name: 'The Commons Café',           category: 'Café',       city: 'San Francisco', addressHint: 'Near Union Square, downtown',          openLate: false },
-  { id: 'ss-demo-2',  name: 'Grand Central Lounge',        category: 'Bar',        city: 'New York',      addressHint: 'Midtown East, ground floor',            openLate: true  },
-  { id: 'ss-demo-3',  name: 'Riverside Public Library',    category: 'Library',    city: 'Chicago',       addressHint: 'River North branch',                    openLate: false },
-  { id: 'ss-demo-4',  name: 'Ember & Oak',                 category: 'Restaurant', city: 'Austin',        addressHint: 'Downtown, street level',                openLate: true  },
-  { id: 'ss-demo-5',  name: 'The Garden Hotel Lobby',      category: 'Hotel',      city: 'Los Angeles',   addressHint: 'West Hollywood, lobby level',            openLate: true  },
-  { id: 'ss-demo-6',  name: 'Meridian Museum Café',        category: 'Museum',     city: 'Seattle',       addressHint: 'Capitol Hill, ground floor',             openLate: false },
-  { id: 'ss-demo-7',  name: 'Blue Bottle Coffee Hayes',    category: 'Café',       city: 'San Francisco', addressHint: 'Hayes Valley · large communal tables',   openLate: false },
-  { id: 'ss-demo-8',  name: 'The Ace Hotel Lobby',         category: 'Hotel',      city: 'New York',      addressHint: 'Midtown · open 24h, well-staffed',       openLate: true  },
-  { id: 'ss-demo-9',  name: 'Chicago Cultural Center',     category: 'Museum',     city: 'Chicago',       addressHint: 'Loop · grand atrium, public entry',      openLate: false },
-  { id: 'ss-demo-10', name: 'Blanton Museum Lobby',        category: 'Museum',     city: 'Austin',        addressHint: 'UT Campus · airy entrance, easy exit',   openLate: false },
-  { id: 'ss-demo-11', name: 'The Setai Hotel Lobby',       category: 'Hotel',      city: 'Miami',         addressHint: 'South Beach · concierge desk visible',   openLate: true  },
-  { id: 'ss-demo-12', name: 'Pike Place Market Entrance',  category: 'Restaurant', city: 'Seattle',       addressHint: 'Pike St & 1st Ave · busy, public',       openLate: false },
-  { id: 'ss-demo-13', name: 'Denver Art Museum Café',      category: 'Café',       city: 'Denver',        addressHint: 'Golden Triangle · ground floor café',    openLate: false },
-  { id: 'ss-demo-14', name: 'Boston Public Library Foyer', category: 'Library',    city: 'Boston',        addressHint: 'Copley Sq · manned entrance desk',       openLate: false },
-  { id: 'ss-demo-15', name: 'Ponce City Market Atrium',    category: 'Restaurant', city: 'Atlanta',       addressHint: 'Old Fourth Ward · open, visible seating', openLate: true  },
-  { id: 'ss-demo-16', name: 'National Portrait Gallery',   category: 'Museum',     city: 'Washington D.C.', addressHint: 'Penn Quarter · Penn Ave entrance',     openLate: false },
-];
-
 const ALL_CATEGORIES = ['Café', 'Restaurant', 'Hotel', 'Library', 'Museum', 'Bar'];
 
 function SafeSpotCard({ spot }: { spot: SafeSpot }) {
@@ -11147,7 +11137,7 @@ function SafeSpots() {
     },
   });
 
-  const spots: SafeSpot[] = (query.data && query.data.length > 0) ? query.data as SafeSpot[] : DEMO_SAFESPOTS;
+  const spots: SafeSpot[] = (query.data ?? []) as SafeSpot[];
   const filtered = spots.filter((s) =>
     (!categoryFilter || s.category === categoryFilter) &&
     (!lateOnly || s.openLate)
@@ -11236,7 +11226,7 @@ function SafeSpots() {
         {/* Network stats strip */}
         <div className="mt-12 grid gap-4 sm:grid-cols-3" data-testid="safespot-stats">
           {[
-            { value: `${filtered.length}+`, label: 'Verified venues in this view', icon: MapPin },
+            { value: String(filtered.length), label: 'Verified venues in this view', icon: MapPin },
             { value: '100%', label: 'Staff-aware before bookings begin', icon: ShieldCheck },
             { value: '0', label: 'Home address meetings — ever', icon: EyeOff },
           ].map(({ value, label, icon: Icon }) => (
@@ -11282,10 +11272,7 @@ function useSafeSpot(id: string) {
     queryFn: async () => {
       const res = await fetch(`/api/safespots/${id}`);
       if (res.status === 404) return null;
-      if (!res.ok) {
-        // Return from demo set as fallback
-        return DEMO_SAFESPOTS.find((s) => s.id === id) ?? null;
-      }
+      if (!res.ok) return null;
       return res.json();
     },
   });
@@ -12196,32 +12183,13 @@ function NotFound() {
 
 function RedeemPage() {
   const [code, setCode] = useState('');
-  const [phase, setPhase] = useState<'entry' | 'loading' | 'success' | 'error'>('entry');
+  const [phase, setPhase] = useState<'entry' | 'error'>('entry');
   const [errorMsg, setErrorMsg] = useState('');
-  const [balance, setBalance] = useState(0);
-
-  const DEMO_CODES: Record<string, number> = {
-    'FAVOR-DEMO': 5000,
-    'GIFT-2025': 10000,
-    'WELCOME25': 2500,
-  };
 
   const handleRedeem = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = code.trim().toUpperCase();
-    if (!trimmed) return;
-    setPhase('loading');
-    setTimeout(() => {
-      const cents = DEMO_CODES[trimmed];
-      if (cents !== undefined) {
-        setBalance(cents);
-        setPhase('success');
-        try { localStorage.setItem('of_gift_balance', String(cents)); } catch {}
-      } else {
-        setErrorMsg('That code wasn\'t found. Check the spelling and try again, or contact support if you think this is an error.');
-        setPhase('error');
-      }
-    }, 900);
+    setPhase('error');
+    setErrorMsg('Gift redemption is not live yet. Email hello@onlyfavors.com if you were given a code.');
   };
 
   return (
@@ -12231,40 +12199,13 @@ function RedeemPage() {
           <ArrowLeft className="h-3.5 w-3.5" />OnlyFavors
         </Link>
 
-        {phase === 'success' ? (
-          <div className="text-center">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#d3e1d8]">
-              <Gift className="h-8 w-8 text-[#477254]" />
-            </div>
-            <h1 className="mt-6 font-serif text-5xl text-[#48213d]">Gift applied.</h1>
-            <p className="mt-4 text-sm leading-6 text-[#725e69]">
-              <strong>{money(balance)}</strong> has been added to your account. It will be applied automatically at checkout.
-            </p>
-            <div className="mt-4 inline-block rounded-[14px] bg-[#d3e1d8] px-6 py-3">
-              <p className="font-mono text-[10px] uppercase tracking-[.15em] text-[#477254]">Account balance</p>
-              <p className="mt-1 font-serif text-4xl text-[#2d5c3e]">{money(balance)}</p>
-            </div>
-            <div className="mt-10 flex flex-col items-center gap-3">
-              <Link href="/explore"
-                className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white"
-                data-testid="link-redeem-explore">
-                Find a companion to book <ArrowRight className="h-4 w-4" />
-              </Link>
-              <button type="button" onClick={() => { setCode(''); setPhase('entry'); }}
-                className="text-xs text-[#9b858e] hover:text-[#48213d]">
-                Redeem another code
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="text-center">
+        <div className="text-center">
               <div className="mx-auto grid h-20 w-20 place-items-center rounded-[22px] bg-[#ead0dd]">
                 <Gift className="h-8 w-8 text-[#7f2e62]" />
               </div>
               <h1 className="mt-6 font-serif text-5xl text-[#48213d]">Redeem a gift card</h1>
               <p className="mt-3 text-sm leading-6 text-[#725e69]">
-                Enter the code from your gift card or email. The balance will be applied automatically to your next booking.
+                Gift redemption is not live yet. If you were given a code, email hello@onlyfavors.com and we'll help.
               </p>
             </div>
 
@@ -12289,10 +12230,10 @@ function RedeemPage() {
               )}
 
               <button type="submit"
-                disabled={!code.trim() || phase === 'loading'}
+                disabled={!code.trim()}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e] disabled:opacity-50"
                 data-testid="button-submit-redeem">
-                {phase === 'loading' ? 'Checking…' : 'Apply gift card'}
+                Apply gift card
               </button>
             </form>
 
@@ -12313,8 +12254,6 @@ function RedeemPage() {
               Want to send a gift card?{' '}
               <Link href="/gift" className="font-bold text-[#7f2e62] hover:underline">Give the gift of good company →</Link>
             </p>
-          </>
-        )}
       </main>
     </Shell>
   );
@@ -12539,8 +12478,9 @@ function CheckIn() {
     try {
       const res = await fetch(`/api/bookings/${bookingId}/checkin`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ venue }),
+        body: JSON.stringify({ venue, kind: 'arrival' }),
       });
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({ error: 'Check-in failed' }));
@@ -12569,8 +12509,7 @@ function CheckIn() {
             </div>
             <h1 className="font-serif text-3xl text-[#f9efe5]">Arrived safely.</h1>
             <p className="mt-3 text-sm leading-6 text-[#c695ae]">
-              Your arrival at <span className="font-semibold text-[#f9efe5]">{venue}</span> has been recorded.
-              Your Trust Circle received a quiet "arrived safely" — no details shared.
+              Your arrival at <span className="font-semibold text-[#f9efe5]">{venue}</span> has been recorded on this booking.
             </p>
             <div className="mt-8 rounded-[16px] border border-[#4a2040] bg-[#2d1128] p-5">
               <p className="font-mono text-[9px] uppercase tracking-widest text-[#9d7e8e]">Check-in logged</p>
@@ -13761,6 +13700,25 @@ function Router() {
   );
 }
 
+function AgeGate() {
+  const { user, refresh } = useAuth();
+  const [busy, setBusy] = useState(false);
+  if (!user || user.ageConfirmed) return null;
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-[#241A20]/70 px-5" role="dialog" aria-labelledby="age-gate-title">
+      <div className="w-full max-w-md rounded-[24px] bg-[#FFFDF9] p-8 text-[#241A20] shadow-2xl">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8F294C]">Adults only</p>
+        <h2 id="age-gate-title" className="mt-3 font-serif text-4xl">Confirm you are 18 or older.</h2>
+        <p className="mt-4 text-sm leading-6 text-[#725e69]">OnlyFavors is a platonic marketplace for adults. We do not allow minors, sexual services, or off-platform payments.</p>
+        <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { await confirmAge(); await refresh(); } finally { setBusy(false); } }}
+          className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-[#8F294C] text-sm font-bold text-white disabled:opacity-50">
+          {busy ? 'Saving…' : 'I am 18 or older'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // Seed dev companion Q&A answers so profiles show populated interview sections
   useEffect(() => {
@@ -13784,7 +13742,7 @@ function App() {
     });
   }, []);
 
-  return <QueryClientProvider client={queryClient}><TooltipProvider><AuthProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></AuthProvider></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><TooltipProvider><AuthProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><AgeGate /><Router /></WouterRouter><Toaster /></AuthProvider></TooltipProvider></QueryClientProvider>;
 }
 
 export default App;
