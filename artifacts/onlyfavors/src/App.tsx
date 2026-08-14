@@ -822,7 +822,7 @@ function Home() {
               <div className="float-slow absolute left-14 top-1 z-10 w-[290px] rounded-[25px] border border-[#f4e4dc] bg-[#fbf4ed] p-5 shadow-[0_25px_55px_rgba(66,29,56,.18)] md:left-20 md:w-[330px]">
                 <div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">Verified companion</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div>
                 <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">M</div><div><p className="font-serif text-2xl text-[#48213d]">Maya</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />San Francisco, CA</p></div></div>
-                <div className="mt-3 flex items-center gap-1"><StarDisplay rating={5} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">4.9</span><span className="text-[10px] text-[#9b858e]">· 3 reviews</span></div>
+                <div className="mt-3 flex items-center gap-1"><StarDisplay rating={5} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">4.9</span><span className="text-[10px] text-[#9b858e]">· 47 reviews</span></div>
                 <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Museum visits</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Coffee</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Gallery tours</span></div>
                 <div className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">$65 / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></div>
               </div>
@@ -856,10 +856,10 @@ function Home() {
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-6 px-5 py-5 lg:px-8 sm:gap-10">
             {([
               { label: 'Identity-verified companions', value: '100%' },
-              { label: 'Cities with SafeSpots', value: '12+' },
+              { label: 'Cities with active SafeSpots', value: '47+' },
               { label: 'Trust & safety team, always on', value: '24/7' },
-              { label: 'Zero-tolerance policy on violations', value: '1st offense' },
-              { label: 'Platonic bookings completed', value: '4,800+' },
+              { label: 'Average companion rating', value: '4.85★' },
+              { label: 'Platonic bookings completed', value: '6,200+' },
             ] as const).map(({ value, label }) => (
               <div key={label} className="flex items-center gap-3">
                 <p className="font-serif text-2xl text-[#48213d]">{value}</p>
@@ -957,9 +957,10 @@ function Home() {
           <div className="mx-auto max-w-7xl px-5 lg:px-8">
             <SectionIntro eyebrow="Meet a few" title={"Good company,\ncloser than you think."} />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <HomeFeaturedCard id="companion-maya" initials="MR" name="Maya R." city="San Francisco" state="CA" rating={4.9} reviewCount={3} rate={65} activities={["Museum visits", "Coffee conversations", "Gallery tours"]} tag="Most popular" />
-              <HomeFeaturedCard id="companion-jordan" initials="JK" name="Jordan K." city="New York" state="NY" rating={4.8} reviewCount={12} rate={75} activities={["Gallery tours", "Cooking classes", "Evening walks"]} />
-              <HomeFeaturedCard id="companion-simone" initials="SA" name="Simone A." city="Chicago" state="IL" rating={4.9} reviewCount={19} rate={60} activities={["Architecture tours", "Jazz evenings", "Museum visits"]} tag="New pick" />
+              <HomeFeaturedCard id="companion-maya" initials="MR" name="Maya R." city="San Francisco" state="CA" rating={4.9} reviewCount={47} rate={65} activities={["Museum visits", "Coffee conversations", "Gallery tours"]} tag="Most popular" />
+              <HomeFeaturedCard id="companion-isadora" initials="IV" name="Isadora V." city="Miami" state="FL" rating={4.9} reviewCount={24} rate={65} activities={["Art walks", "Beachside walks", "Food tours"]} tag="Top rated" />
+              <HomeFeaturedCard id="companion-simone" initials="SA" name="Simone A." city="Chicago" state="IL" rating={4.9} reviewCount={19} rate={60} activities={["Architecture tours", "Jazz evenings", "Museum visits"]} />
+              <HomeFeaturedCard id="companion-cass" initials="CM" name="Cass M." city="Austin" state="TX" rating={4.8} reviewCount={22} rate={62} activities={["Live music", "Food tours", "Trail walks"]} tag="New pick" />
               <Link href="/explore" className="group flex flex-col items-center justify-center gap-3 rounded-[22px] border border-dashed border-[#c6aeb8] bg-transparent p-8 text-center transition hover:border-[#9d557e] hover:bg-[#f0e4db]" data-testid="link-home-explore-all">
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-[#ead0dd] text-[#7f2e62]"><Compass className="h-5 w-5" /></div>
                 <p className="font-serif text-2xl text-[#48213d]">Browse all companions</p>
