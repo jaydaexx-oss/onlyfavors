@@ -3090,9 +3090,18 @@ function TrustCircleSetup() {
   const [relation, setRelation] = useState('Friend');
   const [addedName, setAddedName] = useState<string | null>(null);
 
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
   const handleAdd = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim() || contacts.length >= 3) return;
+    // Basic phone validation: 7–15 digits (allows spaces, dashes, parens, leading +)
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7 || digits.length > 15) {
+      setPhoneError('Enter a valid phone number (7–15 digits).');
+      return;
+    }
+    setPhoneError(null);
     add({ name: name.trim(), phone: phone.trim(), relation });
     setAddedName(name.trim());
     setName(''); setPhone(''); setRelation('Friend');
@@ -3761,7 +3770,9 @@ function CustomerBookingList() {
               data-testid={`booking-row-${b.id}`}>
               <div className="flex-1 min-w-0">
                 <p className="truncate text-sm font-semibold text-[#48213d]">{b.activity}</p>
-                <p className="text-[10px] text-[#9b858e]">{b.date} · {b.startTime} · {b.durationHours}h</p>
+                <p className="text-[10px] text-[#9b858e]">
+                  {(b as any).companionName ? `with ${(b as any).companionName} · ` : ''}{b.date} · {b.startTime} · {b.durationHours}h
+                </p>
               </div>
               <span className={cn('shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[.12em]', STATUS_PILL[b.status] ?? 'bg-[#ece1d9] text-[#725e69]')}>
                 {b.status.replace('_', ' ')}
@@ -9498,6 +9509,13 @@ function BookingStatus() {
             <div><p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Time</p><p className="mt-1 font-semibold text-[#48213d]">{b.startTime}</p></div>
             <div><p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Duration</p><p className="mt-1 font-semibold text-[#48213d]">{b.durationHours}h</p></div>
             <div><p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Activity</p><p className="mt-1 font-semibold text-[#48213d]">{b.activity}</p></div>
+            {(b as any).safeSpotName && (
+              <div className="sm:col-span-2">
+                <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Meeting venue</p>
+                <p className="mt-1 font-semibold text-[#48213d]">{(b as any).safeSpotName}</p>
+                {(b as any).safeSpotAddressHint && <p className="text-[10px] text-[#9b858e]">{(b as any).safeSpotAddressHint}</p>}
+              </div>
+            )}
           </div>
 
           {/* Price breakdown */}
