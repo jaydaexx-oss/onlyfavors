@@ -1816,12 +1816,14 @@ function Explore() {
         {!activity && (
           <div className="mt-6 flex flex-wrap gap-2" data-testid="vibe-filter-strip">
             {([
-              { key: 'adventurous', label: '🧗 Adventurous', match: ['hiking', 'climbing', 'outdoor', 'adventure'] },
-              { key: 'cultural', label: '🎭 Cultural', match: ['museum', 'gallery', 'art', 'theatre', 'history'] },
-              { key: 'low-key', label: '☕ Low-key', match: ['coffee', 'conversation', 'walk', 'quiet', 'bookstore'] },
-              { key: 'foodie', label: '🍜 Foodie', match: ['dinner', 'cooking', 'food', 'restaurant', 'cuisine'] },
-              { key: 'creative', label: '🎨 Creative', match: ['art', 'photography', 'craft', 'sketch', 'creative'] },
-              { key: 'social', label: '🎉 Social', match: ['event', 'networking', 'party', 'social', 'concert'] },
+              { key: 'adventurous', label: '🧗 Adventurous', match: ['hiking', 'climbing', 'outdoor', 'adventure', 'trail'] },
+              { key: 'cultural', label: '🎭 Cultural', match: ['museum', 'gallery', 'art', 'theatre', 'history', 'architecture'] },
+              { key: 'low-key', label: '☕ Low-key', match: ['coffee', 'conversation', 'walk', 'quiet', 'bookstore', 'book'] },
+              { key: 'foodie', label: '🍜 Foodie', match: ['dinner', 'cooking', 'food', 'restaurant', 'cuisine', 'taco', 'brewery', 'wine'] },
+              { key: 'creative', label: '🎨 Creative', match: ['art', 'photography', 'craft', 'sketch', 'creative', 'painting'] },
+              { key: 'social', label: '🎉 Social', match: ['event', 'networking', 'party', 'social', 'concert', 'festival'] },
+              { key: 'outdoorsy', label: '🌿 Outdoorsy', match: ['park', 'nature', 'trail', 'botanical', 'garden', 'farmers', 'market', 'hiking'] },
+              { key: 'wellness', label: '🧘 Wellness', match: ['yoga', 'meditation', 'spa', 'wellness', 'mindful', 'journal', 'breathwork'] },
             ] as const).map(({ key, label }) => (
               <button key={key} type="button"
                 onClick={() => setVibe(vibe === key ? null : key)}
@@ -1869,11 +1871,11 @@ function Explore() {
             </p>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
               {[
-                { id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', joined: '3 days ago', rate: 65 },
-                { id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', joined: '1 week ago', rate: 75 },
-                { id: 'companion-priya', initials: 'PS', name: 'Priya S.', city: 'Chicago', joined: 'today', rate: 60 },
-                { id: 'companion-alex', initials: 'AW', name: 'Alex W.', city: 'Austin', joined: '2 days ago', rate: 70 },
-                { id: 'companion-ren', initials: 'RT', name: 'Ren T.', city: 'Seattle', joined: '5 days ago', rate: 55 },
+                { id: 'companion-cass', initials: 'CM', name: 'Cass M.', city: 'Austin', joined: '2 days ago', rate: 62 },
+                { id: 'companion-nadia', initials: 'NB', name: 'Nadia B.', city: 'Atlanta', joined: 'today', rate: 60 },
+                { id: 'companion-finn', initials: 'FO', name: 'Finn O.', city: 'Portland', joined: '3 days ago', rate: 55 },
+                { id: 'companion-devon', initials: 'DH', name: 'Devon H.', city: 'Boston', joined: '1 week ago', rate: 70 },
+                { id: 'companion-theo', initials: 'TL', name: 'Theo L.', city: 'Washington D.C.', joined: '5 days ago', rate: 72 },
               ].map((c) => (
                 <Link key={c.id} href={`/companions/${c.id}`}
                   className="group flex shrink-0 w-[160px] flex-col rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-4 transition hover:border-[#9d557e] hover:shadow-md"
@@ -4698,6 +4700,99 @@ const STORIES = [
       { kind: 'p', text: 'The OnlyFavors rate advisor (available on your earnings page) shows where you sit relative to companions in your city with a similar experience level. Use it as a data point, not a rule — but don\'t ignore it either.' },
     ],
   },
+  {
+    id: 'privacy-by-design',
+    category: 'How it works',
+    title: 'Why we built privacy in from the start — not as a feature',
+    excerpt: 'Privacy isn\'t a setting you toggle. We designed OnlyFavors so the right information is never collected in the first place.',
+    readTime: '5 min read',
+    color: '#e8eaf6',
+    textColor: '#2a3580',
+    body: [
+      { kind: 'p', text: 'Every consumer app eventually arrives at a privacy settings page and calls it done. We took a different approach: designing the platform so that sensitive information is either never collected, or never shared beyond the people who need it.' },
+      { kind: 'h2', text: 'Your location is always approximate' },
+      { kind: 'p', text: 'Customer profiles show only a city, never a neighborhood. Companions list a service area — a radius, not an address. Our map view uses general areas, not pins. Your exact location is not something we store or transmit.' },
+      { kind: 'h2', text: 'Masked communications' },
+      { kind: 'p', text: 'When your booking is confirmed, a private chat thread opens between you and your companion. Neither party ever sees the other\'s real phone number, email address, or social media profile through OnlyFavors. Messages route through our system and can be reviewed by the trust team if either party raises a concern.' },
+      { kind: 'h2', text: 'What companions can and cannot see' },
+      { kind: 'p', text: 'Companions see your first name, your chosen activity, your selected SafeSpot, and the messages you send. They do not see your billing details, your last name, or your location beyond the city you\'ve selected. You are as anonymous as you choose to be.' },
+      { kind: 'h2', text: 'The data we do keep — and why' },
+      { kind: 'p', text: 'We retain enough information to run safety reviews, resolve disputes, and generate your receipts. We do not sell data to advertisers. We do not build profiles for targeting. Our business model is the booking fee — not your information.' },
+    ],
+  },
+  {
+    id: 'companion-spotlight-isadora',
+    category: 'Companion spotlight',
+    title: 'Isadora on building a companion practice across three languages',
+    excerpt: '"Being multilingual isn\'t just about words. It\'s about how differently people experience the same city depending on the lens they\'re looking through."',
+    readTime: '5 min read',
+    color: '#fdf3e3',
+    textColor: '#8a5a1a',
+    body: [
+      { kind: 'p', text: '"I grew up between São Paulo and Miami. My mother is Brazilian, my father is Venezuelan, and I went to an English-medium school for most of my childhood. So I\'ve always moved between languages without thinking about it — it\'s not a skill I developed so much as something I just am."' },
+      { kind: 'p', text: '"When I joined OnlyFavors I wasn\'t sure whether to market myself as a multilingual companion or just as someone who knows Miami well. But the requests that came in made the decision for me. About a third of my bookings come from international visitors — people traveling for work or leisure who want company but feel more comfortable in Spanish or Portuguese."' },
+      { kind: 'h2', text: 'On what changes when the language changes' },
+      { kind: 'p', text: '"There\'s a kind of relaxation that happens when someone can speak their first language in a foreign city. I see it every time. They stop searching for words and just start talking. The conversation goes somewhere different — more personal, more specific. The city itself looks different when you\'re not translating everything in your head."' },
+      { kind: 'h2', text: 'On the Boundary Receipt across cultures' },
+      { kind: 'p', text: '"The Boundary Receipt translates beautifully, actually. The concept of clarity about what is and isn\'t happening — that resonates across every culture I\'ve worked with. If anything, international visitors appreciate it more, because they\'re in an unfamiliar place and the explicit agreement gives them confidence."' },
+    ],
+  },
+  {
+    id: 'choosing-your-activity',
+    category: 'Getting started',
+    title: 'How to choose the right activity — especially for a first booking',
+    excerpt: 'The best first activity isn\'t the most interesting one. It\'s the one that gives you both an easy way out if you need it.',
+    readTime: '4 min read',
+    color: '#f3e8f8',
+    textColor: '#6a2a7f',
+    body: [
+      { kind: 'p', text: 'There\'s a temptation to book something ambitious for a first outing — a long dinner, a full-day gallery tour, an evening event. The logic makes sense: if you\'re going to try this, try it properly. But first bookings work better with a shorter, naturally-bounded activity.' },
+      { kind: 'h2', text: 'Coffee is the gold standard' },
+      { kind: 'p', text: 'An hour at a café gives you time to get a real sense of someone without committing to more. If it goes well, you can extend it or plan something longer next time. If it doesn\'t, an hour is a perfectly respectable ending point. Nobody is stuck.' },
+      { kind: 'h2', text: 'Museums work well too' },
+      { kind: 'p', text: 'A museum visit has built-in structure — you move through rooms, talk about what you\'re looking at, take breaks at the café. The art does some of the social work. Silence doesn\'t feel awkward when you\'re both looking at something. It\'s a great container for a first meeting.' },
+      { kind: 'h2', text: 'What to avoid for a first booking' },
+      { kind: 'p', text: 'Multi-hour dining experiences, cooking classes (too intimate too fast), and anything involving travel to a new neighborhood right away. These aren\'t bad activities — they\'re wonderful for a third or fourth booking. They\'re just a lot of pressure for a first.' },
+      { kind: 'h2', text: 'Trust your instincts from the profile' },
+      { kind: 'p', text: 'If a companion\'s profile makes you want to ask them about their reading list, book a coffee. If they list hiking as an activity and you\'ve been meaning to get outdoors, start there. The best bookings happen when the activity matches a genuine shared interest, not an obligation to be interesting.' },
+    ],
+  },
+  {
+    id: 'trust-circle-guide',
+    category: 'Safety',
+    title: 'Your Trust Circle: the safety net that works in the background',
+    excerpt: 'The Trust Circle isn\'t for emergencies. It\'s for the ordinary peace of mind that makes you feel more comfortable before you leave the house.',
+    readTime: '3 min read',
+    color: '#e8f5ef',
+    textColor: '#1a5e3a',
+    body: [
+      { kind: 'p', text: 'Before every booking, you can designate up to two people as your Trust Circle — friends, family, or anyone you trust. They receive a brief, private summary of your booking: when it starts, where the SafeSpot is, and when it\'s expected to end.' },
+      { kind: 'h2', text: 'What they see and don\'t see' },
+      { kind: 'p', text: 'Your Trust Circle contacts receive the venue name and address, the booking start and end time, and a one-tap check-in link so they can confirm you\'re safe after the booking. They do not see the companion\'s name or profile — just the information they\'d need if something went wrong.' },
+      { kind: 'h2', text: 'The automatic check-in' },
+      { kind: 'p', text: 'After your booking end time, our system sends you a simple prompt: confirm you\'re safe. If you don\'t respond within 30 minutes, your Trust Circle is notified. This isn\'t surveillance — it\'s a quiet net that\'s only visible if you fall.' },
+      { kind: 'h2', text: 'Who should be in your Trust Circle?' },
+      { kind: 'p', text: 'Someone who will actually look at their phone. A close friend, a sibling, a flatmate. They don\'t need to know everything about how OnlyFavors works — they just need to know you want them in your corner.' },
+    ],
+  },
+  {
+    id: 'for-solo-travelers',
+    category: 'Use cases',
+    title: 'OnlyFavors for solo travelers: a practical guide',
+    excerpt: 'A hotel restaurant alone is fine. A museum alone is fine. But some experiences are just better with someone who knows the city.',
+    readTime: '4 min read',
+    color: '#fde8e8',
+    textColor: '#7a1c1c',
+    body: [
+      { kind: 'p', text: 'Solo travel is one of the most common reasons people book on OnlyFavors. You\'re in a city for three days, you\'ve seen what you wanted to see, and you\'d like one evening that doesn\'t end with room service and a show you\'ve already seen.' },
+      { kind: 'h2', text: 'What companions bring to travel' },
+      { kind: 'p', text: 'Local knowledge you can\'t Google. The restaurant that doesn\'t have a website. The museum wing that\'s worth doubling back for. The neighborhood that\'s technically not on the tourist circuit but should be. Companions who live in their city don\'t just know the landmarks — they know the texture of the place.' },
+      { kind: 'h2', text: 'Practical logistics' },
+      { kind: 'p', text: 'Book 24–48 hours in advance when you can. Many companions have flexible schedules and can accommodate last-minute requests, but the best ones fill up. If you\'re a frequent traveler, the Insider membership removes the $10 deposit step and gets you faster companion responses.' },
+      { kind: 'h2', text: 'What to tell your companion' },
+      { kind: 'p', text: 'Tell them what kind of trip this is. Business trip where you\'d love one evening that feels like a real city experience. A week alone because you needed space to think. A research trip and you\'d love to talk to someone who lives here. Context helps companions tailor the time. The more honest you are, the better the booking.' },
+    ],
+  },
 ];
 
 function NewsletterPage() {
@@ -5300,6 +5395,9 @@ function PressPage() {
                 { name: 'The Atlantic', quote: '"Quietly redefining what companionship can look like online."' },
                 { name: 'Forbes', quote: '"One of the most thoughtfully designed trust systems in the gig economy."' },
                 { name: 'Wired', quote: '"Privacy-first in a way most social apps only claim to be."' },
+                { name: 'NYT Styles', quote: '"Companions for hire — but not the way you\'re imagining."' },
+                { name: 'Fast Company', quote: '"The antidote to parasocial culture: real time, real presence, real people."' },
+                { name: 'TIME', quote: '"A platform built for the loneliness epidemic — and designed to actually work."' },
               ].map(({ name, quote }) => (
                 <div key={name} className="min-w-[200px] flex-1 rounded-[16px] border border-[#5e3458] bg-white/5 p-4" data-testid={`press-coverage-${name.toLowerCase().replace(/\W+/g, '-')}`}>
                   <p className="font-mono text-[10px] font-bold text-[#e8b4d0]">{name}</p>
