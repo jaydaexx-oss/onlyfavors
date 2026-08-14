@@ -991,10 +991,10 @@ function Home() {
                   <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Spotlight pick</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[18px] bg-[#ead0dd] font-serif text-3xl text-[#7f2e62]">M</div>
+                  <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[18px] bg-[#ead0dd] font-serif text-3xl text-[#7f2e62]">I</div>
                   <div>
-                    <p className="font-serif text-3xl text-[#f9efe5]">Maya R.</p>
-                    <p className="text-sm text-[#c695ae]">San Francisco · $65/hr</p>
+                    <p className="font-serif text-3xl text-[#f9efe5]">Isadora V.</p>
+                    <p className="text-sm text-[#c695ae]">Miami · $65/hr</p>
                   </div>
                 </div>
                 <div className="mt-6 flex gap-3">
@@ -1008,11 +1008,11 @@ function Home() {
                   </div>
                 </div>
                 <div className="mt-6 flex flex-wrap gap-2">
-                  {['Museum visits', 'Coffee conversations', 'Gallery tours'].map((act) => (
+                  {['Art walks', 'Beachside walks', 'Food & culture tours', 'Gallery visits'].map((act) => (
                     <span key={act} className="rounded-full border border-[#6a3858] px-3 py-1 text-[10px] text-[#d9c4cf]">{act}</span>
                   ))}
                 </div>
-                <Link href="/companions/companion-maya"
+                <Link href="/companions/companion-isadora"
                   className="mt-8 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e]"
                   data-testid="link-spotlight-view-profile">
                   View profile <ArrowRight className="h-4 w-4" />
@@ -1021,13 +1021,13 @@ function Home() {
               {/* Right: Q&A highlight */}
               <div className="space-y-5">
                 <p className="font-serif text-[22px] leading-snug text-[#48213d]">
-                  "I've always loved how a good conversation can make a place feel alive — museums, markets, quiet gardens."
+                  "Miami is three cities at once — the art, the water, the food. I love introducing people to the version they haven't seen yet."
                 </p>
                 <div className="space-y-4">
                   {[
-                    { q: 'What draws you to this work?', a: 'Being present with someone and watching them genuinely enjoy themselves is something I find deeply rewarding.' },
-                    { q: 'What does an ideal favor look like for you?', a: 'An unhurried morning at a photography exhibition, then coffee somewhere with big windows. No agenda, just curiosity.' },
-                    { q: 'How would regulars describe you?', a: 'Warm but not performatively cheerful. I\'ll match your energy — quiet if you need quiet, animated if you\'re excited.' },
+                    { q: 'What draws you to this work?', a: 'I\'m trilingual — English, Spanish, Portuguese — and I love those moments when someone relaxes into their first language in a foreign city. The whole energy changes.' },
+                    { q: 'What does an ideal favor look like for you?', a: 'Wynwood in the morning, a coffee at Panther, then an afternoon on the water. Miami is best when it\'s unhurried.' },
+                    { q: 'How would regulars describe you?', a: 'Warm, knowledgeable, and genuinely curious. I ask good questions. I remember what you told me last time.' },
                   ].map(({ q, a }) => (
                     <div key={q} className="rounded-[18px] border border-[#e8ddd6] bg-white p-5">
                       <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">{q}</p>
@@ -1035,10 +1035,10 @@ function Home() {
                     </div>
                   ))}
                 </div>
-                <Link href="/companions/companion-maya"
+                <Link href="/companions/companion-isadora"
                   className="inline-flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline"
                   data-testid="link-spotlight-full-profile">
-                  Read Maya's full profile <ArrowRight className="h-3.5 w-3.5" />
+                  Read Isadora's full profile <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             </div>
@@ -1137,29 +1137,29 @@ function Home() {
           <div className="rounded-[28px] bg-[#ead0dd] p-8 md:flex md:items-center md:gap-10 md:p-12">
             <div className="flex-1">
               <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#7f2e62]">Companion spotlight</p>
-              <h2 className="mt-3 font-serif text-5xl leading-[.94] text-[#48213d]">Maya R.<br /><em>this week's pick.</em></h2>
+              <h2 className="mt-3 font-serif text-5xl leading-[.94] text-[#48213d]">Nadia B.<br /><em>this week's pick.</em></h2>
               <p className="mt-4 max-w-md text-sm leading-6 text-[#654c5f]">
-                Maya has been a top-rated companion in San Francisco for over a year. Customers love her for museum visits, gallery walks, and thoughtful conversation over coffee. 4.9 stars across 86 reviews.
+                Nadia has one of the highest acceptance rates on the platform — 94%. Her Atlanta customers love her for street art walks, neighborhood food tours, and the kind of conversation that makes you feel like a local. 4.9 stars, 33 bookings.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
-                {['Museum visits', 'Gallery tours', 'Coffee conversations', 'Art shows'].map((a) => (
+                {['Street art walks', 'Food & culture tours', 'Museum visits', 'Neighborhood walks'].map((a) => (
                   <span key={a} className="rounded-full bg-[#d3a8c0] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-wider text-[#48213d]">{a}</span>
                 ))}
               </div>
               <div className="mt-6 flex gap-3">
-                <Link href="/companions/companion-maya" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white hover:bg-[#9d3a78]" data-testid="link-companion-of-week">
+                <Link href="/companions/companion-nadia" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white hover:bg-[#9d3a78]" data-testid="link-companion-of-week">
                   View profile <ArrowRight className="h-4 w-4" />
                 </Link>
-                <Link href="/book?companion=companion-maya" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#c08eae] px-5 text-sm font-bold text-[#48213d] hover:bg-[#d3a8c0]" data-testid="link-book-spotlight">
+                <Link href="/book?companion=companion-nadia" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#c08eae] px-5 text-sm font-bold text-[#48213d] hover:bg-[#d3a8c0]" data-testid="link-book-spotlight">
                   Book now
                 </Link>
               </div>
             </div>
             <div className="mt-8 grid h-48 w-48 shrink-0 place-items-center self-center rounded-full bg-[#c08eae] md:mt-0">
               <div className="text-center">
-                <p className="font-serif text-6xl text-[#fbf7f1]">MR</p>
+                <p className="font-serif text-6xl text-[#fbf7f1]">NB</p>
                 <StarDisplay rating={4.9} size="sm" />
-                <p className="mt-1 font-mono text-[9px] font-bold text-[#d4b8ca]">$65/hr · SF</p>
+                <p className="mt-1 font-mono text-[9px] font-bold text-[#d4b8ca]">$60/hr · ATL</p>
               </div>
             </div>
           </div>
@@ -1170,8 +1170,8 @@ function Home() {
           <SectionIntro eyebrow="From the community" title={"Time well spent,\nin their own words."} />
           <div className="grid gap-4 md:grid-cols-3">
             {([
-              { quote: "I was dreading the museum alone after a hard week. Maya turned it into the best afternoon I'd had in months. No pressure, just good conversation in front of art I actually cared about.", name: "Priya S.", city: "San Francisco" },
-              { quote: "I was skeptical — it felt strange to 'book a friend.' Then I had coffee with Jordan and it was just... easy. We talked for two hours. I left feeling like myself again.", name: "Thomas A.", city: "New York" },
+              { quote: "I was dreading the museum alone after a hard week. My companion turned it into the best afternoon I'd had in months. No pressure, just good conversation in front of art I actually cared about.", name: "Priya S.", city: "San Francisco" },
+              { quote: "I was skeptical — it felt strange to 'book a friend.' Then I had coffee and it was just... easy. We talked for two hours. I left feeling like myself again.", name: "Thomas A.", city: "New York" },
               { quote: "The boundary receipt made my husband comfortable. He knew exactly what the arrangement was. We both felt safe, and I had the gallery walk I'd been putting off for a year.", name: "Claire M.", city: "Chicago" },
             ] as const).map(({ quote, name, city }) => (
               <div key={name} className="flex flex-col gap-5 rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-7">
@@ -4148,24 +4148,24 @@ function CompanionReviews({ companionId }: { companionId: string }) {
 
 function LiveActivityTicker() {
   const EVENTS = [
-    { text: 'Coffee with Jordan in New York', ago: '2m ago', icon: Coffee },
+    { text: 'Coffee conversation booked in New York', ago: '2m ago', icon: Coffee },
     { text: 'Gallery tour booked in San Francisco', ago: '5m ago', icon: Landmark },
     { text: 'Museum visit confirmed in Chicago', ago: '11m ago', icon: Building2 },
-    { text: 'Walk and conversation in Seattle', ago: '18m ago', icon: Navigation2 },
+    { text: 'Evening walk confirmed in Seattle', ago: '18m ago', icon: Navigation2 },
     { text: 'Cooking class requested in Austin', ago: '24m ago', icon: UtensilsCrossed },
-    { text: 'New companion joined in Boston', ago: '31m ago', icon: UserPlus },
-    { text: 'Dining experience completed in LA', ago: '45m ago', icon: UtensilsCrossed },
+    { text: 'New companion approved in Boston', ago: '31m ago', icon: UserPlus },
+    { text: 'Restaurant dining completed in Los Angeles', ago: '45m ago', icon: UtensilsCrossed },
     { text: 'Architecture walk booked in Chicago', ago: '52m ago', icon: Landmark },
-    { text: 'Bookstore visit in Portland confirmed', ago: '58m ago', icon: Search },
-    { text: 'Farmers market tour in Denver', ago: '1h ago', icon: Navigation2 },
-    { text: 'Jazz evening requested in New York', ago: '1h ago', icon: Star },
+    { text: 'Bookstore visit confirmed in Portland', ago: '58m ago', icon: BookOpen },
+    { text: 'Farmers market visit booked in Denver', ago: '1h ago', icon: Navigation2 },
+    { text: 'Jazz evening confirmed in New York', ago: '1h ago', icon: Music },
     { text: 'Gift card sent to a friend in Miami', ago: '1h ago', icon: HeartHandshake },
     { text: '5-star review left in San Francisco', ago: '2h ago', icon: Star },
-    { text: 'Cooking class completed in Austin', ago: '2h ago', icon: UtensilsCrossed },
+    { text: 'Brewery tour requested in Austin', ago: '2h ago', icon: UtensilsCrossed },
     { text: 'Trust Circle updated before a favor', ago: '2h ago', icon: ShieldCheck },
-    { text: 'SafeSpot check-in verified in Seattle', ago: '3h ago', icon: MapPin },
+    { text: 'SafeSpot check-in verified in Atlanta', ago: '3h ago', icon: MapPin },
     { text: 'New companion approved in Washington D.C.', ago: '3h ago', icon: UserPlus },
-    { text: 'Evening walk in Boston confirmed', ago: '4h ago', icon: Navigation2 },
+    { text: 'Hiking outing confirmed in Portland', ago: '4h ago', icon: Mountain },
   ];
   const [idx, setIdx] = useState(0);
   useEffect(() => {
