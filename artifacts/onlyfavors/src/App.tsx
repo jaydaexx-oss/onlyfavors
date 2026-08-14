@@ -1471,6 +1471,7 @@ function CompareCompanions() {
     { label: 'Hourly rate', key: 'hourlyRate', fmt: (v) => `$${v}/hr` },
     { label: 'Rating', key: 'rating', fmt: (v) => `${v.toFixed(1)} ★` },
     { label: 'Reviews', key: 'reviewCount', fmt: (v) => `${v} reviews` },
+    { label: 'Completed bookings', key: 'totalBookings', fmt: (v) => `${v} favors` },
     { label: 'Response time', key: 'responseTime' },
     { label: 'Acceptance rate', key: 'acceptanceRate', fmt: (v) => `${v}%` },
     { label: 'Instant book', key: 'instantBook', fmt: (v) => v ? '✓ Yes' : '✗ No' },
@@ -1533,7 +1534,7 @@ function CompareCompanions() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[#48213d]">{c.displayName}</p>
-                    <p className="text-[10px] text-[#9b858e]">{c.city} · ${c.hourlyRate}/hr · {c.rating.toFixed(1)}★</p>
+                    <p className="text-[10px] text-[#9b858e]">{c.city} · ${c.hourlyRate}/hr · {c.rating.toFixed(1)}★ · {c.totalBookings} favors</p>
                   </div>
                   {isSelected && <Check className="h-4 w-4 shrink-0 text-[#7f2e62]" />}
                 </button>
