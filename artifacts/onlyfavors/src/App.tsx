@@ -821,9 +821,9 @@ function Home() {
               <div className="absolute bottom-5 right-3 h-[265px] w-[255px] rotate-[8deg] rounded-[28px] bg-[#b7c4b3] shadow-[0_24px_50px_rgba(49,74,57,.13)] md:h-[310px] md:w-[290px]" />
               <div className="float-slow absolute left-14 top-1 z-10 w-[290px] rounded-[25px] border border-[#f4e4dc] bg-[#fbf4ed] p-5 shadow-[0_25px_55px_rgba(66,29,56,.18)] md:left-20 md:w-[330px]">
                 <div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">Verified companion</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div>
-                <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">M</div><div><p className="font-serif text-2xl text-[#48213d]">Maya</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />San Francisco, CA</p></div></div>
-                <div className="mt-3 flex items-center gap-1"><StarDisplay rating={5} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">4.9</span><span className="text-[10px] text-[#9b858e]">· 47 reviews</span></div>
-                <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Museum visits</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Coffee</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Gallery tours</span></div>
+                <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#b7c4b3] font-serif text-2xl text-[#31533f]">I</div><div><p className="font-serif text-2xl text-[#48213d]">Isadora</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />Miami, FL</p></div></div>
+                <div className="mt-3 flex items-center gap-1"><StarDisplay rating={5} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">4.9</span><span className="text-[10px] text-[#9b858e]">· 24 reviews</span></div>
+                <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Art walks</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Food tours</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Beachside walks</span></div>
                 <div className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">$65 / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></div>
               </div>
               <div className="absolute bottom-7 left-0 z-20 flex items-center gap-2 rounded-full border border-[#f4e4dc] bg-[#fbf4ed] px-4 py-3 shadow-lg"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#cad8cb] text-[#376448]"><Check className="h-4 w-4" /></span><span className="text-xs font-semibold text-[#543d50]">Safety plan included</span></div>
@@ -4748,10 +4748,10 @@ const STORIES = [
     ],
   },
   {
-    id: 'companion-spotlight-maya',
+    id: 'companion-spotlight-isadora',
     category: 'Companion spotlight',
-    title: 'Maya on why she joined OnlyFavors',
-    excerpt: '"I wanted work that felt meaningful — not just filling time, but actually being present with someone who needed company."',
+    title: 'Isadora on building a practice across three languages',
+    excerpt: '"About a third of my bookings come from international visitors — people who feel more comfortable in Spanish or Portuguese. The whole conversation changes."',
     readTime: '5 min read',
     color: '#f3ead7',
     textColor: '#9a6d25',
@@ -4948,7 +4948,7 @@ function NewsletterPage() {
               <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#c695ae]">What readers say</p>
               <div className="mt-4 space-y-4">
                 {[
-                  { quote: '"The companion spotlight on Maya made me finally book my first session. Worth every word."', attr: 'Reader in New York' },
+                  { quote: '"The companion spotlight on Isadora made me finally book my first session. Worth every word."', attr: 'Reader in New York' },
                   { quote: '"The safety guides are genuinely useful — clear, non-preachy, practical."', attr: 'Reader in San Francisco' },
                 ].map(({ quote, attr }) => (
                   <div key={attr} className="rounded-[12px] bg-[#4a2842] p-4">
@@ -5772,14 +5772,14 @@ function NotificationsPage() {
   const NOTIFS = [
     { id: 'n1',  kind: 'booking',  icon: CalendarDays, title: 'Walk and conversation accepted',          body: 'Your booking on Aug 25 is confirmed. Meet at The Grand Café.',                     ago: '2h ago',  read: false },
     { id: 'n2',  kind: 'safety',   icon: ShieldCheck,  title: 'Trust Circle alert sent',                 body: 'Your check-in alert was delivered to 2 contacts.',                               ago: '1d ago',  read: false },
-    { id: 'n3',  kind: 'review',   icon: Star,         title: 'Maya left you a note',                    body: 'Thank you for the museum walk — thoughtful and kind.',                           ago: '3d ago',  read: true  },
+    { id: 'n3',  kind: 'review',   icon: Star,         title: 'Your companion left you a note',            body: 'Thank you for the museum walk — thoughtful and kind.',                           ago: '3d ago',  read: true  },
     { id: 'n4',  kind: 'payment',  icon: WalletCards,  title: 'Receipt for Museum visits',               body: '$136.50 charged · $10 deposit credited.',                                       ago: '5d ago',  read: true  },
     { id: 'n5',  kind: 'platform', icon: Bell,         title: 'New SafeSpot added in your city',         body: 'The Library Co-op in SF is now verified for bookings.',                         ago: '1w ago',  read: true  },
     { id: 'n6',  kind: 'booking',  icon: CalendarDays, title: 'Gallery tours — reminder',                body: "Your booking tomorrow at 14:00. Don't forget your safety plan.",                 ago: '2w ago',  read: true  },
-    { id: 'n7',  kind: 'booking',  icon: CalendarDays, title: 'Booking request received',                body: 'Jordan K. has accepted your coffee conversation on Sep 2.',                      ago: '6h ago',  read: false },
+    { id: 'n7',  kind: 'booking',  icon: CalendarDays, title: 'Booking request received',                body: 'Alex T. has accepted your coffee conversation on Sep 2.',                       ago: '6h ago',  read: false },
     { id: 'n8',  kind: 'payment',  icon: WalletCards,  title: '$10 deposit applied',                     body: 'Your deposit unlocked the chat with Simone A. for your Sep 8 booking.',         ago: '8h ago',  read: false },
     { id: 'n9',  kind: 'platform', icon: Bell,         title: 'New companion in Chicago',                body: 'Simone A. — architecture tours and jazz evenings — just joined your area.',      ago: '1d ago',  read: true  },
-    { id: 'n10', kind: 'safety',   icon: ShieldCheck,  title: 'Boundary Receipt confirmed',              body: 'Both you and Jordan K. have agreed to the booking terms for Sep 2.',            ago: '2d ago',  read: true  },
+    { id: 'n10', kind: 'safety',   icon: ShieldCheck,  title: 'Boundary Receipt confirmed',              body: 'Both you and Alex T. have agreed to the booking terms for Sep 2.',             ago: '2d ago',  read: true  },
     { id: 'n11', kind: 'review',   icon: Star,         title: 'You have a new review',                   body: '5 stars from a recent booking. "Thoughtful and warm — exactly what I needed."', ago: '4d ago',  read: true  },
     { id: 'n12', kind: 'platform', icon: Bell,         title: 'Your referral earned credit',             body: 'A friend joined using your code. $20 has been added to your balance.',           ago: '1w ago',  read: true  },
   ];
