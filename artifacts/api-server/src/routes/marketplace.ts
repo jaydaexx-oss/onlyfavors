@@ -11,6 +11,19 @@ import {
   ListSafeSpotsQueryParams,
 } from "@workspace/api-zod";
 import { db, bookings, favorRequests, messages } from "@workspace/db";
+import {
+  accountRoles,
+  accounts,
+  adminAuditLog,
+  checkIns,
+  companionApplications,
+  companionProfiles,
+  incidentReports,
+  platformSettings,
+  reviews as reviewRows,
+  safespotApplications,
+  safespots,
+} from "@workspace/db/schema";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getApprovedCompanion,
@@ -20,6 +33,7 @@ import {
 } from "../lib/supabase";
 import { calculatePrice } from "../lib/pricing";
 import { getUncachableStripeClient } from "../lib/stripeClient";
+import { getActorId, requireAdmin, writeAudit } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -104,16 +118,14 @@ const pausedRequestsSet = new Set<string>();
 
 router.get("/companion/requests/paused", (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   res.json({ paused: pausedRequestsSet.has(companionId) });
 });
 
 router.post("/companion/requests/pause", (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { paused } = req.body ?? {};
   if (paused) {
@@ -130,16 +142,14 @@ const availableTodaySet = new Set<string>(['companion-maya']); // Maya available
 
 router.get("/companion/availability/today", (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   res.json({ available: availableTodaySet.has(companionId) });
 });
 
 router.post("/companion/availability/today", (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { available } = req.body ?? {};
   if (available) {
@@ -396,8 +406,7 @@ router.post("/bookings", async (req, res) => {
   // Auth — falls back to a preview ID in development so the flow can be tested
   // before Task #1 (auth) lands. Never permitted in production.
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -479,8 +488,7 @@ router.post("/bookings", async (req, res) => {
 
 router.get("/bookings", async (req, res) => {
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -504,8 +512,7 @@ router.get("/bookings", async (req, res) => {
 router.get("/bookings/:id", async (req, res) => {
   const { id } = req.params;
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -531,8 +538,7 @@ router.get("/bookings/:id", async (req, res) => {
 router.post("/bookings/:id/deposit", async (req, res) => {
   const { id } = AuthorizeDepositParams.parse(req.params);
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -615,8 +621,7 @@ router.post("/bookings/:id/deposit", async (req, res) => {
 router.post("/bookings/:id/authorize", async (req, res) => {
   const { id } = AuthorizeFullPaymentParams.parse(req.params);
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -713,8 +718,7 @@ router.post("/bookings/:id/authorize", async (req, res) => {
 
 router.get("/companion/bookings", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const rows = await db
@@ -736,8 +740,7 @@ router.get("/companion/bookings", async (req, res) => {
 router.get("/companion/bookings/:id", async (req, res) => {
   const { id } = req.params;
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
@@ -759,8 +762,7 @@ router.get("/companion/bookings/:id", async (req, res) => {
 router.post("/bookings/:id/accept", async (req, res) => {
   const { id } = req.params;
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
@@ -798,8 +800,7 @@ router.post("/bookings/:id/accept", async (req, res) => {
 router.post("/bookings/:id/decline", async (req, res) => {
   const { id } = req.params;
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
@@ -880,8 +881,7 @@ router.post("/bookings/:id/extend", async (req, res) => {
 router.post("/bookings/:id/complete", async (req, res) => {
   const { id } = req.params;
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   // Dev fallback — mutate fixture
@@ -926,34 +926,33 @@ router.post("/bookings/:id/complete", async (req, res) => {
 router.post("/bookings/:id/checkin", async (req, res) => {
   const { id } = req.params;
   const { venue } = req.body ?? {};
-
-  // Dev fallback: accept any booking ID — just record the check-in time
-  if (process.env.NODE_ENV === "development") {
-    if (checkedInBookings.has(id)) {
-      res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue, alreadyRecorded: true });
-      return;
-    }
-    checkedInBookings.add(id);
-    req.log.info({ bookingId: id, venue }, "SafeSpot check-in (dev)");
-    res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue });
-    return;
-  }
+  const actorId = getActorId(req, "customer");
+  if (!actorId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
-    if (!["confirmed", "deposit_paid"].includes(booking.status)) {
+    if (booking.customerId !== actorId && booking.companionId !== actorId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!["confirmed", "deposit_paid", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "Check-in not available for this booking" }); return;
     }
-    if (checkedInBookings.has(id)) {
-      res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue, alreadyRecorded: true });
+    const existing = await db.select().from(checkIns).where(eq(checkIns.bookingId, id)).limit(1);
+    if (existing[0]) {
+      res.json({ bookingId: id, checkedInAt: existing[0].createdAt, venue: existing[0].venue, alreadyRecorded: true });
       return;
     }
-    checkedInBookings.add(id);
-    req.log.info({ bookingId: id, companionId: booking.companionId, venue }, "SafeSpot check-in");
-    res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue });
-  } catch (err: any) {
-    if (isMissingTableError(err)) {
+    const [row] = await db.insert(checkIns).values({
+      bookingId: id,
+      accountId: actorId,
+      venue: venue ? String(venue).slice(0, 120) : null,
+      kind: "arrival",
+    }).returning();
+    req.log.info({ bookingId: id, venue }, "SafeSpot check-in");
+    res.json({ bookingId: id, checkedInAt: row.createdAt, venue: row.venue });
+  } catch (err: unknown) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
       checkedInBookings.add(id);
       res.json({ bookingId: id, checkedInAt: new Date().toISOString(), venue });
       return;
@@ -966,8 +965,7 @@ router.post("/bookings/:id/checkin", async (req, res) => {
 router.post("/bookings/:id/cancel", async (req, res) => {
   const { id } = req.params;
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { reason } = req.body ?? {};
   try {
@@ -999,8 +997,7 @@ router.post("/bookings/:id/cancel", async (req, res) => {
 router.post("/favor-requests", async (req, res) => {
   const body = CreateFavorRequestBody.parse(req.body);
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -1053,8 +1050,7 @@ router.post("/favor-requests", async (req, res) => {
 
 router.get("/dashboard/customer", async (req, res) => {
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -1097,8 +1093,7 @@ router.get("/dashboard/customer", async (req, res) => {
 
 router.get("/dashboard/companion", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -1158,8 +1153,7 @@ const CHAT_STATUSES = ["deposit_paid", "authorized", "confirmed", "completed"];
 router.get("/bookings/:id/messages", async (req, res) => {
   const { id } = req.params;
   const userId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   try {
@@ -1188,8 +1182,7 @@ router.get("/bookings/:id/messages", async (req, res) => {
 router.post("/bookings/:id/messages", async (req, res) => {
   const { id } = req.params;
   const userId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const rawBody = String(req.body?.body ?? "").trim();
@@ -1282,23 +1275,77 @@ const reviewedBookings = new Set<string>(["bk-demo-1", "bk-demo-2", "bk-demo-3"]
 router.post("/companions/:id/report", async (req, res) => {
   const { id } = req.params;
   const { reason, note } = req.body ?? {};
-  req.log.warn({ companionId: id, reason, note: note?.slice(0, 200) }, "Companion report submitted");
-  // In production this would create a ticket in the safety ops queue.
-  res.json({ received: true, message: "Report received. Our trust team will review within 24 hours." });
+  if (!reason) { res.status(400).json({ error: "A reason is required" }); return; }
+  try {
+    const [row] = await db.insert(incidentReports).values({
+      reporterId: req.user?.id ?? null,
+      companionId: id,
+      reportType: String(reason).slice(0, 80),
+      detail: String(note ?? reason).slice(0, 1500),
+      urgent: false,
+    }).returning();
+    req.log.warn({ companionId: id, reportId: row.id }, "Companion report submitted");
+    res.json({ received: true, id: row.id, message: "Report received. Our trust team will review within 24 hours." });
+  } catch (err: unknown) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({ received: true, message: "Report received. Our trust team will review within 24 hours." });
+      return;
+    }
+    req.log.error({ err }, "Companion report failed");
+    res.status(503).json({ error: "Could not submit report" });
+  }
+});
+
+router.post("/reports", async (req, res) => {
+  const { reportType, detail, bookingRef, urgent, companionId } = req.body ?? {};
+  if (!reportType || !String(detail ?? "").trim()) {
+    res.status(400).json({ error: "Incident type and details are required" }); return;
+  }
+  try {
+    const [row] = await db.insert(incidentReports).values({
+      reporterId: req.user?.id ?? null,
+      companionId: companionId ? String(companionId) : null,
+      bookingId: bookingRef ? String(bookingRef).slice(0, 80) : null,
+      reportType: String(reportType).slice(0, 80),
+      detail: String(detail).slice(0, 1500),
+      urgent: Boolean(urgent),
+      riskLevel: urgent ? "high" : "standard",
+    }).returning();
+    res.status(201).json({ id: row.id, status: row.status });
+  } catch (err: unknown) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.status(201).json({ id: `dev-report-${Date.now()}`, status: "open" });
+      return;
+    }
+    req.log.error({ err }, "Safety report failed");
+    res.status(503).json({ error: "Could not submit report" });
+  }
 });
 
 router.get("/companions/:id/reviews", async (req, res) => {
   const { id } = req.params;
-  // Production: query reviews table WHERE companion_id = id, ORDER BY created_at DESC
-  const reviews = devReviews.filter((r) => r.companionId === id);
-  res.json(reviews);
+  try {
+    const rows = await db
+      .select()
+      .from(reviewRows)
+      .where(eq(reviewRows.companionId, id))
+      .orderBy(desc(reviewRows.createdAt));
+    res.json(rows);
+  } catch (err: unknown) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json(devReviews.filter((r) => r.companionId === id));
+      return;
+    }
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Reviews lookup failed");
+    res.status(503).json({ error: "Reviews temporarily unavailable" });
+  }
 });
 
 router.post("/bookings/:id/review", async (req, res) => {
   const { id } = req.params;
   const customerId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+    getActorId(req, "customer");
   if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const { rating, comment } = req.body ?? {};
@@ -1399,8 +1446,7 @@ const DEV_EARNINGS_TRANSACTIONS: EarningsTransaction[] = [
 
 router.get("/companion/earnings", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const lifetimeCents = DEV_EARNINGS_MONTHS.reduce((s, m) => s + m.earningsCents, 0);
@@ -1567,8 +1613,7 @@ const devCompanionProfiles = new Map<string, DevCompanionProfile>();
 
 router.get("/companion/profile", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   // Production: query Supabase companion_profiles table
@@ -1579,8 +1624,7 @@ router.get("/companion/profile", async (req, res) => {
 
 router.put("/companion/profile", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const { displayName, bio, hourlyRateCents, activities, languages, serviceArea, availableDays, availableHoursStart, availableHoursEnd } = req.body ?? {};
@@ -1620,8 +1664,7 @@ router.put("/companion/profile", async (req, res) => {
 
 router.post("/companion/profile/photo", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const { photoDataUrl } = req.body ?? {};
@@ -1649,70 +1692,205 @@ const DEV_COMPANION_APPLICATIONS = [
   { id: "app-003", displayName: "Sam T.", city: "Chicago", activities: ["Board games", "Book clubs", "City tours"], languages: ["English"], hourlyRate: 55, applicationDate: "2026-08-12", bio: "Professional librarian who knows every good spot in the city. Quiet energy, great listener.", status: "pending" },
 ];
 
-router.get("/admin/overview", async (req, res) => {
+function formatApplication(row: typeof companionApplications.$inferSelect) {
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    email: row.email,
+    city: row.city,
+    activities: row.activities,
+    languages: row.languages,
+    hourlyRate: row.hourlyRate,
+    applicationDate: row.createdAt.toISOString().slice(0, 10),
+    bio: row.bio,
+    status: row.status,
+  };
+}
+
+router.get("/admin/overview", requireAdmin, async (req, res) => {
   try {
-    let activeBookings = 0;
-    try {
-      const rows = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(bookings)
-        .where(inArray(bookings.status, ["deposit_paid", "authorized", "confirmed"]));
-      activeBookings = Number(rows[0]?.count ?? 0);
-    } catch (err: any) {
-      if (!isMissingTableError(err)) throw err;
-    }
+    const [active, queue, open, due] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(bookings)
+        .where(inArray(bookings.status, ["deposit_paid", "authorized", "confirmed"])),
+      db.select({ count: sql<number>`count(*)` }).from(companionApplications)
+        .where(eq(companionApplications.status, "pending")),
+      db.select({ count: sql<number>`count(*)` }).from(incidentReports)
+        .where(eq(incidentReports.status, "open")),
+      db.select({ count: sql<number>`count(*)` }).from(bookings)
+        .where(inArray(bookings.status, ["confirmed", "authorized"])),
+    ]);
     res.json({
-      verificationQueue: process.env.NODE_ENV === "development" ? DEV_COMPANION_APPLICATIONS.length : 0,
-      openReports: 0,
-      activeBookings,
-      checkInsDue: 0,
+      verificationQueue: Number(queue[0]?.count ?? 0),
+      openReports: Number(open[0]?.count ?? 0),
+      activeBookings: Number(active[0]?.count ?? 0),
+      checkInsDue: Number(due[0]?.count ?? 0),
     });
   } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({
+        verificationQueue: DEV_COMPANION_APPLICATIONS.length,
+        openReports: 0,
+        activeBookings: 0,
+        checkInsDue: 0,
+      });
+      return;
+    }
     req.log.error({ err }, "Admin overview failed");
     res.status(503).json({ error: "Overview temporarily unavailable" });
   }
 });
 
-router.post("/companion/applications", (req, res) => {
+router.post("/companion/applications", async (req, res) => {
   const { displayName, email, city, bio } = req.body as {
     displayName: string; email: string; city: string; bio: string;
   };
   if (!displayName || !email || !city || !bio) {
     res.status(400).json({ error: "All fields required" }); return;
   }
-  const newApp = {
-    id: `app-${Date.now()}`,
-    displayName, email, city, bio,
-    activities: [], languages: ["English"], hourlyRate: 60,
-    applicationDate: new Date().toISOString().split("T")[0],
-    status: "pending",
-  };
-  DEV_COMPANION_APPLICATIONS.push(newApp as any);
-  req.log.info({ id: newApp.id, displayName }, "Companion application received");
-  res.status(201).json({ id: newApp.id, status: "pending" });
-});
-
-router.get("/admin/companions/pending", (_req, res) => {
-  if (process.env.NODE_ENV === "development") {
-    res.json(DEV_COMPANION_APPLICATIONS);
-    return;
+  try {
+    const [row] = await db.insert(companionApplications).values({
+      accountId: req.user?.id ?? null,
+      displayName: String(displayName).slice(0, 80),
+      email: String(email).trim().toLowerCase().slice(0, 160),
+      city: String(city).slice(0, 80),
+      bio: String(bio).slice(0, 2000),
+    }).returning();
+    req.log.info({ id: row.id }, "Companion application received");
+    res.status(201).json({ id: row.id, status: row.status });
+  } catch (err: unknown) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      const newApp = {
+        id: `app-${Date.now()}`,
+        displayName, email, city, bio,
+        activities: [], languages: ["English"], hourlyRate: 60,
+        applicationDate: new Date().toISOString().split("T")[0],
+        status: "pending",
+      };
+      DEV_COMPANION_APPLICATIONS.push(newApp as (typeof DEV_COMPANION_APPLICATIONS)[number]);
+      res.status(201).json({ id: newApp.id, status: "pending" });
+      return;
+    }
+    req.log.error({ err }, "Companion application failed");
+    res.status(503).json({ error: "Could not submit application" });
   }
-  res.json([]);
 });
 
-router.post("/admin/companions/:id/approve", (req, res) => {
+router.get("/admin/companions/pending", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(companionApplications)
+      .where(eq(companionApplications.status, "pending"))
+      .orderBy(desc(companionApplications.createdAt));
+    res.json(rows.map(formatApplication));
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json(DEV_COMPANION_APPLICATIONS);
+      return;
+    }
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Pending companions failed");
+    res.status(503).json({ error: "Applications temporarily unavailable" });
+  }
+});
+
+router.post("/admin/companions/:id/approve", requireAdmin, async (req, res) => {
   const { id } = req.params;
-  req.log.info({ id }, "Companion approved");
-  res.json({ id, status: "approved" });
+  const actorId = req.user!.id;
+  try {
+    const [application] = await db
+      .select()
+      .from(companionApplications)
+      .where(eq(companionApplications.id, id));
+    if (!application) { res.status(404).json({ error: "Application not found" }); return; }
+
+    let accountId = application.accountId;
+    if (!accountId) {
+      const [existing] = await db.select().from(accounts).where(eq(accounts.email, application.email)).limit(1);
+      if (existing) {
+        accountId = existing.id;
+      } else {
+        const [created] = await db.insert(accounts).values({ email: application.email, displayName: application.displayName }).returning();
+        accountId = created.id;
+        await db.insert(accountRoles).values({ accountId, role: "customer", grantedBy: actorId });
+      }
+    }
+    const roleRows = await db.select().from(accountRoles)
+      .where(eq(accountRoles.accountId, accountId));
+    if (!roleRows.some((r) => r.role === "companion")) {
+      await db.insert(accountRoles).values({ accountId, role: "companion", grantedBy: actorId });
+    }
+
+    const [profile] = await db.insert(companionProfiles).values({
+      accountId,
+      displayName: application.displayName,
+      city: application.city,
+      serviceArea: application.city,
+      activities: application.activities,
+      languages: application.languages,
+      hourlyRate: application.hourlyRate,
+      biography: application.bio,
+      approved: true,
+      verified: true,
+    }).returning();
+
+    await db.update(companionApplications).set({
+      status: "approved",
+      accountId,
+      reviewedBy: actorId,
+      reviewedAt: new Date(),
+    }).where(eq(companionApplications.id, id));
+
+    await writeAudit({
+      actorId,
+      action: "companion.approve",
+      subjectType: "companion_application",
+      subjectId: id,
+      note: `Approved profile ${profile.id}`,
+    });
+    res.json({ id, status: "approved", profileId: profile.id });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({ id, status: "approved" }); return;
+    }
+    req.log.error({ err }, "Companion approve failed");
+    res.status(503).json({ error: "Could not approve application" });
+  }
 });
 
-router.post("/admin/companions/:id/reject", (req, res) => {
+router.post("/admin/companions/:id/reject", requireAdmin, async (req, res) => {
   const { id } = req.params;
-  req.log.info({ id }, "Companion rejected");
-  res.json({ id, status: "rejected" });
+  const note = typeof req.body?.note === "string" ? req.body.note.slice(0, 500) : null;
+  try {
+    const [application] = await db
+      .update(companionApplications)
+      .set({
+        status: "rejected",
+        reviewNote: note,
+        reviewedBy: req.user!.id,
+        reviewedAt: new Date(),
+      })
+      .where(eq(companionApplications.id, id))
+      .returning();
+    if (!application) { res.status(404).json({ error: "Application not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "companion.reject",
+      subjectType: "companion_application",
+      subjectId: id,
+      note: note ?? undefined,
+    });
+    res.json({ id, status: "rejected" });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({ id, status: "rejected" }); return;
+    }
+    req.log.error({ err }, "Companion reject failed");
+    res.status(503).json({ error: "Could not reject application" });
+  }
 });
 
-router.get("/admin/bookings/recent", async (req, res) => {
+router.get("/admin/bookings/recent", requireAdmin, async (req, res) => {
   try {
     const rows = await db
       .select()
@@ -1720,10 +1898,91 @@ router.get("/admin/bookings/recent", async (req, res) => {
       .orderBy(desc(bookings.createdAt))
       .limit(20);
     res.json(rows.map(formatBookingFull));
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isMissingTableError(err)) { res.json([]); return; }
     req.log.error({ err }, "Admin bookings failed");
     res.status(503).json({ error: "Bookings temporarily unavailable" });
+  }
+});
+
+router.get("/admin/reports", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(incidentReports)
+      .orderBy(desc(incidentReports.createdAt))
+      .limit(50);
+    res.json(rows);
+  } catch (err) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Admin reports failed");
+    res.status(503).json({ error: "Reports temporarily unavailable" });
+  }
+});
+
+router.post("/admin/reports/:id/resolve", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const note = typeof req.body?.note === "string" ? req.body.note.slice(0, 500) : null;
+  const riskLevel = typeof req.body?.riskLevel === "string" ? req.body.riskLevel : undefined;
+  try {
+    const [row] = await db.update(incidentReports).set({
+      status: "resolved",
+      resolutionNote: note,
+      resolvedBy: req.user!.id,
+      resolvedAt: new Date(),
+      ...(riskLevel ? { riskLevel } : {}),
+    }).where(eq(incidentReports.id, id)).returning();
+    if (!row) { res.status(404).json({ error: "Report not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "report.resolve",
+      subjectType: "incident_report",
+      subjectId: id,
+      note: note ?? undefined,
+    });
+    res.json(row);
+  } catch (err) {
+    req.log.error({ err }, "Resolve report failed");
+    res.status(503).json({ error: "Could not resolve report" });
+  }
+});
+
+router.post("/admin/accounts/:id/suspend", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 500) : "Suspended by trust team";
+  try {
+    const [row] = await db.update(accounts).set({
+      suspendedAt: new Date(),
+      suspensionReason: reason,
+      updatedAt: new Date(),
+    }).where(eq(accounts.id, id)).returning();
+    if (!row) { res.status(404).json({ error: "Account not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "account.suspend",
+      subjectType: "account",
+      subjectId: id,
+      note: reason,
+    });
+    res.json({ id, suspended: true });
+  } catch (err) {
+    req.log.error({ err }, "Suspend account failed");
+    res.status(503).json({ error: "Could not suspend account" });
+  }
+});
+
+router.get("/admin/audit", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(adminAuditLog)
+      .orderBy(desc(adminAuditLog.createdAt))
+      .limit(100);
+    res.json(rows);
+  } catch (err) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Audit log failed");
+    res.status(503).json({ error: "Audit log temporarily unavailable" });
   }
 });
 
@@ -1785,44 +2044,133 @@ const devSafeSpotApplications: SafeSpotApplication[] = [
   { id: 'ss-app-1', name: 'Catahoula Coffee', address: '375 Bush St', city: 'San Francisco', type: 'cafe', contactEmail: 'hello@catahoula.com', contactName: 'Jordan T.', description: 'Quiet specialty coffee shop with private nooks and excellent lighting.', submittedAt: new Date(Date.now() - 2 * 86400_000).toISOString(), status: 'pending' },
 ];
 
-router.post("/safespots/register", (req, res) => {
+router.post("/safespots/register", async (req, res) => {
   const { name, address, city, type, contactEmail, contactName, description } = req.body ?? {};
   if (!name || !address || !city || !contactEmail) {
     res.status(400).json({ error: "name, address, city, and contactEmail are required" }); return;
   }
-  const app: SafeSpotApplication = {
-    id: `ss-app-${crypto.randomUUID().slice(0, 8)}`,
-    name: String(name).trim(),
-    address: String(address).trim(),
-    city: String(city).trim(),
-    type: String(type ?? 'other').trim(),
-    contactEmail: String(contactEmail).trim(),
-    contactName: String(contactName ?? '').trim(),
-    description: String(description ?? '').slice(0, 500).trim(),
-    submittedAt: new Date().toISOString(),
-    status: 'pending',
-  };
-  devSafeSpotApplications.push(app);
-  req.log.info({ id: app.id, name: app.name }, "SafeSpot application submitted");
-  res.status(201).json({ id: app.id, status: 'pending' });
+  try {
+    const [row] = await db.insert(safespotApplications).values({
+      name: String(name).trim().slice(0, 120),
+      address: String(address).trim().slice(0, 200),
+      city: String(city).trim().slice(0, 80),
+      type: String(type ?? "other").trim().slice(0, 40),
+      contactEmail: String(contactEmail).trim().slice(0, 160),
+      contactName: String(contactName ?? "").trim().slice(0, 80),
+      description: String(description ?? "").slice(0, 500).trim(),
+    }).returning();
+    req.log.info({ id: row.id }, "SafeSpot application submitted");
+    res.status(201).json({ id: row.id, status: row.status });
+  } catch (err: unknown) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      const app: SafeSpotApplication = {
+        id: `ss-app-${crypto.randomUUID().slice(0, 8)}`,
+        name: String(name).trim(),
+        address: String(address).trim(),
+        city: String(city).trim(),
+        type: String(type ?? "other").trim(),
+        contactEmail: String(contactEmail).trim(),
+        contactName: String(contactName ?? "").trim(),
+        description: String(description ?? "").slice(0, 500).trim(),
+        submittedAt: new Date().toISOString(),
+        status: "pending",
+      };
+      devSafeSpotApplications.push(app);
+      res.status(201).json({ id: app.id, status: "pending" });
+      return;
+    }
+    req.log.error({ err }, "SafeSpot application failed");
+    res.status(503).json({ error: "Could not submit venue" });
+  }
 });
 
-router.get("/admin/safespots/pending", (_req, res) => {
-  res.json(devSafeSpotApplications.filter((a) => a.status === 'pending'));
+router.get("/admin/safespots/pending", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(safespotApplications)
+      .where(eq(safespotApplications.status, "pending"))
+      .orderBy(desc(safespotApplications.createdAt));
+    res.json(rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      address: row.address,
+      city: row.city,
+      type: row.type,
+      contactEmail: row.contactEmail,
+      contactName: row.contactName,
+      submittedAt: row.createdAt.toISOString(),
+      status: row.status,
+    })));
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json(devSafeSpotApplications.filter((a) => a.status === "pending"));
+      return;
+    }
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "SafeSpot pending failed");
+    res.status(503).json({ error: "Venue applications temporarily unavailable" });
+  }
 });
 
-router.post("/admin/safespots/:id/approve", (req, res) => {
-  const app = devSafeSpotApplications.find((a) => a.id === req.params.id);
-  if (!app) { res.status(404).json({ error: "Application not found" }); return; }
-  app.status = 'approved';
-  res.json(app);
+router.post("/admin/safespots/:id/approve", requireAdmin, async (req, res) => {
+  try {
+    const [app] = await db.select().from(safespotApplications).where(eq(safespotApplications.id, req.params.id));
+    if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+    await db.update(safespotApplications).set({ status: "approved" }).where(eq(safespotApplications.id, app.id));
+    await db.insert(safespots).values({
+      name: app.name,
+      category: app.type,
+      city: app.city,
+      addressHint: app.address,
+      openLate: false,
+      active: true,
+    });
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "safespot.approve",
+      subjectType: "safespot_application",
+      subjectId: app.id,
+    });
+    res.json({ ...app, status: "approved" });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      const app = devSafeSpotApplications.find((a) => a.id === req.params.id);
+      if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+      app.status = "approved";
+      res.json(app);
+      return;
+    }
+    req.log.error({ err }, "SafeSpot approve failed");
+    res.status(503).json({ error: "Could not approve venue" });
+  }
 });
 
-router.post("/admin/safespots/:id/reject", (req, res) => {
-  const app = devSafeSpotApplications.find((a) => a.id === req.params.id);
-  if (!app) { res.status(404).json({ error: "Application not found" }); return; }
-  app.status = 'rejected';
-  res.json(app);
+router.post("/admin/safespots/:id/reject", requireAdmin, async (req, res) => {
+  try {
+    const [app] = await db.update(safespotApplications)
+      .set({ status: "rejected" })
+      .where(eq(safespotApplications.id, req.params.id))
+      .returning();
+    if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "safespot.reject",
+      subjectType: "safespot_application",
+      subjectId: app.id,
+    });
+    res.json(app);
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      const app = devSafeSpotApplications.find((a) => a.id === req.params.id);
+      if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+      app.status = "rejected";
+      res.json(app);
+      return;
+    }
+    req.log.error({ err }, "SafeSpot reject failed");
+    res.status(503).json({ error: "Could not reject venue" });
+  }
 });
 
 router.get("/safespots", async (req, res) => {
@@ -1890,8 +2238,7 @@ router.get("/safespots/:id", async (req, res) => {
 
 router.post("/companion/stripe/onboard", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -1947,8 +2294,7 @@ router.post("/companion/stripe/onboard", async (req, res) => {
 
 router.get("/companion/stripe/status", async (req, res) => {
   const companionId =
-    (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+    getActorId(req, "companion");
   if (!companionId) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -2104,22 +2450,57 @@ function formatBooking(b: {
 // ---------------------------------------------------------------------------
 // Platform announcement (admin-set, shown on home page)
 // ---------------------------------------------------------------------------
-let devAnnouncement: { message: string; kind: 'info' | 'warning' | 'success'; active: boolean } = {
-  message: '', kind: 'info', active: false,
-};
-
-router.get('/announcement', (_req, res) => {
-  res.json(devAnnouncement);
+router.get("/announcement", async (_req, res) => {
+  try {
+    const [row] = await db.select().from(platformSettings).where(eq(platformSettings.id, "default")).limit(1);
+    res.json({
+      message: row?.announcementMessage ?? "",
+      kind: row?.announcementKind ?? "info",
+      active: row?.announcementActive ?? false,
+      accessFeeEnabled: row?.accessFeeEnabled ?? false,
+      accessFeeCents: row?.accessFeeCents ?? 0,
+      accessFeeLabel: row?.accessFeeLabel ?? "Messaging access",
+    });
+  } catch {
+    res.json({ message: "", kind: "info", active: false, accessFeeEnabled: false, accessFeeCents: 0 });
+  }
 });
 
-router.post('/admin/announcement', (req, res) => {
+router.post("/admin/announcement", requireAdmin, async (req, res) => {
   const { message, kind, active } = req.body ?? {};
-  devAnnouncement = {
-    message: String(message ?? '').slice(0, 200),
-    kind: ['info', 'warning', 'success'].includes(kind) ? kind : 'info',
-    active: Boolean(active),
+  const announcement = {
+    announcementMessage: String(message ?? "").slice(0, 200),
+    announcementKind: ["info", "warning", "success"].includes(kind) ? kind : "info",
+    announcementActive: Boolean(active),
+    updatedAt: new Date(),
   };
-  res.json({ ok: true, announcement: devAnnouncement });
+  try {
+    await db
+      .insert(platformSettings)
+      .values({ id: "default", ...announcement })
+      .onConflictDoUpdate({
+        target: platformSettings.id,
+        set: announcement,
+      });
+    await writeAudit({
+      actorId: req.user!.id,
+      action: active ? "announcement.publish" : "announcement.clear",
+      subjectType: "platform_settings",
+      subjectId: "default",
+      note: announcement.announcementMessage || undefined,
+    });
+    res.json({
+      ok: true,
+      announcement: {
+        message: announcement.announcementMessage,
+        kind: announcement.announcementKind,
+        active: announcement.announcementActive,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Announcement update failed");
+    res.status(503).json({ error: "Could not update announcement" });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -2161,7 +2542,7 @@ router.get('/platform/health', async (_req, res) => {
 // ---------------------------------------------------------------------------
 // Platform analytics summary  GET /platform/analytics
 // ---------------------------------------------------------------------------
-router.get('/platform/analytics', async (_req, res) => {
+router.get('/platform/analytics', requireAdmin, async (_req, res) => {
   try {
     const rows = await db.select().from(bookings).orderBy(desc(bookings.createdAt));
 
@@ -2217,7 +2598,7 @@ router.get('/platform/analytics', async (_req, res) => {
 // ---------------------------------------------------------------------------
 // Booking search by customer or companion  GET /bookings/search
 // ---------------------------------------------------------------------------
-router.get('/bookings/search', async (req, res) => {
+router.get('/bookings/search', requireAdmin, async (req, res) => {
   const { q, status, limit } = req.query as Record<string, string | undefined>;
   const lim = Math.min(Number(limit ?? 50), 200);
   try {

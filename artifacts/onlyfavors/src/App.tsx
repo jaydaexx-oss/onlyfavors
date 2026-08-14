@@ -24,6 +24,7 @@ import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { AuthProvider, dashboardPath, requestOtp, useAuth, verifyOtp } from '@/lib/auth-session';
 // NotFound defined inline below to match design system
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 
@@ -41,6 +42,8 @@ function Brand({ dark = false }: { dark?: boolean }) {
 
 function Header() {
   const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const dashboard = dashboardPath(user);
   return <header className="sticky top-0 z-40 border-b border-[#ddcfc6] bg-[#f8f1e9]/90 backdrop-blur-md">
     <div className="mx-auto flex h-[74px] max-w-7xl items-center justify-between px-5 lg:px-8">
       <Brand />
@@ -57,9 +60,16 @@ function Header() {
           aria-label="Open command palette" data-testid="button-cmd-k">
           <Search className="h-3 w-3" /><span className="font-mono">⌘K</span>
         </button>
-        <NotificationBell role="customer" />
+        {user && <NotificationBell role={user.roles.includes('companion') ? 'companion' : 'customer'} />}
         <SavedNavIcon />
-        <Link href="/login" className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-login"><LogIn className="h-4 w-4" />Sign in</Link>
+        {user ? (
+          <>
+            <Link href={dashboard} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-account">{user.displayName || user.email.split('@')[0]}</Link>
+            <button type="button" onClick={() => void logout()} className="inline-flex h-10 items-center rounded-full px-3 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="button-logout">Sign out</button>
+          </>
+        ) : (
+          <Link href="/login" className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-login"><LogIn className="h-4 w-4" />Sign in</Link>
+        )}
         <Link href="/messages" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#654c5f] transition hover:bg-[#eee2d9] hover:text-[#7f2e62]" data-testid="link-nav-messages" aria-label="Messages">
           <MessageCircle className="h-5 w-5" />
         </Link>
@@ -78,7 +88,14 @@ function Header() {
         <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
         <Link href="/companion/apply" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-apply">Become a companion</Link>
         <div className="my-1 h-px bg-[#ddcfc6]" />
-        <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
+        {user ? (
+          <>
+            <Link href={dashboard} onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-account">Your workspace</Link>
+            <button type="button" onClick={() => { setOpen(false); void logout(); }} className="rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-button-logout">Sign out</button>
+          </>
+        ) : (
+          <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
+        )}
       </div>
     </div>}
   </header>;
@@ -851,19 +868,18 @@ function Home() {
           </div>
         </section>
 
-        {/* ── Trust stats strip ── */}
-        <section className="border-b border-[#ddcfc6] bg-[#f8f1e9]">
+        {/* ── Trust principles strip ── */}
+        <section className="border-b border-[#ddcfc6] bg-[#FFF7ED]">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-6 px-5 py-5 lg:px-8 sm:gap-10">
             {([
-              { label: 'Identity-verified companions', value: '100%' },
-              { label: 'Cities with SafeSpots', value: '12+' },
-              { label: 'Trust & safety team, always on', value: '24/7' },
-              { label: 'Zero-tolerance policy on violations', value: '1st offense' },
-              { label: 'Platonic bookings completed', value: '4,800+' },
+              { label: 'Companions are identity-verified before they appear in Explore', value: '18+' },
+              { label: 'Public SafeSpot meetings, never a published home address', value: 'SafeSpot' },
+              { label: 'Trust team reviews every safety report', value: 'Human review' },
+              { label: 'Sexual services, minors, and off-platform payments are prohibited', value: 'Zero tolerance' },
             ] as const).map(({ value, label }) => (
               <div key={label} className="flex items-center gap-3">
                 <p className="font-serif text-2xl text-[#48213d]">{value}</p>
-                <p className="max-w-[120px] text-[10px] leading-4 text-[#806c76]">{label}</p>
+                <p className="max-w-[160px] text-[10px] leading-4 text-[#806c76]">{label}</p>
               </div>
             ))}
           </div>
@@ -1220,7 +1236,7 @@ function Home() {
               { initials: 'J', name: 'Jordan', city: 'New York', rate: '$75', rating: 4.8, reviews: 27, acts: ['Gallery tours', 'Cooking classes', 'Evening walks'], id: 'companion-jordan' },
               { initials: 'S', name: 'Simone', city: 'Chicago', rate: '$60', rating: 4.9, reviews: 19, acts: ['Architecture tours', 'Jazz evenings', 'Museum visits'], id: 'companion-simone' },
             ] as const).map((c) => (
-              <Link key={c.id} href={`/companion/${c.id}`}
+              <Link key={c.id} href={`/companions/${c.id}`}
                 className="group flex flex-col rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-0.5 hover:border-[#9d557e] hover:shadow-md"
                 data-testid={`home-spotlight-${c.id}`}>
                 <div className="flex items-center gap-3">
@@ -10841,9 +10857,41 @@ function Apply() {
 }
 
 function Login() {
-  const [email, setEmail] = useState(''); const [sent, setSent] = useState(false); const [code, setCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [devCode, setDevCode] = useState('');
   const [, navigate] = useLocation();
-  return <Shell bare><main className="grid min-h-[100dvh] lg:grid-cols-[.8fr_1.2fr]"><div className="hidden bg-[#3d2038] p-10 text-[#f9efe5] lg:flex lg:flex-col lg:justify-between"><Brand dark /><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your private front door</p><h1 className="mt-5 max-w-md font-serif text-6xl leading-[.92]">Good company<br /><em>starts here.</em></h1><p className="mt-6 max-w-sm text-sm leading-7 text-[#d9c4cf]">Sign in with an email code. No passwords to remember, no social profile to connect.</p></div><p className="text-xs text-[#b795a7]">OnlyFavors · Private by design.</p></div><div className="flex flex-col p-5 md:p-10"><div className="flex justify-between lg:justify-end"><div className="lg:hidden"><Brand /></div><Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-login-home"><ArrowLeft className="h-4 w-4" />Back home</Link></div><div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center"><div className="mb-8 lg:hidden"><h1 className="font-serif text-5xl leading-none text-[#48213d]">Welcome back.</h1><p className="mt-3 text-sm text-[#725e69]">Your private front door to good company.</p></div>{!sent ? <form onSubmit={(e) => { e.preventDefault(); setSent(true); }}><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Email sign in</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">A code, not a password.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We will send a one-time code to your email. It expires shortly and is never used for marketing.</p><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Email address</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-login-email" /></label><Button type="submit" className="mt-5 w-full" testId="button-send-login-code">Send secure code <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={(e) => { e.preventDefault(); if (code.length >= 6) navigate('/dashboard/customer'); }}><button type="button" onClick={() => setSent(false)} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="button-change-login-email"><ArrowLeft className="h-4 w-4" />Change email</button><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Check your inbox</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">Enter your code.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We sent a six-character code to <strong>{email}</strong>.</p><input required inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} className="mt-8 h-14 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-center font-mono text-xl tracking-[.5em] outline-none focus:border-[#7f2e62]" placeholder="000000" data-testid="input-login-code" /><Button type="submit" disabled={code.length < 6} className="mt-5 w-full" testId="button-verify-login-code">Verify and continue <Check className="h-4 w-4" /></Button></form>}<p className="mt-8 text-center text-[11px] leading-5 text-[#9b858e]">By continuing, you agree to our <Link href="/terms" className="font-bold text-[#7f2e62]" data-testid="link-login-terms">community guidelines</Link> and <Link href="/privacy" className="font-bold text-[#7f2e62]" data-testid="link-login-privacy">privacy policy</Link>.</p></div></div></main></Shell>;
+  const { refresh } = useAuth();
+
+  const send = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const result = await requestOtp(email, 'login');
+      setDevCode(result.devCode ?? '');
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send a code');
+    } finally { setBusy(false); }
+  };
+
+  const verify = async (e: FormEvent) => {
+    e.preventDefault();
+    if (code.replace(/\D/g, '').length !== 8) return;
+    setBusy(true); setError('');
+    try {
+      const result = await verifyOtp(email, code, 'login');
+      await refresh();
+      navigate(dashboardPath(result.user));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not verify that code');
+    } finally { setBusy(false); }
+  };
+
+  return <Shell bare><main className="grid min-h-[100dvh] lg:grid-cols-[.8fr_1.2fr]"><div className="hidden bg-[#3E1027] p-10 text-[#f9efe5] lg:flex lg:flex-col lg:justify-between"><Brand dark /><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your private front door</p><h1 className="mt-5 max-w-md font-serif text-6xl leading-[.92]">Good company<br /><em>starts here.</em></h1><p className="mt-6 max-w-sm text-sm leading-7 text-[#d9c4cf]">Sign in with an 8-digit email code. No passwords to remember, no social profile to connect.</p></div><p className="text-xs text-[#b795a7]">OnlyFavors · Private by design.</p></div><div className="flex flex-col p-5 md:p-10"><div className="flex justify-between lg:justify-end"><div className="lg:hidden"><Brand /></div><Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-login-home"><ArrowLeft className="h-4 w-4" />Back home</Link></div><div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center"><div className="mb-8 lg:hidden"><h1 className="font-serif text-5xl leading-none text-[#48213d]">Welcome back.</h1><p className="mt-3 text-sm text-[#725e69]">Your private front door to good company.</p></div>{!sent ? <form onSubmit={send}><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Email sign in</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">A code, not a password.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We will send an 8-digit code to your email. It expires in 10 minutes and is never used for marketing.</p><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Email address</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#8F294C]" data-testid="input-login-email" /></label>{error && <p className="mt-3 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{error}</p>}<Button type="submit" disabled={busy} className="mt-5 w-full" testId="button-send-login-code">{busy ? 'Sending…' : 'Send secure code'} <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={verify}><button type="button" onClick={() => setSent(false)} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="button-change-login-email"><ArrowLeft className="h-4 w-4" />Change email</button><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Check your inbox</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">Enter your code.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We sent an 8-digit code to <strong>{email}</strong>.</p>{devCode && <p className="mt-3 rounded-xl bg-[#e8f0e8] p-3 text-xs text-[#31533f]">Development code: <span className="font-mono tracking-[.3em]">{devCode}</span></p>}<input required inputMode="numeric" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-8 h-14 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-center font-mono text-xl tracking-[.5em] outline-none focus:border-[#8F294C]" placeholder="00000000" data-testid="input-login-code" />{error && <p className="mt-3 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{error}</p>}<Button type="submit" disabled={busy || code.length !== 8} className="mt-5 w-full" testId="button-verify-login-code">{busy ? 'Verifying…' : 'Verify and continue'} <Check className="h-4 w-4" /></Button></form>}<p className="mt-8 text-center text-[11px] leading-5 text-[#9b858e]">By continuing, you confirm you are 18 or older and agree to our <Link href="/terms" className="font-bold text-[#8F294C]" data-testid="link-login-terms">community guidelines</Link> and <Link href="/privacy" className="font-bold text-[#8F294C]" data-testid="link-login-privacy">privacy policy</Link>.</p></div></div></main></Shell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -10857,6 +10905,9 @@ function SafetyReportPage() {
   const [bookingRef, setBookingRef] = useState('');
   const [urgent, setUrgent] = useState(false);
 
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
   const REPORT_TYPES = [
     'Boundary violation',
     'Inappropriate communication',
@@ -10868,10 +10919,28 @@ function SafetyReportPage() {
     'Other',
   ];
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!reportType || !detail.trim()) return;
-    setStep('done');
+    if (!reportType || !detail.trim() || submitting) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportType, detail, bookingRef, urgent }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? 'Could not submit report');
+      }
+      setStep('done');
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Could not submit report');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -10956,10 +11025,11 @@ function SafetyReportPage() {
                 Your report is confidential. The person you report will never be told who filed the report.
               </div>
 
-              <button type="submit" disabled={!reportType || !detail.trim()}
+              {submitError && <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{submitError}</p>}
+              <button type="submit" disabled={submitting || !reportType || !detail.trim()}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e] disabled:opacity-40"
                 data-testid="button-submit-report">
-                <ShieldCheck className="h-4 w-4" />Submit report
+                <ShieldCheck className="h-4 w-4" />{submitting ? 'Sending…' : 'Submit report'}
               </button>
             </form>
           </>
@@ -11365,8 +11435,45 @@ function SafeSpotDetail() {
 }
 
 function AdminLogin() {
+  const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
-  return <Shell bare><main className="grid min-h-[100dvh] place-items-center bg-[#3d2038] px-5"><div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#48243f] p-8 text-[#f9efe5] md:p-10"><div className="flex items-center justify-between"><Brand dark /><span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span></div>{sent ? <div className="mt-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><Check /></div><h1 className="mt-7 font-serif text-4xl">Check your inbox.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">A secure operations code is on its way. This workspace is restricted to approved trust staff.</p><Link href="/admin/operations" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]" data-testid="link-admin-operations">Continue to operations <ArrowRight className="h-4 w-4" /></Link></div> : <form onSubmit={(e) => { e.preventDefault(); setSent(true); }} className="mt-12"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p><h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations email</span><input required type="email" className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3d2038] px-4 text-sm text-[#f9efe5] outline-none focus:border-[#d897b6]" data-testid="input-admin-email" /></label><Button type="submit" variant="primary" className="mt-5 w-full" testId="button-admin-login">Send secure code <KeyRound className="h-4 w-4" /></Button></form>}<Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home"><ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors</Link></div></main></Shell>;
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [devCode, setDevCode] = useState('');
+  const [, navigate] = useLocation();
+  const { refresh } = useAuth();
+
+  const send = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const result = await requestOtp(email, 'admin');
+      setDevCode(result.devCode ?? '');
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send a code');
+    } finally { setBusy(false); }
+  };
+
+  const verify = async (e: FormEvent) => {
+    e.preventDefault();
+    if (code.replace(/\D/g, '').length !== 8) return;
+    setBusy(true); setError('');
+    try {
+      const result = await verifyOtp(email, code, 'admin');
+      await refresh();
+      if (!result.user.roles.includes('admin')) {
+        setError('This workspace is restricted to approved trust staff.');
+        return;
+      }
+      navigate('/admin/operations');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not verify that code');
+    } finally { setBusy(false); }
+  };
+
+  return <Shell bare><main className="grid min-h-[100dvh] place-items-center bg-[#3E1027] px-5"><div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#5D1833] p-8 text-[#f9efe5] md:p-10"><div className="flex items-center justify-between"><Brand dark /><span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span></div>{sent ? <form onSubmit={verify} className="mt-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><KeyRound /></div><h1 className="mt-7 font-serif text-4xl">Enter your operations code.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">An 8-digit code was sent to <strong>{email}</strong>. This workspace is restricted to approved trust staff.</p>{devCode && <p className="mt-3 rounded-xl bg-[#3E1027] p-3 font-mono text-xs tracking-[.3em] text-[#BDEBD7]">{devCode}</p>}<input required inputMode="numeric" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-6 h-12 w-full rounded-xl border border-[#79556d] bg-[#3E1027] px-4 text-center font-mono tracking-[.4em] text-[#f9efe5] outline-none focus:border-[#d897b6]" placeholder="00000000" data-testid="input-admin-code" />{error && <p className="mt-3 text-xs text-[#FF625D]">{error}</p>}<Button type="submit" disabled={busy || code.length !== 8} variant="primary" className="mt-5 w-full" testId="button-admin-verify">{busy ? 'Verifying…' : 'Continue to operations'} <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={send} className="mt-12"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p><h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations email</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3E1027] px-4 text-sm text-[#f9efe5] outline-none focus:border-[#d897b6]" data-testid="input-admin-email" /></label>{error && <p className="mt-3 text-xs text-[#FF625D]">{error}</p>}<Button type="submit" disabled={busy} variant="primary" className="mt-5 w-full" testId="button-admin-login">{busy ? 'Sending…' : 'Send secure code'} <KeyRound className="h-4 w-4" /></Button></form>}<Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home"><ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors</Link></div></main></Shell>;
 }
 
 function AdminAnnouncementControl() {
@@ -11451,6 +11558,14 @@ function AdminAnnouncementControl() {
 }
 
 function AdminOperations() {
+  const { user, loading } = useAuth();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (!loading && (!user || !user.roles.includes('admin'))) {
+      navigate('/admin/login');
+    }
+  }, [loading, user, navigate]);
+
   const overview = useGetAdminOverview({ query: { queryKey: getGetAdminOverviewQueryKey(), retry: false } });
   const companions = useAdminCompanions();
   const bookings_ = useAdminBookings();
@@ -11515,7 +11630,7 @@ function AdminOperations() {
             </div>
             <div className="mt-7 space-y-2">
               <QueueRow icon={ClipboardCheck} title="Companion verification" count={data?.verificationQueue ?? 0} href="#companion-review" />
-              <QueueRow icon={CircleAlert}   title="Safety reports"          count={data?.openReports ?? 0}       href="/safety" />
+              <QueueRow icon={CircleAlert}   title="Safety reports"          count={data?.openReports ?? 0}       href="#safety-reports" />
               <QueueRow icon={Clock3}         title="Check-ins due"           count={data?.checkInsDue ?? 0}       href="#bookings" />
             </div>
           </div>
@@ -11523,7 +11638,7 @@ function AdminOperations() {
             <ShieldCheck className="h-6 w-6 text-[#d897b6]" />
             <h2 className="mt-12 font-serif text-3xl leading-none">Review with care.</h2>
             <p className="mt-3 text-sm leading-6 text-[#d9c4cf]">Every number here represents a person waiting for a considered response. Leave an audit note whenever you make a decision.</p>
-            <button type="button" onClick={() => window.alert('Audit log is ready for your next review.')}
+            <button type="button" onClick={() => document.getElementById('admin-audit')?.scrollIntoView({ behavior: 'smooth' })}
               className="mt-6 inline-flex items-center gap-2 text-xs font-bold text-[#e2b3c9]"
               data-testid="button-open-audit-log">
               Open audit log <ArrowRight className="h-3.5 w-3.5" />
@@ -11647,6 +11762,9 @@ function AdminOperations() {
           );
         })()}
 
+        <AdminReportsSection />
+        <AdminAuditSection />
+
         {/* Recent bookings */}
         <div id="bookings" className="mt-10 scroll-mt-8">
           <div className="mb-5 flex items-center justify-between">
@@ -11698,6 +11816,96 @@ function AdminOperations() {
 
       </main>
     </Shell>
+  );
+}
+
+function AdminReportsSection() {
+  const qc = useQueryClient();
+  const reports = useQuery<{ id: string; reportType: string; detail: string; urgent: boolean; status: string; createdAt: string; riskLevel: string }[]>({
+    queryKey: ['admin-reports'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/reports', { credentials: 'include' });
+      if (res.status === 401 || res.status === 403) return [];
+      if (!res.ok) throw new Error('Could not load reports');
+      return res.json();
+    },
+    retry: false,
+  });
+  const [acting, setActing] = useState<string | null>(null);
+
+  const resolve = async (id: string) => {
+    setActing(id);
+    await fetch(`/api/admin/reports/${id}/resolve`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Reviewed by trust team' }),
+    });
+    qc.invalidateQueries({ queryKey: ['admin-reports'] });
+    qc.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
+    setActing(null);
+  };
+
+  return (
+    <div id="safety-reports" className="mt-10 scroll-mt-8">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Safety reports</p>
+      <h2 className="mt-1 font-serif text-3xl text-[#48213d]">Open concerns</h2>
+      {reports.isLoading && <div className="mt-4 skeleton h-24 rounded-[16px]" />}
+      {!reports.isLoading && (reports.data ?? []).length === 0 && (
+        <div className="mt-4 rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-8 text-center">
+          <p className="font-serif text-xl text-[#48213d]">No reports in the queue.</p>
+          <p className="mt-1 text-xs text-[#806c76]">Live incident reports will appear here. Nothing is invented for empty states.</p>
+        </div>
+      )}
+      <div className="mt-4 space-y-3">
+        {(reports.data ?? []).map((report) => (
+          <div key={report.id} className="rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-[#48213d]">{report.reportType}</p>
+                <p className="mt-1 text-xs leading-5 text-[#725e69]">{report.detail}</p>
+                <p className="mt-2 font-mono text-[10px] text-[#9b858e]">{new Date(report.createdAt).toLocaleString()} · {report.status} · {report.riskLevel}</p>
+              </div>
+              {report.status === 'open' && (
+                <button type="button" disabled={acting === report.id} onClick={() => void resolve(report.id)}
+                  className="rounded-full bg-[#8F294C] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  {acting === report.id ? 'Saving…' : 'Resolve'}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminAuditSection() {
+  const audit = useQuery<{ id: string; action: string; subjectType: string; subjectId: string; note: string | null; createdAt: string; actorId: string }[]>({
+    queryKey: ['admin-audit'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/audit', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    retry: false,
+  });
+  return (
+    <div id="admin-audit" className="mt-10 scroll-mt-8">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Immutable audit log</p>
+      <h2 className="mt-1 font-serif text-3xl text-[#48213d]">Every admin action</h2>
+      {!audit.isLoading && (audit.data ?? []).length === 0 && (
+        <p className="mt-4 text-sm text-[#806c76]">No recorded actions yet. Approvals, rejections, and report resolutions will appear here.</p>
+      )}
+      <div className="mt-4 space-y-2">
+        {(audit.data ?? []).map((row) => (
+          <div key={row.id} className="grid gap-1 rounded-xl border border-[#ece1d9] bg-white px-4 py-3 md:grid-cols-[160px_1fr]">
+            <p className="font-mono text-[10px] text-[#9b858e]">{new Date(row.createdAt).toLocaleString()}</p>
+            <p className="text-sm text-[#48213d]"><span className="font-bold">{row.action}</span> · {row.subjectType} {row.subjectId}{row.note ? ` — ${row.note}` : ''}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -13576,7 +13784,7 @@ function App() {
     });
   }, []);
 
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><TooltipProvider><AuthProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></AuthProvider></TooltipProvider></QueryClientProvider>;
 }
 
 export default App;

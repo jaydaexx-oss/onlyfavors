@@ -1,4 +1,4 @@
-import { getStripeSync, getUncachableStripeClient } from "./stripeClient";
+import { getStripeSync, getUncachableStripeClient, getStripeWebhookSecret } from "./stripeClient";
 import { handlePaymentEvent } from "../routes/stripe";
 import { logger } from "./logger";
 
@@ -25,7 +25,7 @@ export class WebhookHandlers {
     // 2. Handle business logic — update booking status based on payment events
     try {
       const stripe = await getUncachableStripeClient();
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+      const webhookSecret = await getStripeWebhookSecret();
       const event = stripe.webhooks.constructEvent(
         payload,
         signature,

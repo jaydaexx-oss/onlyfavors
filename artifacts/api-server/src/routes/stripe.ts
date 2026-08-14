@@ -3,6 +3,7 @@ import { db, bookings } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getStripePublishableKey, getUncachableStripeClient } from "../lib/stripeClient";
 import { logger } from "../lib/logger";
+import { getActorId } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -64,8 +65,7 @@ export async function handlePaymentEvent(
 router.get("/stripe/booking/:id/status", async (req, res) => {
   const { id } = req.params;
   // Auth check — only the booking owner should poll this
-  const customerId = (req as any).user?.id ??
-    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  const customerId = getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;

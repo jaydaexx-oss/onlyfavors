@@ -10,6 +10,14 @@ async function getStripeCredentials(): Promise<{
   publishableKey?: string;
   webhookSecret?: string;
 }> {
+  if (process.env.STRIPE_SECRET_KEY) {
+    return {
+      secretKey: process.env.STRIPE_SECRET_KEY,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+      webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+    };
+  }
+
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? "repl " + process.env.REPL_IDENTITY
@@ -85,6 +93,14 @@ export async function getStripePublishableKey(): Promise<string> {
     );
   }
   return publishableKey;
+}
+
+export async function getStripeWebhookSecret(): Promise<string> {
+  const { webhookSecret } = await getStripeCredentials();
+  if (!webhookSecret) {
+    throw new Error("Stripe webhook secret is not configured");
+  }
+  return webhookSecret;
 }
 
 /**

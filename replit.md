@@ -46,8 +46,10 @@ The first milestone includes the public home, companion discovery, profile and b
 
 ## Gotchas
 
-- OnlyFavors expects the connected Supabase project to expose approved `companion_profiles` and active `safespots` REST resources before discovery can serve records.
-- Stripe Connect, OTP authorization, RLS, and the full application schema remain follow-up production work; do not present the current preview as payment-ready.
+- Apply `supabase/migrations/0001_onlyfavors_core.sql` (or `pnpm --filter @workspace/db run push`) before discovery and auth can persist. Without `DATABASE_URL`, the API fails closed.
+- Production OTP email requires `RESEND_API_KEY` and `AUTH_PEPPER`. Set `ADMIN_BOOTSTRAP_EMAIL` to grant the first admin role.
+- Stripe works via the Replit connector or `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET`.
+- This repo is Vite + Express, not Next.js. Deploying to Vercel requires a separate hosting adapter and must not expose service-role keys to the browser.
 
 ## Pointers
 
