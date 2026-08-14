@@ -30,8 +30,8 @@ function fmt(seconds: number) {
 
 // Demo booking data — replaced by real API data once Task #1 auth lands
 const DEMO = {
-  companion: { name: 'Leilani K.', activity: 'Evening walk & coffee', city: 'Waikīkī' },
-  venue: { name: 'The Surfjack Hotel Café', hint: 'Pool deck entrance, ask for the OF table' },
+  companion: { name: 'Isadora V.', activity: 'Art walk & coffee', city: 'Miami' },
+  venue: { name: 'Wynwood Café', hint: 'Wynwood · street-level, art district — look for the OF check-in sign' },
   totalMinutes: 120,
   boundaries: ['Platonic only', 'No photography without asking', 'Public spaces only'],
 };

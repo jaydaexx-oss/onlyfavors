@@ -3351,7 +3351,8 @@ function Book() {
   const companionQuery = useGetCompanion(companionId, { query: { queryKey: getGetCompanionQueryKey(companionId), enabled: Boolean(companionId) } });
   const companion = companionQuery.data;
   const spotsQuery = useListSafeSpots(companion?.city ? { city: companion.city } : undefined, { query: { queryKey: getListSafeSpotsQueryKey(companion?.city ? { city: companion.city } : undefined), enabled: Boolean(companion?.city), retry: false } });
-  const [activity, setActivity] = useState(''); const [date, setDate] = useState(''); const [time, setTime] = useState(''); const [duration, setDuration] = useState('2'); const [spot, setSpot] = useState(''); const [created, setCreated] = useState<Booking | null>(null);
+  // Pre-fill activity from ?activity= query param (set by ActivityDetail "Book now" CTA)
+  const [activity, setActivity] = useState(() => search.get('activity') ?? ''); const [date, setDate] = useState(''); const [time, setTime] = useState(''); const [duration, setDuration] = useState('2'); const [spot, setSpot] = useState(''); const [created, setCreated] = useState<Booking | null>(null);
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutLabel, setCheckoutLabel] = useState('');
   const [checkoutAmount, setCheckoutAmount] = useState(0);
