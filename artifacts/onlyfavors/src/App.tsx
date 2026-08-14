@@ -1619,6 +1619,17 @@ function Explore() {
   const [language, setLanguage] = useState('');
   const [maxRate, setMaxRate] = useState('');
   const [instant, setInstant] = useState(false);
+  const [availNow, setAvailNow] = useState(false);
+  const [timeWindow, setTimeWindow] = useState<'now' | 'tonight' | 'weekend' | null>(null);
+  const [customDate, setCustomDate] = useState('');
+  const [savedIds, setSavedIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]')); }
+    catch { return new Set(); }
+  });
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc' | 'most_experienced'>('best');
+  const [filters, setFilters] = useState(false);
+  const [vibe, setVibe] = useState<string | null>(null);
 
   // Sync key filters to URL so results are shareable / survive back-navigation
   useEffect(() => {
@@ -1633,17 +1644,6 @@ function Explore() {
       window.history.replaceState(null, '', next);
     } catch {}
   }, [city, activity, language, vibe]);
-  const [availNow, setAvailNow] = useState(false);
-  const [timeWindow, setTimeWindow] = useState<'now' | 'tonight' | 'weekend' | null>(null);
-  const [customDate, setCustomDate] = useState('');
-  const [savedIds, setSavedIds] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]')); }
-    catch { return new Set(); }
-  });
-  const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc' | 'most_experienced'>('best');
-  const [filters, setFilters] = useState(false);
-  const [vibe, setVibe] = useState<string | null>(null);
 
   // View: list or map
   const [view, setView] = useState<'list' | 'map'>('list');
@@ -10430,7 +10430,7 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
           );
         })()}
         {isCustomer && (() => {
-          const completedBks = (allBookings ?? []).filter((b) => b.status === 'completed');
+          const completedBks = (customerBookings.data ?? []).filter((b) => b.status === 'completed');
           const totalSpentCents = completedBks.reduce((s, b) => s + (b.totalCents ?? 0), 0);
           const totalHours = completedBks.reduce((s, b) => s + (b.durationHours ?? 0), 0);
           const depositCreditCents = completedBks.reduce((s, b) => s + (b.depositCents ?? 0), 0);
