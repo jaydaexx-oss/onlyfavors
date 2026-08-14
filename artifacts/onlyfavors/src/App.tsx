@@ -6,7 +6,7 @@ import {
   CircleAlert, ClipboardCheck, Clock3, Coffee, Compass, EyeOff, FileText, Gift, Heart, HeartHandshake, HelpCircle,
   KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Mail, Map, MapPin, Menu, MessageCircle, MessageSquare,
   Navigation2, PanelLeft, Pencil, Plus, RefreshCw, Search, Send, Share2, Shield, ShieldCheck, SlidersHorizontal,
-  Sparkles, Star, Sunrise, TrendingUp, User, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, Wine, X, Zap, Lock, Lightbulb, Mountain,
+  Sparkles, Star, Sunrise, TrendingUp, User, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, Wine, X, Zap, Lock, Lightbulb, Mountain, Music,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
@@ -4482,7 +4482,66 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['It\'s okay to not know what you want to talk about — just start', 'Sessions work well for processing big decisions or transitions', 'This is a good activity if it\'s your first OnlyFavors booking'],
     goodFor: ['People going through a life transition', 'Anyone who wants to think out loud with a thoughtful listener', 'Those who want to practice articulating ideas or plans'],
     avgDuration: '1–2 hours', avgRate: '$55–$70 / hour',
-    companions: [{ id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 }],
+    companions: [
+      { id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 },
+      { id: 'companion-finn', initials: 'FO', name: 'Finn O.', city: 'Portland', rate: 55, rating: 4.8 },
+    ],
+  },
+  'brewery-tours': {
+    name: 'Brewery tours', category: 'Food & Drink', color: '#f3ead7', textColor: '#9a6d25', icon: UtensilsCrossed,
+    tagline: 'Visit local craft breweries with a companion who knows their hops from their malts.',
+    intro: 'The craft brewery scene varies wildly by city — some are loud taprooms, others are quiet tasting rooms with barrel programs. A companion who knows their way around the local scene can take you to the right ones for your palate.',
+    whatToExpect: [
+      'Your companion will map out 2–4 breweries depending on the neighborhood and your pace',
+      'Sessions begin at a SafeSpot — often the first brewery on the list',
+      'Tastings are self-paced; your companion can help navigate tasting menus',
+      'Most brewery tour outings run 2.5–3.5 hours',
+    ],
+    tips: ['Eat before you go — tasting on an empty stomach changes the experience', 'Let your companion know if you prefer sours, IPAs, lagers, or stouts', 'Weekday afternoons tend to be quieter and more talkative'],
+    goodFor: ['Beer enthusiasts new to a city\'s scene', 'People who want a social afternoon that isn\'t a bar crawl', 'Travelers who want to explore local craft culture'],
+    avgDuration: '2.5–3.5 hours', avgRate: '$55–$75 / hour',
+    companions: [
+      { id: 'companion-ruth', initials: 'RK', name: 'Ruth K.', city: 'Denver', rate: 58, rating: 4.7 },
+      { id: 'companion-finn', initials: 'FO', name: 'Finn O.', city: 'Portland', rate: 55, rating: 4.8 },
+      { id: 'companion-cass', initials: 'CM', name: 'Cass M.', city: 'Austin', rate: 62, rating: 4.8 },
+    ],
+  },
+  'jazz-evenings': {
+    name: 'Jazz evenings', category: 'Social & Events', color: '#dce4f5', textColor: '#1e3460', icon: Music,
+    tagline: 'Discover great jazz venues with a companion who knows the scene.',
+    intro: 'Jazz venues are some of the most welcoming and intimate live music spaces in any city — but knowing which clubs have the best regular acts, the best sound, and the right atmosphere takes local knowledge.',
+    whatToExpect: [
+      'Your companion will suggest a venue based on what\'s playing and your taste',
+      'Sessions typically start with a drink at the SafeSpot bar before the set begins',
+      'Most jazz outings run 2–3 hours',
+      'Your companion will give context on the musicians and the music without being a lecture',
+    ],
+    tips: ['Arrive early at small jazz clubs — seating fills up fast on good nights', 'Let your companion know if you prefer traditional, contemporary, or Latin jazz', 'Quieter conversation is expected while musicians are playing'],
+    goodFor: ['First-timers at jazz venues who want a knowledgeable companion', 'Music lovers visiting a new city', 'Anyone who wants a sophisticated, relaxed evening with great sound'],
+    avgDuration: '2–3 hours', avgRate: '$60–$80 / hour',
+    companions: [
+      { id: 'companion-devon', initials: 'DH', name: 'Devon H.', city: 'Boston', rate: 70, rating: 4.8 },
+      { id: 'companion-simone', initials: 'SA', name: 'Simone A.', city: 'Chicago', rate: 60, rating: 4.9 },
+    ],
+  },
+  'farmers-market-visits': {
+    name: 'Farmers market visits', category: 'Food & Drink', color: '#f3ead7', textColor: '#9a6d25', icon: UtensilsCrossed,
+    tagline: 'Browse local produce, artisans, and street food with someone who knows where to look.',
+    intro: 'Farmers markets are best experienced slowly — with someone who knows which stalls are worth stopping at, what\'s in season, and where the line for that particular pastry vendor moves fastest.',
+    whatToExpect: [
+      'Markets are public outdoor spaces — perfect SafeSpot starting points',
+      'Your companion will point out what\'s fresh, what\'s local, and what you shouldn\'t miss',
+      'Sessions run 1.5–2.5 hours depending on the size of the market',
+      'Usually ends with coffee or a snack from the market',
+    ],
+    tips: ['Bring a tote bag and some cash (many stalls are card-only, but having cash helps)', 'Saturday mornings are peak hours; Sunday is often more relaxed', 'Let your companion know if you want to focus on produce, prepared food, or artisan goods'],
+    goodFor: ['Food lovers new to a neighborhood or city', 'People who want a casual, unhurried morning outing', 'Anyone wanting to find the best local ingredients in a new place'],
+    avgDuration: '1.5–2.5 hours', avgRate: '$52–$70 / hour',
+    companions: [
+      { id: 'companion-finn', initials: 'FO', name: 'Finn O.', city: 'Portland', rate: 55, rating: 4.8 },
+      { id: 'companion-ruth', initials: 'RK', name: 'Ruth K.', city: 'Denver', rate: 58, rating: 4.7 },
+      { id: 'companion-cass', initials: 'CM', name: 'Cass M.', city: 'Austin', rate: 62, rating: 4.8 },
+    ],
   },
 };
 
