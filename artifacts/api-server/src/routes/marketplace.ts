@@ -268,7 +268,7 @@ const DEV_COMPANIONS: Record<string, object> = {
     activities: ["Hiking", "Farmers market walks", "Coffee conversations", "Brewery tours", "Evening walks"],
     languages: ["English"], hourlyRate: 55,
     serviceArea: "Seattle", city: "WA",
-    photoUrl: null, rating: 4.7, reviewCount: 8, responseTime: "within 2h",
+    photoUrl: null, rating: 4.7, reviewCount: 22, responseTime: "within 2h",
     boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
     availability: [
       { day: "Mon", hours: "9am – 6pm" }, { day: "Tue", hours: "9am – 6pm" },
