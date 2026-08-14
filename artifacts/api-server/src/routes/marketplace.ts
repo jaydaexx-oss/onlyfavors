@@ -1815,9 +1815,17 @@ const DEV_SAFESPOTS = [
   { id: "ss-bos-1", name: "Boston Public Library Foyer",  category: "Library",       city: "MA", cityLabel: "Boston, MA",          addressHint: "Copley Sq · manned entrance desk",            openLate: false },
   { id: "ss-bos-2", name: "The Newbury Lobby",            category: "Hotel Lobby",   city: "MA", cityLabel: "Boston, MA",          addressHint: "Back Bay · grand lobby, staffed 24h",         openLate: true  },
   { id: "ss-den-1", name: "Denver Art Museum Café",       category: "Café",          city: "CO", cityLabel: "Denver, CO",          addressHint: "Golden Triangle · ground floor café",         openLate: false },
+  { id: "ss-den-2", name: "Denver Central Market",        category: "Public Market", city: "CO", cityLabel: "Denver, CO",          addressHint: "RiNo · indoor food hall, busy + visible",     openLate: true  },
+  { id: "ss-den-3", name: "Tattered Cover Café",          category: "Café",          city: "CO", cityLabel: "Denver, CO",          addressHint: "Colfax · beloved bookstore + café, staffed",  openLate: false },
   { id: "ss-dc-1",  name: "National Portrait Gallery",    category: "Museum",        city: "DC", cityLabel: "Washington, D.C.",    addressHint: "Penn Quarter · Penn Ave entrance",            openLate: false },
+  { id: "ss-dc-2",  name: "Union Station Grand Hall",     category: "Hotel Lobby",   city: "DC", cityLabel: "Washington, D.C.",    addressHint: "NoMa · open concourse, 24h staffed",          openLate: true  },
+  { id: "ss-dc-3",  name: "Library of Congress Café",     category: "Library",       city: "DC", cityLabel: "Washington, D.C.",    addressHint: "Capitol Hill · public, manned entrance",      openLate: false },
   { id: "ss-atl-1", name: "Ponce City Market Atrium",     category: "Public Market", city: "GA", cityLabel: "Atlanta, GA",         addressHint: "Old Fourth Ward · open, visible seating",     openLate: true  },
+  { id: "ss-atl-2", name: "High Museum of Art Lobby",     category: "Museum",        city: "GA", cityLabel: "Atlanta, GA",         addressHint: "Buckhead · staffed main entrance",            openLate: false },
+  { id: "ss-atl-3", name: "Krog Street Market",           category: "Public Market", city: "GA", cityLabel: "Atlanta, GA",         addressHint: "Inman Park · covered market, always busy",    openLate: true  },
   { id: "ss-por-1", name: "Powell's Books Café",          category: "Café",          city: "OR", cityLabel: "Portland, OR",        addressHint: "Pearl District · lively, always open",        openLate: false },
+  { id: "ss-por-2", name: "Portland Art Museum Lobby",    category: "Museum",        city: "OR", cityLabel: "Portland, OR",        addressHint: "SW Park Ave · manned entrance, free lobby",   openLate: false },
+  { id: "ss-por-3", name: "Farmers Market at PSU",        category: "Public Market", city: "OR", cityLabel: "Portland, OR",        addressHint: "South Park Blocks · Sat mornings, open-air",  openLate: false },
 ];
 
 // In-memory SafeSpot applications (pending venue approvals)

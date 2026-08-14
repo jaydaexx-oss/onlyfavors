@@ -13375,7 +13375,6 @@ function BookingReceiptPage() {
                 { label: 'Date', value: bookingDate },
                 { label: 'Start time', value: b.startTime },
                 { label: 'Duration', value: `${b.durationHours} hour${b.durationHours > 1 ? 's' : ''}` },
-                { label: 'Activity', value: b.activity },
                 ...(b.companionName ? [{ label: 'Companion', value: b.companionName }] : []),
                 ...(b.safeSpotId ? [{ label: 'Meeting venue', value: b.safeSpotId }] : []),
               ].map(({ label, value }) => (
@@ -13384,6 +13383,19 @@ function BookingReceiptPage() {
                   <p className="mt-1 text-sm font-semibold text-[#48213d]">{value}</p>
                 </div>
               ))}
+              {/* Activity detail link */}
+              {b.activity && (
+                <div className="rounded-[14px] bg-[#fbf7f1] px-4 py-3">
+                  <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Activity</p>
+                  <div className="mt-1 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-[#48213d]">{b.activity}</p>
+                    <Link href={`/activities/${b.activity.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                      className="text-[10px] font-bold text-[#9d557e] hover:underline">
+                      About this activity →
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Divider */}
