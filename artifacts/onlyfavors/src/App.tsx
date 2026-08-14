@@ -4204,6 +4204,8 @@ function ActivitiesDirectory() {
         { name: 'Cooking classes', desc: 'Learn a new recipe together in a fun, social setting.' },
         { name: 'Farmers market visits', desc: 'Browse local produce, artisans, and street food.' },
         { name: 'Wine and food tasting', desc: 'Explore local wines, cheeses, and specialty foods.' },
+        { name: 'Brewery tours', desc: 'Visit local craft breweries with a companion who knows their hops from their malts.' },
+        { name: 'Taco crawls', desc: 'Sample the best tacos in a neighborhood — one stop at a time.' },
       ],
     },
     {
@@ -4224,6 +4226,8 @@ function ActivitiesDirectory() {
         { name: 'Festivals & markets', desc: 'Explore seasonal events, fairs, and local festivals.' },
         { name: 'Sports events', desc: 'Watch a game with company who shares your enthusiasm.' },
         { name: 'Book club & readings', desc: 'Attend author events and literary gatherings.' },
+        { name: 'Jazz evenings', desc: 'Discover great jazz venues with a companion who knows the scene.' },
+        { name: 'Comedy shows', desc: 'Laugh together at stand-up or improv in a local club.' },
       ],
     },
     {
