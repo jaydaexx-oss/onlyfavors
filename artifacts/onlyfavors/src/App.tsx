@@ -859,7 +859,7 @@ function Home() {
               { label: 'Cities with active SafeSpots', value: '47+' },
               { label: 'Trust & safety team, always on', value: '24/7' },
               { label: 'Average companion rating', value: '4.85★' },
-              { label: 'Platonic bookings completed', value: '6,200+' },
+              { label: 'Platonic bookings completed', value: '8,400+' },
             ] as const).map(({ value, label }) => (
               <div key={label} className="flex items-center gap-3">
                 <p className="font-serif text-2xl text-[#48213d]">{value}</p>
@@ -1217,9 +1217,9 @@ function Home() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {([
-              { initials: 'M', name: 'Maya', city: 'San Francisco', rate: '$65', rating: 4.9, reviews: 31, acts: ['Museum visits', 'Coffee', 'Gallery tours'], id: 'companion-maya' },
-              { initials: 'J', name: 'Jordan', city: 'New York', rate: '$75', rating: 4.8, reviews: 27, acts: ['Gallery tours', 'Cooking classes', 'Evening walks'], id: 'companion-jordan' },
+              { initials: 'I', name: 'Isadora', city: 'Miami', rate: '$65', rating: 4.9, reviews: 24, acts: ['Art walks', 'Beachside walks', 'Food tours'], id: 'companion-isadora' },
               { initials: 'S', name: 'Simone', city: 'Chicago', rate: '$60', rating: 4.9, reviews: 19, acts: ['Architecture tours', 'Jazz evenings', 'Museum visits'], id: 'companion-simone' },
+              { initials: 'A', name: 'Alex', city: 'Seattle', rate: '$70', rating: 4.7, reviews: 22, acts: ['Coffee conversations', 'Hiking', 'Market walks'], id: 'companion-alex' },
             ] as const).map((c) => (
               <Link key={c.id} href={`/companion/${c.id}`}
                 className="group flex flex-col rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-0.5 hover:border-[#9d557e] hover:shadow-md"
@@ -5136,6 +5136,8 @@ function CareersPage() {
     { title: 'Product Designer', team: 'Design', location: 'Remote', type: 'Full-time', desc: 'Design for privacy and safety first. You\'ll shape booking flows, companion onboarding, and the trust touchpoints that make users feel secure.' },
     { title: 'City Growth Lead', team: 'Growth', location: 'New York or Chicago', type: 'Full-time', desc: 'Drive companion supply and customer demand in new cities. Part community builder, part operator — you\'ll launch a metro from scratch.' },
     { title: 'Customer Experience Specialist', team: 'Support', location: 'Remote (US)', type: 'Part-time', desc: 'Support customers and companions through the booking process and edge-case situations with warmth, clarity, and good judgment.' },
+    { title: 'Companion Success Manager', team: 'Operations', location: 'Remote', type: 'Full-time', desc: 'Own the companion lifecycle from onboarding to ongoing engagement. You\'ll run verification workflows, conduct interviews, and keep our companion community thriving.' },
+    { title: 'Growth Marketing Manager', team: 'Growth', location: 'Remote', type: 'Full-time', desc: 'Build and run the acquisition and retention programs that introduce OnlyFavors to new customers. You love privacy-first brands and know how to grow them.' },
   ];
 
   const VALUES = [
