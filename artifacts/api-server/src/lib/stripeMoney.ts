@@ -35,6 +35,28 @@ export async function captureIntentIfHeld(paymentIntentId: string | null | undef
   return { ok: true, detail: "captured" };
 }
 
+/** Separate charges and transfers: funds stay on the platform until this runs. */
+export async function transferCompanionPayout(input: {
+  bookingId: string;
+  amountCents: number;
+  destinationAccountId: string;
+  existingTransferId?: string | null;
+}): Promise<{ ok: boolean; transferId?: string; detail: string }> {
+  if (input.existingTransferId) return { ok: true, transferId: input.existingTransferId, detail: "already_transferred" };
+  if (!input.destinationAccountId || input.amountCents <= 0) {
+    return { ok: false, detail: "no_destination" };
+  }
+  const stripe = await getUncachableStripeClient();
+  const transfer = await stripe.transfers.create({
+    amount: input.amountCents,
+    currency: "usd",
+    destination: input.destinationAccountId,
+    transfer_group: input.bookingId,
+    metadata: { bookingId: input.bookingId },
+  });
+  return { ok: true, transferId: transfer.id, detail: "transferred" };
+}
+
 export function customerCancelPlan(booking: {
   status: string;
   date: string;

@@ -1,4 +1,4 @@
-import { pgSchema, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, pgSchema, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * Exact meeting coordinates and safety-plan details never belong on the
@@ -13,5 +13,8 @@ export const exactLocations = privateSchema.table("exact_locations", {
   bookingId: text("booking_id").notNull(),
   ciphertext: text("ciphertext").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
+  sharing: boolean("sharing").notNull().default(true),
+  accountId: text("account_id"),
+  kind: text("kind").notNull().default("checkin"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

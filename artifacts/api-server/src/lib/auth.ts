@@ -3,6 +3,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   accountRoles,
   accounts,
+  companionApplications,
+  companionProfiles,
   db,
   otpChallenges,
   sessions,
@@ -14,11 +16,16 @@ import { lifecycleOf } from "./accountState";
 
 export const SESSION_COOKIE = "of_session";
 const OTP_TTL_MS = 10 * 60 * 1000;
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Public customer/companion sessions. */
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Admin portal sessions — short, same identity, separate cookie lifetime. */
+export const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
 
 export type AccountRole = "customer" | "companion" | "admin";
 export type AccountStatus = "active" | "suspended" | "banned" | "deactivated";
+export type SessionKind = "login" | "admin";
+export type CompanionApplicationStatus = "none" | "draft" | "pending" | "approved" | "rejected";
 
 export type AuthUser = {
   id: string;
@@ -31,6 +38,11 @@ export type AuthUser = {
   banned: boolean;
   deactivated: boolean;
   riskLevel: string;
+  /** How this session was issued. Admin APIs require kind `admin`. */
+  sessionKind: SessionKind;
+  /** True only after manual approval — pending providers stay out of search. */
+  companionApproved: boolean;
+  companionApplicationStatus: CompanionApplicationStatus;
 };
 
 function pepper(): string {
@@ -62,6 +74,15 @@ function generateOtp(): string {
   return n.toString().padStart(8, "0");
 }
 
+function sessionKindFromToken(token: string): SessionKind {
+  return token.startsWith("adm_") ? "admin" : "login";
+}
+
+function mintSessionToken(kind: SessionKind): string {
+  const prefix = kind === "admin" ? "adm_" : "pub_";
+  return `${prefix}${randomBytes(32).toString("hex")}`;
+}
+
 function isMissingTableError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as Record<string, unknown>;
@@ -80,7 +101,43 @@ export function getActorId(
   return null;
 }
 
-export async function loadUserById(accountId: string): Promise<AuthUser | null> {
+async function companionStatusForAccount(accountId: string): Promise<{
+  companionApproved: boolean;
+  companionApplicationStatus: CompanionApplicationStatus;
+}> {
+  try {
+    const [listing] = await db
+      .select({ approved: companionProfiles.approved })
+      .from(companionProfiles)
+      .where(eq(companionProfiles.accountId, accountId))
+      .limit(1);
+    const [app] = await db
+      .select({ status: companionApplications.status })
+      .from(companionApplications)
+      .where(eq(companionApplications.accountId, accountId))
+      .orderBy(desc(companionApplications.createdAt))
+      .limit(1);
+    const raw = app?.status ?? (listing ? "approved" : "none");
+    const companionApplicationStatus: CompanionApplicationStatus =
+      raw === "draft" || raw === "pending" || raw === "approved" || raw === "rejected"
+        ? raw
+        : "none";
+    return {
+      companionApproved: Boolean(listing?.approved),
+      companionApplicationStatus,
+    };
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      return { companionApproved: false, companionApplicationStatus: "none" };
+    }
+    throw err;
+  }
+}
+
+export async function loadUserById(
+  accountId: string,
+  sessionKind: SessionKind = "login",
+): Promise<AuthUser | null> {
   try {
     const [account] = await db
       .select()
@@ -94,6 +151,7 @@ export async function loadUserById(accountId: string): Promise<AuthUser | null> 
       .select()
       .from(accountRoles)
       .where(eq(accountRoles.accountId, account.id));
+    const companion = await companionStatusForAccount(account.id);
     return {
       id: account.id,
       email: account.email,
@@ -105,6 +163,8 @@ export async function loadUserById(accountId: string): Promise<AuthUser | null> 
       banned: life === "banned",
       deactivated: life === "deactivated",
       riskLevel: account.riskLevel,
+      sessionKind,
+      ...companion,
     };
   } catch (err) {
     if (isMissingTableError(err)) return null;
@@ -147,7 +207,9 @@ export async function attachUser(
       next();
       return;
     }
-    const user = await loadUserById(session.accountId);
+    const sessionKind = sessionKindFromToken(token);
+    req.sessionKind = sessionKind;
+    const user = await loadUserById(session.accountId, sessionKind);
     if (user) req.user = user;
   } catch (err) {
     if (!isMissingTableError(err)) {
@@ -185,7 +247,22 @@ export function requireRole(...roles: AccountRole[]) {
   };
 }
 
-export const requireAdmin = requireRole("admin");
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (user.suspended || user.banned) {
+    res.status(403).json({ error: user.banned ? "This account is banned" : "This account is suspended" });
+    return;
+  }
+  if (!user.roles.includes("admin") || req.sessionKind !== "admin") {
+    res.status(403).json({ error: "This workspace is restricted to trust staff" });
+    return;
+  }
+  next();
+}
 
 async function sendOtpEmail(email: string, code: string): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
@@ -295,7 +372,15 @@ export async function verifyOtp(emailRaw: string, codeRaw: string, purpose = "lo
     .where(eq(accounts.email, email))
     .limit(1);
 
+  const bootstrap = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
+  const isBootstrapAdmin = Boolean(bootstrap && bootstrap === email);
+
   if (!account) {
+    if (purpose === "admin" && !isBootstrapAdmin) {
+      throw Object.assign(new Error("This workspace is restricted to trust staff"), {
+        status: 403,
+      });
+    }
     const [created] = await db
       .insert(accounts)
       .values({ email })
@@ -318,8 +403,9 @@ export async function verifyOtp(emailRaw: string, codeRaw: string, purpose = "lo
     throw Object.assign(new Error("This account is suspended"), { status: 403 });
   }
 
-  const bootstrap = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
-  if (bootstrap && bootstrap === email) {
+  // Admin is never granted through public signup — only the admin portal,
+  // and only for the manually configured bootstrap email or an existing admin role.
+  if (purpose === "admin" && isBootstrapAdmin) {
     const existing = await db
       .select()
       .from(accountRoles)
@@ -342,7 +428,8 @@ export async function verifyOtp(emailRaw: string, codeRaw: string, purpose = "lo
     }
   }
 
-  if (purpose === "admin") {
+  const sessionKind: SessionKind = purpose === "admin" ? "admin" : "login";
+  if (sessionKind === "admin") {
     const roles = await db
       .select()
       .from(accountRoles)
@@ -354,18 +441,28 @@ export async function verifyOtp(emailRaw: string, codeRaw: string, purpose = "lo
     }
   }
 
-  const token = randomBytes(32).toString("hex");
+  const ttl = sessionKind === "admin" ? ADMIN_SESSION_TTL_MS : SESSION_TTL_MS;
+  const token = mintSessionToken(sessionKind);
   await db.insert(sessions).values({
     accountId: account.id,
     tokenHash: hashSecret(token),
-    expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    expiresAt: new Date(Date.now() + ttl),
   });
 
-  const user = await loadUserById(account.id);
+  const user = await loadUserById(account.id, sessionKind);
   if (!user) {
     throw Object.assign(new Error("Could not load account"), { status: 500 });
   }
-  return { token, user };
+  if (sessionKind === "admin") {
+    await writeAudit({
+      actorId: account.id,
+      action: "admin.session.create",
+      subjectType: "account",
+      subjectId: account.id,
+      note: "admin portal sign-in",
+    });
+  }
+  return { token, user, sessionKind, ttlMs: ttl };
 }
 
 export async function revokeSession(token: string | undefined): Promise<void> {
@@ -391,13 +488,13 @@ export async function revokeAllSessions(accountId: string): Promise<void> {
   }
 }
 
-export function setSessionCookie(res: Response, token: string): void {
+export function setSessionCookie(res: Response, token: string, ttlMs = SESSION_TTL_MS): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_TTL_MS,
+    maxAge: ttlMs,
   });
 }
 

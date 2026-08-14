@@ -46,9 +46,8 @@ export class WebhookHandlers {
         await handlePaymentEvent(event.type, pi.id, pi.metadata ?? {}, pi.status);
       }
     } catch (err) {
-      // Business logic failure is logged but does not fail the webhook response —
-      // Stripe requires a 2xx to stop retrying. The sync above already succeeded.
-      logger.error({ err }, "Webhook business logic error (sync succeeded)");
+      logger.error({ err }, "Webhook business logic error");
+      throw err;
     }
   }
 }

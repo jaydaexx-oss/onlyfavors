@@ -1,14 +1,14 @@
 import { Router, type IRouter } from "express";
 import { db, bookings } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { getStripePublishableKey, getUncachableStripeClient } from "../lib/stripeClient";
+import { getStripePublishableKey } from "../lib/stripeClient";
 import { logger } from "../lib/logger";
 import { getActorId } from "../lib/auth";
 import { maybeInstantConfirm, recordBookingEvent } from "../lib/bookingLifecycle";
 
 const router: IRouter = Router();
 
-const TERMINAL = new Set(["completed", "cancelled"]);
+const TERMINAL = new Set(["completed", "cancelled", "expired"]);
 
 router.get("/stripe/config", async (_req, res) => {
   try {
@@ -31,7 +31,7 @@ export async function handlePaymentEvent(
 
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
   if (!booking) return;
-  if (TERMINAL.has(booking.status)) return;
+  if (TERMINAL.has(booking.status) || booking.status === "expired") return;
 
   const now = new Date();
 
@@ -39,7 +39,12 @@ export async function handlePaymentEvent(
     if (booking.status === "requested") {
       await db
         .update(bookings)
-        .set({ status: "deposit_paid", depositPaidAt: now, updatedAt: now })
+        .set({
+          status: "deposit_paid",
+          depositPaidAt: now,
+          holdExpiresAt: null,
+          updatedAt: now,
+        })
         .where(eq(bookings.id, bookingId));
       await recordBookingEvent({
         bookingId,
@@ -47,7 +52,7 @@ export async function handlePaymentEvent(
         toStatus: "deposit_paid",
         note: "deposit_succeeded",
       });
-      logger.info({ bookingId, piId: paymentIntentId }, "Deposit confirmed — chat unlocked");
+      logger.info({ bookingId, piId: paymentIntentId }, "Deposit confirmed by webhook — chat unlocked");
     }
     await maybeInstantConfirm(bookingId);
     return;
@@ -121,44 +126,9 @@ router.get("/stripe/booking/:id/status", async (req, res) => {
       res.status(404).json({ error: "Booking not found" });
       return;
     }
-
-    try {
-      const stripe = await getUncachableStripeClient();
-      if (booking.status === "requested" && booking.depositPaymentIntentId) {
-        const pi = await stripe.paymentIntents.retrieve(booking.depositPaymentIntentId);
-        if (pi.status === "succeeded") {
-          await handlePaymentEvent("payment_intent.succeeded", pi.id, (pi.metadata ?? {}) as Record<string, string>, pi.status);
-        }
-      }
-      if (booking.fullPaymentIntentId && !TERMINAL.has(booking.status) && booking.status !== "authorized") {
-        const pi = await stripe.paymentIntents.retrieve(booking.fullPaymentIntentId);
-        if (pi.status === "requires_capture") {
-          await handlePaymentEvent(
-            "payment_intent.amount_capturable_updated",
-            pi.id,
-            (pi.metadata ?? {}) as Record<string, string>,
-            pi.status,
-          );
-        }
-      }
-      const [updated] = await db.select().from(bookings).where(eq(bookings.id, id));
-      if (updated) {
-        res.json({ bookingId: id, status: updated.status });
-        return;
-      }
-    } catch (stripeErr) {
-      logger.warn({ stripeErr }, "Could not verify payment status from Stripe — returning cached status");
-    }
-
-    res.json({ bookingId: id, status: booking.status });
+    // Read-only. Stripe.js success must not confirm a booking — only the signed webhook writes status.
+    res.json({ bookingId: id, status: booking.status, holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null });
   } catch (err: any) {
-    if (process.env.NODE_ENV === "development") {
-      const { DEV_BOOKING_FIXTURES } = await import("./marketplace.js") as any;
-      const fixture = (DEV_BOOKING_FIXTURES as Record<string, any>)?.[id];
-      if (fixture) {
-        res.json({ bookingId: id, status: fixture.status }); return;
-      }
-    }
     logger.error({ err }, "Unable to fetch booking status");
     res.status(500).json({ error: "Unable to check payment status" });
   }

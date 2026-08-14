@@ -23,6 +23,7 @@ export type SupabaseCompanionRow = {
   photo_url?: string | null;
   paused?: boolean;
   available_today?: boolean;
+  identity_status?: string;
   created_at?: string;
 };
 
@@ -63,13 +64,14 @@ function mapProfile(row: typeof companionProfiles.$inferSelect): SupabaseCompani
     photo_url: row.photoUrl,
     paused: row.paused,
     available_today: row.availableToday,
+    identity_status: row.identityStatus,
     created_at: row.createdAt.toISOString(),
   };
 }
 
 async function supabaseGet<T>(path: string): Promise<T> {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_ANON_KEY;
   if (url && key) {
     const response = await fetch(`${url.replace(/\/$/, "")}${path}`, {
       method: "GET",

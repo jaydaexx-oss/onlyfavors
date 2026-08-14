@@ -1,4 +1,5 @@
 import type { WorkspacePrefs } from "@workspace/db/schema";
+import { chicagoDateTime, PILOT_TZ } from "./pilot";
 
 export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -98,4 +99,66 @@ export function mergeWorkspacePrefs(raw: WorkspacePrefs | null | undefined): Req
       pausedByAway: Boolean(raw?.away?.pausedByAway),
     },
   };
+}
+
+function chicagoClockParts(instant: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: PILOT_TZ,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const weekdayName = get("weekday");
+  return {
+    weekday: weekdayFromName(weekdayName.slice(0, 3)) ?? 0,
+    clock: `${String(get("hour")).padStart(2, "0")}:${String(get("minute")).padStart(2, "0")}`,
+  };
+}
+
+function clockInRange(clock: string, start: string, end: string): boolean {
+  return clock >= start && clock < end;
+}
+
+/** True when published weekly windows cover Now / Tonight / This weekend / a calendar date (Chicago). */
+export function windowsMatchWhen(
+  windows: Array<{ weekday: number; startTime: string; endTime: string }>,
+  when: string | undefined,
+  now = new Date(),
+): boolean {
+  if (!when) return true;
+  if (!windows.length) return false;
+  const here = chicagoClockParts(now);
+  if (when === "now") {
+    return windows.some((w) => w.weekday === here.weekday && clockInRange(here.clock, w.startTime, w.endTime));
+  }
+  if (when === "tonight") {
+    return windows.some((w) => w.weekday === here.weekday && w.endTime > "17:00");
+  }
+  if (when === "weekend") {
+    return windows.some((w) => w.weekday === 0 || w.weekday === 6);
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when)) {
+    const [datePart, timePart] = when.split("T");
+    const parts = chicagoClockParts(chicagoDateTime(datePart, timePart));
+    return windows.some((w) => w.weekday === parts.weekday && clockInRange(parts.clock, w.startTime, w.endTime));
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(when)) {
+    const [y, m, d] = when.split("-").map(Number);
+    const noonUtc = Date.UTC(y, (m ?? 1) - 1, d ?? 1, 18, 0, 0);
+    const weekday = chicagoClockParts(new Date(noonUtc)).weekday;
+    return windows.some((w) => w.weekday === weekday);
+  }
+  return true;
+}
+
+export function windowsHint(
+  windows: Array<{ weekday: number; startTime: string; endTime: string }>,
+  now = new Date(),
+): "now" | "tonight" | "weekend" | null {
+  if (windowsMatchWhen(windows, "now", now)) return "now";
+  if (windowsMatchWhen(windows, "tonight", now)) return "tonight";
+  if (windowsMatchWhen(windows, "weekend", now)) return "weekend";
+  return null;
 }

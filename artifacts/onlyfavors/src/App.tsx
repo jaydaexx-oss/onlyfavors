@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
+import LocationShare from '@/pages/location-share';
+import { approxMiles, isInNewOrleans, neighborhoodCenter, NOLA_AREAS, MAX_NEAR_ME_MILES, NEAR_ME_RADIUS_OPTIONS } from '@/lib/nola-areas';
 import {
   getGetCompanionQueryKey, getGetCustomerDashboardQueryKey, getGetCompanionDashboardQueryKey,
   getGetAdminOverviewQueryKey, getGetSafetyResourcesQueryKey, getListCompanionsQueryKey,
@@ -24,7 +26,7 @@ import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { AuthProvider, confirmAge, dashboardPath, requestOtp, useAuth, verifyOtp } from '@/lib/auth-session';
+import { AuthProvider, confirmAge, dashboardPath, requestOtp, useAuth, verifyOtp, type LoginIntent } from '@/lib/auth-session';
 // NotFound defined inline below to match design system
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 
@@ -51,7 +53,7 @@ function Header() {
         <Link href="/explore" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-explore">Explore</Link>
         <Link href="/safety" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-safety">Safety</Link>
         <Link href="/safespots" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-safespots">SafeSpots</Link>
-        <Link href="/companion/apply" className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-apply">Become a companion</Link>
+        <Link href={user ? '/companion/apply' : '/login?intent=companion'} className="text-[13px] font-semibold text-[#654c5f] transition-colors hover:text-[#7f2e62]" data-testid="link-apply">Become a companion</Link>
       </nav>
       <div className="hidden items-center gap-3 md:flex">
         <button type="button"
@@ -92,7 +94,7 @@ function Header() {
         <Link href="/help" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-help">Help centre</Link>
         <Link href="/safety" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safety">Safety center</Link>
         <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
-        <Link href="/companion/apply" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-apply">Become a companion</Link>
+        <Link href={user ? '/companion/apply' : '/login?intent=companion'} onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-apply">Become a companion</Link>
         <div className="my-1 h-px bg-[#ddcfc6]" />
         {user ? (
           <>
@@ -112,7 +114,7 @@ function Footer() {
     <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
       <div><Brand /><p className="mt-4 max-w-xs text-sm leading-6 text-[#725e69]">Good company for the moments that matter. Built with privacy at the center.</p></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Discover</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/explore" className="block hover:text-[#7f2e62]" data-testid="footer-link-explore">Explore</Link><Link href="/saved" className="block hover:text-[#7f2e62]" data-testid="footer-link-saved">Saved companions</Link><Link href="/safety" className="block hover:text-[#7f2e62]" data-testid="footer-link-safety">Safety center</Link><Link href="/safespots" className="block hover:text-[#7f2e62]" data-testid="footer-link-safespots">SafeSpot Network</Link><Link href="/cities" className="block hover:text-[#7f2e62]" data-testid="footer-link-cities">City guides</Link><Link href="/companion/apply" className="block hover:text-[#7f2e62]" data-testid="footer-link-apply">Apply to join</Link><Link href="/refer" className="block hover:text-[#7f2e62]" data-testid="footer-link-refer">Refer a friend</Link><Link href="/gift" className="block hover:text-[#7f2e62]" data-testid="footer-link-gift">Gift a favor</Link><Link href="/redeem" className="block hover:text-[#7f2e62]" data-testid="footer-link-redeem">Redeem a gift card</Link><Link href="/how-it-works" className="block hover:text-[#7f2e62]" data-testid="footer-link-how">How it works</Link><Link href="/cities/san-francisco" className="block hover:text-[#7f2e62]" data-testid="footer-link-sf">San Francisco</Link><Link href="/cities/new-york" className="block hover:text-[#7f2e62]" data-testid="footer-link-ny">New York</Link><Link href="/activities" className="block hover:text-[#7f2e62]" data-testid="footer-link-activities">Activity directory</Link><Link href="/stories" className="block hover:text-[#7f2e62]" data-testid="footer-link-stories">Stories & journal</Link><Link href="/newsletter" className="block hover:text-[#7f2e62]" data-testid="footer-link-newsletter">Companion newsletter</Link><Link href="/compare" className="block hover:text-[#7f2e62]" data-testid="footer-link-compare">Compare companions</Link></div></div>
-      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/about" className="block hover:text-[#7f2e62]" data-testid="footer-link-about">About</Link><Link href="/help" className="block hover:text-[#7f2e62]" data-testid="footer-link-help">Help centre</Link><Link href="/pricing" className="block hover:text-[#7f2e62]" data-testid="footer-link-pricing">Pricing</Link><Link href="/membership" className="block hover:text-[#7f2e62]" data-testid="footer-link-membership">Membership</Link><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link><Link href="/community" className="block hover:text-[#7f2e62]" data-testid="footer-link-community">Community</Link><Link href="/faq" className="block hover:text-[#7f2e62]" data-testid="footer-link-faq">FAQ</Link><Link href="/press" className="block hover:text-[#7f2e62]" data-testid="footer-link-press">Press</Link><Link href="/careers" className="block hover:text-[#7f2e62]" data-testid="footer-link-careers">Careers</Link><Link href="/accessibility" className="block hover:text-[#7f2e62]" data-testid="footer-link-accessibility">Accessibility</Link><Link href="/admin/operations" className="block text-[#c6aeb8] hover:text-[#7f2e62]" data-testid="footer-link-admin">Trust team ↗</Link></div></div>
+      <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/about" className="block hover:text-[#7f2e62]" data-testid="footer-link-about">About</Link><Link href="/help" className="block hover:text-[#7f2e62]" data-testid="footer-link-help">Help centre</Link><Link href="/pricing" className="block hover:text-[#7f2e62]" data-testid="footer-link-pricing">Pricing</Link><Link href="/membership" className="block hover:text-[#7f2e62]" data-testid="footer-link-membership">Membership</Link><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link><Link href="/community" className="block hover:text-[#7f2e62]" data-testid="footer-link-community">Community</Link><Link href="/faq" className="block hover:text-[#7f2e62]" data-testid="footer-link-faq">FAQ</Link><Link href="/press" className="block hover:text-[#7f2e62]" data-testid="footer-link-press">Press</Link><Link href="/careers" className="block hover:text-[#7f2e62]" data-testid="footer-link-careers">Careers</Link><Link href="/accessibility" className="block hover:text-[#7f2e62]" data-testid="footer-link-accessibility">Accessibility</Link><Link href="/admin/login" className="block text-[#c6aeb8] hover:text-[#7f2e62]" data-testid="footer-link-admin">Trust team ↗</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/help" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Help centre <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </div>
     <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-[#ddcfc6] px-5 py-5 text-[11px] text-[#927e87] md:flex-row md:justify-between lg:px-8"><span>© 2025 OnlyFavors, Inc.</span><span>Private by design. Human by nature.</span></div>
@@ -758,7 +760,7 @@ function WelcomePage() {
                 if (city) localStorage.setItem('of_preferred_city', city);
                 if (interests.size) localStorage.setItem('of_interests', JSON.stringify([...interests]));
               } catch {}
-              navigate(role === 'companion' ? '/companion/apply' : '/explore');
+              navigate(role === 'companion' ? '/login?intent=companion&next=/companion/apply' : '/explore');
             }}
             disabled={!city}
             className="mt-8 inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white transition hover:bg-[#65234e] disabled:opacity-40"
@@ -910,12 +912,16 @@ function Home() {
   const health = useHealthCheck();
   const directory = useDirectoryCompanions();
   const stats = usePublicStats();
+  const spotsQuery = useListSafeSpots({ city: 'New Orleans' }, {
+    query: { queryKey: getListSafeSpotsQueryKey({ city: 'New Orleans' }), retry: false },
+  });
   const live = directory.data ?? [];
   const featured = live.slice(0, 3);
   const spotlight = [...live].sort((a, b) => (b.reviewCount - a.reviewCount) || (b.rating - a.rating))[0] ?? featured[0];
   const spotlightAnswers = ((spotlight as { interviewAnswers?: string[] } | undefined)?.interviewAnswers ?? []).filter(Boolean).slice(0, 3);
   const hero = spotlight;
   const publicStats = stats.data ?? { companionCount: 0, completedBookings: 0, averageRating: 0, cityCount: 0 };
+  const safeSpotCount = spotsQuery.data?.length ?? 0;
   return (
     <Shell>
       <main className="page-enter">
@@ -1192,13 +1198,11 @@ function Home() {
             <div>
               <p className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]"><ShieldCheck className="h-4 w-4" />Safety network</p>
               <h2 className="font-serif text-5xl leading-[.93] text-[#f9efe5]">Every favor starts<br /><em>at a SafeSpot.</em></h2>
-              <p className="mt-6 max-w-sm text-[15px] leading-7 text-[#d9c4cf]">Verified public venues in every city — staff-aware, well-lit, and easy to leave. We never share exact addresses publicly.</p>
+              <p className="mt-6 max-w-sm text-[15px] leading-7 text-[#d9c4cf]">Approved public venues in New Orleans. First meetings start here. We never list a home or workplace, and we do not invent a venue partnership program.</p>
               <div className="mt-6 flex items-center gap-6">
-                <div><p className="font-serif text-4xl text-[#f9efe5]">6+</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Verified venues</p></div>
+                <div><p className="font-serif text-4xl text-[#f9efe5]">{safeSpotCount}</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Approved venues in New Orleans</p></div>
                 <div className="h-10 w-px bg-[#5e3458]" />
-                <div><p className="font-serif text-4xl text-[#f9efe5]">6</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Cities</p></div>
-                <div className="h-10 w-px bg-[#5e3458]" />
-                <div><p className="font-serif text-4xl text-[#f9efe5]">∞</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">QR check-ins</p></div>
+                <div><p className="font-serif text-4xl text-[#f9efe5]">1</p><p className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">Pilot city</p></div>
               </div>
               <Link href="/safespots" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#f9efe5] px-5 text-sm font-bold text-[#48213d] transition hover:bg-white" data-testid="link-home-safespots">Browse SafeSpots <ArrowRight className="h-4 w-4" /></Link>
             </div>
@@ -1209,7 +1213,7 @@ function Home() {
                     <Icon className="h-5 w-5" style={{ color }} />
                   </div>
                   <p className="mt-3 font-serif text-xl text-[#f9efe5]">{label}</p>
-                  <p className="mt-1 text-[10px] text-[#c695ae]">Staff-aware · Easy exit</p>
+                  <p className="mt-1 text-[10px] text-[#c695ae]">Public meeting point</p>
                 </div>
               ))}
             </div>
@@ -1225,9 +1229,9 @@ function Home() {
             </div>
             <div className="space-y-3">
               <Step n="01" icon={Compass} title="Browse by feeling" body="Filter by city, activity, language, or an instant booking preference." />
-              <Step n="02" icon={ClipboardCheck} title="Set boundaries together" body="Boundary receipts confirm what the favor includes before anything is booked." />
-              <Step n="03" icon={MessageSquare} title="Chat once the deposit clears" body="A private, masked thread opens — phone numbers and emails are blocked automatically." />
-              <Step n="04" icon={MapPin} title="Meet at a SafeSpot" body="Choose a verified public venue and keep the plan visible to your Trust Circle." />
+              <Step n="02" icon={ClipboardCheck} title="Set boundaries together" body="A Boundary Receipt stores activity, SafeSpot, time, transportation, contact, photos, and alcohol expectations. Both people sign. Chat is masked, not end-to-end encrypted." />
+              <Step n="03" icon={MessageSquare} title="Chat once the deposit clears" body="A private, masked thread opens after the $10 deposit. Phone numbers and emails are stripped. Reported threads can be reviewed by the safety team." />
+              <Step n="04" icon={MapPin} title="Meet at a SafeSpot" body="Check in at the agreed public venue. Trust Circle can get a venue notice — never a companion name or live pin." />
             </div>
           </div>
         </section>
@@ -1268,8 +1272,8 @@ function Home() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <HomeTrustPillar icon={ShieldCheck} title="SafeSpot Network" body="Every booking starts at a verified public venue — no private addresses, ever." accent="bg-[#e8f0e8] text-[#477254]" />
             <HomeTrustPillar icon={ClipboardCheck} title="Boundary Receipt" body="Both sides agree in writing before any booking is confirmed." accent="bg-[#ead0dd] text-[#7f2e62]" />
-            <HomeTrustPillar icon={Users} title="Trust Circle" body="Share your plan with up to 5 emergency contacts before you go." accent="bg-[#f3ead7] text-[#7a5a12]" />
-            <HomeTrustPillar icon={Star} title="Verified Reviews" body="Honest ratings from real bookings, written by the customers who were there." accent="bg-[#fdf3e3] text-[#bf8750]" />
+            <HomeTrustPillar icon={Users} title="Trust Circle" body="Up to 3 contacts can get a venue check-in or missed-check-in notice — never a companion name or live pin." accent="bg-[#f3ead7] text-[#7a5a12]" />
+            <HomeTrustPillar icon={MessageCircle} title="Protected Chat" body="Chat unlocks after the $10 deposit. Phone numbers stay hidden. Messages are masked, not end-to-end encrypted." accent="bg-[#fdf3e3] text-[#bf8750]" />
           </div>
         </section>
 
@@ -1473,10 +1477,58 @@ function Step({ n, icon: Icon, title, body }: { n: string; icon: typeof Compass;
   return <div className="group flex items-center gap-4 rounded-2xl border border-[#dfd2c9] bg-[#f8f1e9] p-4 transition hover:-translate-y-0.5 hover:border-[#c89bb5]"><span className="font-mono text-[10px] text-[#a47e8f]">{n}</span><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-4 w-4" /></div><div><h3 className="text-sm font-bold text-[#543d50]">{title}</h3><p className="mt-0.5 text-xs leading-5 text-[#806c76]">{body}</p></div><ChevronRight className="ml-auto h-4 w-4 text-[#b0929f] transition group-hover:translate-x-1" /></div>;
 }
 
-function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: { companion: Companion; saved?: boolean; onSave?: (id: string) => void; onActivityFilter?: (act: string) => void }) {
+type DirectoryCompanion = Companion & {
+  dayRate?: number | null;
+  identityVerified?: boolean;
+  availabilityHint?: 'now' | 'tonight' | 'weekend' | null;
+  interviewAnswers?: string[];
+  approvedAreas?: string[];
+};
+
+function companionAreaLabels(companion: DirectoryCompanion): string[] {
+  if (companion.approvedAreas?.length) return companion.approvedAreas;
+  return companion.serviceArea ? [companion.serviceArea] : [companion.city];
+}
+
+function minNeighborhoodMiles(companion: DirectoryCompanion, coords: [number, number]): number {
+  const miles = companionAreaLabels(companion).map((label) => {
+    const area = neighborhoodCenter(label);
+    return approxMiles(coords[0], coords[1], area.lat, area.lng);
+  });
+  return miles.length ? Math.min(...miles) : Number.POSITIVE_INFINITY;
+}
+
+const AVAIL_LABEL: Record<'now' | 'tonight' | 'weekend', string> = {
+  now: 'Available now',
+  tonight: 'Available tonight',
+  weekend: 'Available this weekend',
+};
+
+function companionDayRate(companion: DirectoryCompanion): number {
+  return companion.dayRate && companion.dayRate > 0 ? companion.dayRate : companion.hourlyRate * 7;
+}
+
+function availabilityHint(companion: DirectoryCompanion): 'now' | 'tonight' | 'weekend' | null {
+  if (companion.availabilityHint) return companion.availabilityHint;
+  return companion.availableNow ? 'now' : null;
+}
+
+function formatApproxMiles(miles: number): string {
+  if (miles < 1) return 'Under a mile away';
+  return `${Math.round(miles)} mile${Math.round(miles) === 1 ? '' : 's'} away`;
+}
+
+function CompanionCard({ companion, saved = false, onSave, onActivityFilter, distanceMiles }: {
+  companion: DirectoryCompanion;
+  saved?: boolean;
+  onSave?: (id: string) => void;
+  onActivityFilter?: (act: string) => void;
+  distanceMiles?: number;
+}) {
+  const hint = availabilityHint(companion);
+  const identityVerified = companion.identityVerified ?? companion.verified;
   return (
     <Link href={`/companions/${companion.id}`} className="group relative block rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#bc83a6] hover:shadow-[0_18px_34px_rgba(88,37,70,.09)]" data-testid={`card-companion-${companion.id}`}>
-      {/* Avatar + save */}
       <div className="flex items-start justify-between">
         <Avatar companion={companion} />
         {onSave && (
@@ -1490,14 +1542,14 @@ function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: {
           </button>
         )}
       </div>
-      {/* Name */}
       <div className="mt-4 flex items-center gap-2">
         <h3 className="font-serif text-[26px] leading-none text-[#48213d]">{companion.displayName}</h3>
-        {companion.verified && <BadgeCheck className="h-4 w-4 text-[#7f2e62]" />}
+        {identityVerified && <BadgeCheck className="h-4 w-4 text-[#7f2e62]" />}
       </div>
-      {/* Location */}
       <p className="mt-1.5 flex items-center gap-1 text-xs text-[#806c76]">
-        <MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />{companion.serviceArea}, {companion.city}
+        <MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />
+        {companionAreaLabels(companion).slice(0, 2).join(' · ')}
+        {typeof distanceMiles === 'number' ? ` · ${formatApproxMiles(distanceMiles)}` : `, ${companion.city}`}
       </p>
       {companion.rating > 0 && (
         <div className="mt-2 flex items-center gap-1.5">
@@ -1506,23 +1558,20 @@ function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: {
           <span className="text-[10px] text-[#9b858e]">· {companion.reviewCount} reviews</span>
         </div>
       )}
-      {/* Availability + response time */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {(companion as any).availableNow && (
+        {hint && (
           <span className="flex items-center gap-1 rounded-full bg-[#e8f5ef] px-2.5 py-1 text-[10px] font-bold text-[#267a5a]">
-            <Zap className="h-3 w-3" />Available tonight
+            <Zap className="h-3 w-3" />{AVAIL_LABEL[hint]}
           </span>
         )}
-        <span className="text-[10px] text-[#9b858e]">Replies {companion.responseTime}</span>
-        {(companion as any).lastActiveLabel && (
-          <span className="rounded-full bg-[#f0e4db] px-2 py-0.5 text-[9px] text-[#806c76]">
-            Active {(companion as any).lastActiveLabel}
-          </span>
+        {companion.responseTime ? (
+          <span className="text-[10px] text-[#9b858e]">Usually replies in {companion.responseTime}</span>
+        ) : null}
+        {identityVerified && (
+          <span className="rounded-full bg-[#e8f0e8] px-2 py-0.5 text-[9px] font-bold text-[#477254]">Identity verified</span>
         )}
       </div>
-      {/* Bio */}
       <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-[#725e69]">{companion.biography || 'A thoughtful companion for time well spent.'}</p>
-      {/* Activities */}
       <div className="mt-4 flex min-h-[28px] flex-wrap gap-1.5">
         {companion.activities.slice(0, 3).map((a) => onActivityFilter
           ? <button key={a} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onActivityFilter(a); }}
@@ -1530,11 +1579,10 @@ function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: {
           : <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>
         )}
       </div>
-      {/* Pricing */}
       <div className="mt-5 flex items-center justify-between border-t border-[#ece1d9] pt-4">
         <div>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">{money(companion.hourlyRate * 100)}/hr</span>
-          <span className="ml-2 text-[10px] text-[#b0929f]">· {money(companion.hourlyRate * 7 * 100)}/day</span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">From {money(companion.hourlyRate * 100)}/hour</span>
+          <span className="ml-2 text-[10px] text-[#b0929f]">· {money(companionDayRate(companion) * 100)}/day</span>
         </div>
         {companion.instantBook && <span className="flex items-center gap-1 text-[10px] font-bold text-[#477254]"><Check className="h-3 w-3" />Instant book</span>}
       </div>
@@ -1714,69 +1762,94 @@ function CompareCompanions() {
 }
 
 function Explore() {
-  // Filters
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
   const [city, setCity] = useState('New Orleans');
   const [activity, setActivity] = useState(() => { try { return new URLSearchParams(window.location.search).get('activity') ?? ''; } catch { return ''; } });
   const [language, setLanguage] = useState('');
   const [maxRate, setMaxRate] = useState('');
   const [instant, setInstant] = useState(false);
-  const [availNow, setAvailNow] = useState(false);
   const [timeWindow, setTimeWindow] = useState<'now' | 'tonight' | 'weekend' | null>(null);
   const [customDate, setCustomDate] = useState('');
+  const [customTime, setCustomTime] = useState('');
   const { ids: savedIdList, toggle: toggleSaved } = useSavedCompanionIds();
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc'>('best');
+  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc' | 'near'>('best');
   const [filters, setFilters] = useState(false);
   const [vibe, setVibe] = useState<string | null>(null);
 
-  // View: list or map
   const [view, setView] = useState<'list' | 'map'>('list');
 
-  // Near Me: geolocation
   const [nearMe, setNearMe] = useState(false);
   const [userCoords, setUserCoords] = useState<[number, number] | null>(null);
   const [locError, setLocError] = useState<string | null>(null);
   const [locLoading, setLocLoading] = useState(false);
-  const detectedCity = nearMe && city ? city : nearMe ? 'your area' : null;
+  const [radiusMiles, setRadiusMiles] = useState<typeof NEAR_ME_RADIUS_OPTIONS[number]>(MAX_NEAR_ME_MILES);
 
   const handleNearMe = useCallback(() => {
-    if (nearMe) { setNearMe(false); setUserCoords(null); setLocError(null); return; }
-    if (!navigator.geolocation) { setLocError('Your browser does not support location.'); return; }
+    if (nearMe) { setNearMe(false); setUserCoords(null); setLocError(null); setSortBy((s) => (s === 'near' ? 'best' : s)); return; }
+    if (!navigator.geolocation) { setLocError('Your browser does not support location. Search New Orleans or a neighborhood instead.'); return; }
     setLocLoading(true); setLocError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserCoords([pos.coords.latitude, pos.coords.longitude]);
-        setNearMe(true); setLocLoading(false); setView('map');
+        setLocLoading(false);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        if (!isInNewOrleans(lat, lng)) {
+          setNearMe(false);
+          setUserCoords(null);
+          setLocError('OnlyFavors is live in New Orleans. Search a neighborhood — we do not store your location.');
+          return;
+        }
+        setUserCoords([lat, lng]);
+        setNearMe(true);
+        setCity('New Orleans');
+        setView('map');
+        setSortBy('near');
       },
-      () => { setLocError('Location access denied.'); setLocLoading(false); },
-      { enableHighAccuracy: false, timeout: 8000 },
+      () => {
+        setLocError('Location is optional. Search New Orleans or a neighborhood instead.');
+        setLocLoading(false);
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 },
     );
   }, [nearMe]);
 
   const handleSave = useCallback(async (id: string) => {
+    if (!user) {
+      navigate(`/login?intent=customer&next=${encodeURIComponent('/explore')}`);
+      return;
+    }
     const wasSaved = savedIds.has(id);
     await toggleSaved(id);
     if (!wasSaved) {
       setSaveToast(id);
       setTimeout(() => setSaveToast((t) => (t === id ? null : t)), 3500);
     }
-  }, [savedIds, toggleSaved]);
+  }, [user, navigate, savedIds, toggleSaved]);
 
+  const whenValue = customDate && customTime
+    ? `${customDate}T${customTime}`
+    : customDate || timeWindow || undefined;
+  const place = city.trim();
+  const placeIsPilot = !place || /new orleans|^nola$/i.test(place);
   const params = useMemo(() => ({
-    ...(city ? { city } : {}),
+    city: 'New Orleans',
+    ...(place && !placeIsPilot ? { area: place } : {}),
     ...(activity ? { activity } : {}),
     ...(language ? { language } : {}),
     ...(maxRate ? { maxRate: Number(maxRate) } : {}),
     ...(instant ? { instantBook: true } : {}),
-  }), [city, activity, language, maxRate, instant]);
+    ...(whenValue ? { when: whenValue } : {}),
+  }), [place, placeIsPilot, activity, language, maxRate, instant, whenValue]);
 
-  const query = useListCompanions(params, { query: { queryKey: getListCompanionsQueryKey(params), retry: false } });
-  const spotsQuery = useListSafeSpots(city ? { city } : undefined, {
-    query: { queryKey: getListSafeSpotsQueryKey(city ? { city } : undefined), retry: false },
+  const query = useListCompanions(params as Parameters<typeof useListCompanions>[0], { query: { queryKey: getListCompanionsQueryKey(params as Parameters<typeof getListCompanionsQueryKey>[0]), retry: false } });
+  const spotsQuery = useListSafeSpots({ city: 'New Orleans' }, {
+    query: { queryKey: getListSafeSpotsQueryKey({ city: 'New Orleans' }), retry: false },
   });
 
-  const companions = query.data ?? [];
+  const companions = (query.data ?? []) as DirectoryCompanion[];
   const safeSpots = spotsQuery.data ?? [];
 
   const VIBE_KEYWORDS: Record<string, string[]> = {
@@ -1785,20 +1858,30 @@ function Explore() {
     'low-key':   ['coffee', 'conversation', 'walk', 'quiet', 'bookstore', 'reading'],
     foodie:      ['dinner', 'cooking', 'food', 'restaurant', 'cuisine', 'dining', 'brunch', 'lunch'],
     creative:    ['art', 'photography', 'craft', 'sketch', 'creative', 'painting', 'writing'],
-    social:      ['event', 'networking', 'party', 'social', 'concert', 'festival', 'meetup'],
+    social:      ['event', 'networking', 'party', 'social', 'concert', 'festival', 'meetup', 'plus-one'],
   };
 
-  const baseCompanions = (availNow || timeWindow) ? companions.filter((c) => (c as any).availableNow) : companions;
   const vibeFiltered = vibe
-    ? baseCompanions.filter((c) => {
+    ? companions.filter((c) => {
         const kw = VIBE_KEYWORDS[vibe] ?? [];
-        return c.activities.some((a) => kw.some((k) => a.toLowerCase().includes(k)));
+        const hay = [...c.activities, ...(c.interviewAnswers ?? []), c.biography ?? ''].join(' ').toLowerCase();
+        return kw.some((k) => hay.includes(k));
       })
-    : baseCompanions;
-  const shownCompanions = [...vibeFiltered].sort((a, b) => {
+    : companions;
+  const radiusFiltered = userCoords
+    ? vibeFiltered.filter((c) => minNeighborhoodMiles(c, userCoords) <= radiusMiles)
+    : vibeFiltered;
+  const shownCompanions = [...radiusFiltered].sort((a, b) => {
+    if (sortBy === 'near' && userCoords) {
+      return minNeighborhoodMiles(a, userCoords) - minNeighborhoodMiles(b, userCoords);
+    }
     if (sortBy === 'price_asc') return a.hourlyRate - b.hourlyRate;
     if (sortBy === 'price_desc') return b.hourlyRate - a.hourlyRate;
-    return (b.rating ?? 0) - (a.rating ?? 0); // 'best' — highest rated first
+    return (b.rating ?? 0) - (a.rating ?? 0);
+  });
+  const eveningCompanions = shownCompanions.filter((c) => {
+    const hint = availabilityHint(c);
+    return hint === 'now' || hint === 'tonight';
   });
 
   return (
@@ -1808,12 +1891,12 @@ function Explore() {
         {/* Header row */}
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">The directory</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Explore nearby</p>
             <h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d] md:text-6xl">
               Find your kind<br /><em>of company.</em>
             </h1>
             <p className="mt-4 max-w-md text-sm leading-6 text-[#725e69]">
-              Browse approved companions by approximate area. Take your time — there is no public popularity contest here.
+              Browse verified companions available in New Orleans. Browsing is free. Save a profile or send a Favor Request when you are ready to create an account.
             </p>
           </div>
           {/* Controls: Near Me · Time window · View toggle */}
@@ -1827,6 +1910,21 @@ function Explore() {
                 <Navigation2 className={cn('h-3.5 w-3.5', nearMe && 'fill-[#3dbd8c] text-[#3dbd8c]')} />
                 {locLoading ? 'Locating…' : nearMe ? 'Near me ✓' : 'Near me'}
               </button>
+              {nearMe && (
+                <div className="flex overflow-hidden rounded-full border border-[#dfd2c9] bg-[#fbf7f1]">
+                  {NEAR_ME_RADIUS_OPTIONS.map((miles) => (
+                    <button
+                      key={miles}
+                      type="button"
+                      onClick={() => setRadiusMiles(miles)}
+                      className={cn('h-10 px-3 text-[11px] font-bold transition', radiusMiles === miles ? 'bg-[#3d2038] text-white' : 'text-[#654c5f] hover:bg-[#eee2d9]')}
+                      data-testid={`button-radius-${miles}`}
+                    >
+                      {miles} mi
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex overflow-hidden rounded-full border border-[#dfd2c9] bg-[#fbf7f1]">
                 <button onClick={() => setView('list')} className={cn('inline-flex h-10 items-center gap-1.5 px-4 text-xs font-bold transition', view === 'list' ? 'bg-[#3d2038] text-white' : 'text-[#654c5f] hover:bg-[#eee2d9]')} data-testid="button-view-list"><UsersRound className="h-3.5 w-3.5" />List</button>
                 <button onClick={() => setView('map')} className={cn('inline-flex h-10 items-center gap-1.5 px-4 text-xs font-bold transition', view === 'map' ? 'bg-[#3d2038] text-white' : 'text-[#654c5f] hover:bg-[#eee2d9]')} data-testid="button-view-map"><Map className="h-3.5 w-3.5" />Map</button>
@@ -1838,7 +1936,7 @@ function Explore() {
                 const label = { now: 'Now', tonight: 'Tonight', weekend: 'This weekend' }[key];
                 return (
                   <button key={key}
-                    onClick={() => { setTimeWindow(timeWindow === key ? null : key); setCustomDate(''); }}
+                    onClick={() => { setTimeWindow(timeWindow === key ? null : key); setCustomDate(''); setCustomTime(''); }}
                     className={cn('inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[11px] font-bold transition',
                       timeWindow === key ? 'border-[#7f2e62] bg-[#ead0dd] text-[#7f2e62]' : 'border-[#dfd2c9] bg-[#fbf7f1] text-[#654c5f] hover:border-[#9b6b88]')}
                     data-testid={`button-time-${key}`}>
@@ -1854,6 +1952,16 @@ function Explore() {
                   className="absolute inset-0 cursor-pointer opacity-0"
                   data-testid="input-custom-date" />
               </label>
+              {customDate && (
+                <label className={cn('relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-[11px] font-bold transition',
+                  customTime ? 'border-[#7f2e62] bg-[#ead0dd] text-[#7f2e62]' : 'border-[#dfd2c9] bg-[#fbf7f1] text-[#654c5f] hover:border-[#9b6b88]')}>
+                  {customTime || 'Any time'}
+                  <input type="time" value={customTime}
+                    onChange={(e) => setCustomTime(e.target.value)}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    data-testid="input-custom-time" />
+                </label>
+              )}
             </div>
           </div>
         </div>
@@ -1869,9 +1977,13 @@ function Explore() {
             <label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4">
               <MapPin className="h-4 w-4 text-[#9b6b88]" />
               <input value={city} onChange={(e) => setCity(e.target.value)}
-                placeholder={nearMe ? `Near ${detectedCity ?? 'you'}` : 'New Orleans neighborhood'}
+                list="nola-areas"
+                placeholder={nearMe ? 'Near you in New Orleans' : 'City, neighborhood, or venue'}
                 className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-[#a38c95]"
                 data-testid="input-city" />
+              <datalist id="nola-areas">
+                {NOLA_AREAS.map((area) => <option key={area.name} value={area.name} />)}
+              </datalist>
             </label>
             <label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4">
               <Search className="h-4 w-4 text-[#9b6b88]" />
@@ -1993,7 +2105,7 @@ function Explore() {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
-                    <span className="rounded-full bg-[#e8f0e8] px-2 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-[#477254]">Live</span>
+                    <span className="rounded-full bg-[#ead0dd] px-2 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-[#7f2e62]">New</span>
                     <span className="font-mono text-[10px] font-bold text-[#48213d]">${c.hourlyRate}/hr</span>
                   </div>
                   <p className="mt-1.5 text-[9px] text-[#b0929f]">{joined}</p>
@@ -2030,8 +2142,9 @@ function Explore() {
         <div className="mt-6 flex flex-wrap items-center gap-3 border-b border-[#dfd2c9] pb-4">
           <p className="flex-1 font-mono text-[10px] uppercase tracking-[.16em] text-[#9b858e]">
             {query.isLoading ? 'Searching…'
-              : view === 'map' ? `${safeSpots.length} SafeSpots · ${shownCompanions.length} companions`
-              : vibe ? `${shownCompanions.length} ${vibe} companions` : `${shownCompanions.length} approved companions`}
+              : view === 'map'
+                ? `${shownCompanions.length} approved companion${shownCompanions.length === 1 ? '' : 's'} · neighborhood view`
+                : vibe ? `${shownCompanions.length} ${vibe} companions` : `${shownCompanions.length} approved companions`}
           </p>
           {view === 'list' && (
             <select
@@ -2041,18 +2154,14 @@ function Explore() {
               data-testid="select-sort-by"
             >
               <option value="best">Best rated</option>
+              {userCoords && <option value="near">Nearest neighborhood</option>}
               <option value="price_asc">Price: low → high</option>
               <option value="price_desc">Price: high → low</option>
             </select>
           )}
-          <Link href="/compare"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dfd2c9] px-3 text-xs font-semibold text-[#654c5f] hover:border-[#9d557e] hover:text-[#7f2e62]"
-            data-testid="link-compare">
-            <UsersRound className="h-3.5 w-3.5" />Compare
-          </Link>
-          {(city || activity || language || maxRate || instant || nearMe || availNow || timeWindow || customDate) && (
+          {(city !== 'New Orleans' || activity || language || maxRate || instant || nearMe || timeWindow || customDate || customTime || vibe) && (
             <button type="button"
-              onClick={() => { setCity('New Orleans'); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); setNearMe(false); setAvailNow(false); setUserCoords(null); setTimeWindow(null); setCustomDate(''); }}
+              onClick={() => { setCity('New Orleans'); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); setNearMe(false); setUserCoords(null); setTimeWindow(null); setCustomDate(''); setCustomTime(''); setVibe(null); setSortBy('best'); setLocError(null); setRadiusMiles(MAX_NEAR_ME_MILES); }}
               className="text-xs font-bold text-[#7f2e62]" data-testid="button-clear-filters">
               Clear all
             </button>
@@ -2063,13 +2172,13 @@ function Explore() {
         {view === 'map' && (
           <div className="mt-7">
             {/* Available now rail */}
-            {shownCompanions.filter((c) => (c as any).availableNow).length > 0 && (
+            {eveningCompanions.length > 0 && !timeWindow && !customDate && (
               <div className="mb-5">
                 <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e] flex items-center gap-2">
-                  <Zap className="h-3 w-3" />Available this evening
+                  <Zap className="h-3 w-3" />{eveningCompanions.length} approved companion{eveningCompanions.length === 1 ? '' : 's'} available this evening in New Orleans
                 </p>
                 <div className="flex gap-3 overflow-x-auto pb-2">
-                  {shownCompanions.filter((c) => (c as any).availableNow).map((c) => (
+                  {eveningCompanions.map((c) => (
                     <Link key={c.id} href={`/companions/${c.id}`}
                       className="flex shrink-0 items-center gap-3 rounded-[16px] border border-[#3dbd8c]/30 bg-[#e8f5ef] px-4 py-3 hover:border-[#3dbd8c]">
                       <Avatar companion={c} />
@@ -2086,13 +2195,11 @@ function Explore() {
               safeSpots={safeSpots}
               companions={shownCompanions}
               userCoords={userCoords}
-              defaultCity={city || 'honolulu'}
               height="560px"
             />
             <div className="mt-4 flex items-start gap-2 rounded-[16px] bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />
-              Companions appear as service-area circles — never as live pins. SafeSpot venues are exact.
-              Your location is used only to center the map and is never shared or stored.
+              Companions appear at neighborhood centers — never as live pins, homes, or routes. Distance is approximate from those neighborhoods, capped at 15 miles. The meeting venue is shared only after both people confirm.
             </div>
           </div>
         )}
@@ -2130,13 +2237,13 @@ function Explore() {
             })()}
 
             {/* Available now spotlight strip — always shown when anyone is available */}
-            {!query.isLoading && !query.isError && !availNow && shownCompanions.some((c) => (c as any).availableNow) && (
+            {!query.isLoading && !query.isError && !timeWindow && !customDate && eveningCompanions.length > 0 && (
               <div className="mb-7 rounded-[20px] border border-[#3dbd8c]/25 bg-[#eaf6f1] p-5">
                 <p className="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#2a7d59]">
-                  <Zap className="h-3.5 w-3.5" />Available tonight
+                  <Zap className="h-3.5 w-3.5" />{eveningCompanions.length} approved companion{eveningCompanions.length === 1 ? '' : 's'} available this evening in New Orleans
                 </p>
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-                  {shownCompanions.filter((c) => (c as any).availableNow).map((c) => (
+                  {eveningCompanions.map((c) => (
                     <Link key={c.id} href={`/companions/${c.id}`}
                       className="group flex shrink-0 items-center gap-3 rounded-[14px] border border-[#3dbd8c]/20 bg-white px-4 py-3 transition hover:border-[#3dbd8c] hover:shadow-sm"
                       data-testid={`avail-spotlight-${c.id}`}>
@@ -2150,11 +2257,11 @@ function Explore() {
                       </div>
                     </Link>
                   ))}
-                  <button type="button" onClick={() => setAvailNow(true)}
+                  <button type="button" onClick={() => { setTimeWindow('tonight'); setCustomDate(''); }}
                     className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-[14px] border border-dashed border-[#3dbd8c]/30 bg-transparent px-6 py-3 text-center transition hover:border-[#3dbd8c] hover:bg-white"
                     data-testid="button-show-avail-only">
                     <Zap className="h-4 w-4 text-[#2a7d59]" />
-                    <p className="text-[10px] font-bold text-[#2a7d59]">Show only available</p>
+                    <p className="text-[10px] font-bold text-[#2a7d59]">Show only tonight</p>
                   </button>
                 </div>
               </div>
@@ -2166,14 +2273,28 @@ function Explore() {
               ? <ErrorState onRetry={() => query.refetch()} />
               : shownCompanions.length === 0
               ? <EmptyState icon={UsersRound} title="A quiet directory, for now."
-                  body={availNow
-                    ? 'No one has flagged availability tonight yet. Try removing the "Available now" filter.'
-                    : 'We do not fill this space with invented profiles. Try another area or check back as new companions are approved.'}
-                  action={<Button variant="outline" onClick={() => { setCity('New Orleans'); setActivity(''); setAvailNow(false); }} testId="button-browse-all">Browse New Orleans</Button>} />
+                  body={nearMe
+                    ? `No approved companions have a neighborhood center within ${radiusMiles} miles. Try 15 miles, or search a New Orleans neighborhood. We do not show live pins.`
+                    : whenValue
+                    ? 'No approved companions have published hours for that window yet. Try another time, or browse everyone who is listed.'
+                    : 'We do not fill this space with invented profiles. Try another New Orleans neighborhood, or check back as companions are approved.'}
+                  action={<Button variant="outline" onClick={() => { setCity('New Orleans'); setActivity(''); setTimeWindow(null); setCustomDate(''); setVibe(null); }} testId="button-browse-all">Browse New Orleans</Button>} />
               : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {shownCompanions.map((companion) => (
-                    <CompanionCard key={companion.id} companion={companion} saved={savedIds.has(companion.id)} onSave={handleSave} onActivityFilter={(a) => setActivity(a)} />
-                  ))}
+                  {shownCompanions.map((companion) => {
+                    const distanceMiles = userCoords
+                      ? minNeighborhoodMiles(companion, userCoords)
+                      : undefined;
+                    return (
+                      <CompanionCard
+                        key={companion.id}
+                        companion={companion}
+                        saved={savedIds.has(companion.id)}
+                        onSave={handleSave}
+                        onActivityFilter={(a) => setActivity(a)}
+                        distanceMiles={distanceMiles}
+                      />
+                    );
+                  })}
                 </div>
             }
           </div>
@@ -2183,9 +2304,7 @@ function Explore() {
       {/* Save toast */}
       {saveToast && (
         <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#3d2038] px-5 py-3 text-xs font-semibold text-[#f9efe5] shadow-xl">
-          Saved ·{' '}
-          <Link href="/login" className="pointer-events-auto underline text-[#d897b6]">Sign in</Link>{' '}
-          to keep your list across devices
+          Saved to your account
         </div>
       )}
     </Shell>
@@ -2741,7 +2860,9 @@ function Profile() {
   if (query.isLoading) return <Shell><main className="mx-auto max-w-6xl px-5 py-16"><LoadingState /></main></Shell>;
   if (query.isError || !query.data) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => query.refetch()} /></main></Shell>;
   const c = query.data;
-  return <Shell><><main className="page-enter mx-auto max-w-6xl px-5 py-10 pb-28 lg:px-8 lg:py-16 lg:pb-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <Link key={x} href={`/explore?activity=${encodeURIComponent(x)}`} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62] transition-colors hover:bg-[#c695ae] hover:text-white">{x}</Link>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionBadges rating={c.rating} reviewCount={c.reviewCount} totalBookings={(c as any).totalBookings ?? 0} responseTime={c.responseTime} verified={c.verified} /><CompanionQA companionId={c.id} name={c.displayName} /><CompanionReviews companionId={c.id} /><CompanionAvailability availability={(c as any).availability ?? []} /><SimilarCompanions currentId={c.id} city={c.city} activities={c.activities} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />{c.verified ? 'Identity verified by OnlyFavors' : 'Public SafeSpot meetings'}</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div>{(c as any).away?.enabled && (
+  return <Shell><><main className="page-enter mx-auto max-w-6xl px-5 py-10 pb-28 lg:px-8 lg:py-16 lg:pb-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}{c.responseTime ? <><span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Usually replies in {c.responseTime}</> : null}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <Link key={x} href={`/explore?activity=${encodeURIComponent(x)}`} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62] transition-colors hover:bg-[#c695ae] hover:text-white">{x}</Link>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionBadges rating={c.rating} reviewCount={c.reviewCount} totalBookings={(c as any).totalBookings ?? 0} responseTime={c.responseTime} verified={c.verified} /><CompanionQA companionId={c.id} name={c.displayName} /><CompanionReviews companionId={c.id} /><CompanionAvailability availability={(c as any).availability ?? []} /><SimilarCompanions currentId={c.id} city={c.city} activities={c.activities} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div>
+        <p className="mt-1 text-right text-[11px] text-[#9b858e]">Full day {money(companionDayRate(c as DirectoryCompanion) * 100)}</p>
+        <div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />{c.verified ? 'Identity verified by OnlyFavors' : 'Public SafeSpot meetings'}</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div>{(c as any).away?.enabled && (
   <p className="mb-3 rounded-xl bg-[#ead0dd] px-3 py-2 text-center text-xs font-semibold text-[#7f2e62]">{(c as any).away.note || `Currently away${(c as any).away.returnDate ? ` · back ${(c as any).away.returnDate}` : ''}`}</p>
 )}
 {(c as any).paused ? (
@@ -2809,7 +2930,7 @@ function CheckoutForm({ amountCents, label, onSuccess, onClose }: {
       <div className="flex gap-3 pt-2">
         <button type="submit" disabled={busy || !stripe}
           className="flex-1 h-11 rounded-full bg-[#7f2e62] text-sm font-bold text-white disabled:opacity-50">
-          {busy ? 'Processing…' : `Pay ${money(amountCents)} · ${label}`}
+          {busy ? 'Processing…' : `Pay ${money(amountCents)}`}
         </button>
         <button type="button" onClick={onClose}
           className="h-11 px-5 rounded-full border border-[#cbbab5] text-sm font-bold text-[#654c5f]">
@@ -2892,6 +3013,7 @@ const INBOX_STATUS: Record<string, { label: string; tone: string; canAccept: boo
   confirmed:    { label: 'Confirmed',            tone: 'plum',   canAccept: false, canDecline: false },
   completed:    { label: 'Completed',            tone: 'gray',   canAccept: false, canDecline: false },
   cancelled:    { label: 'Cancelled',            tone: 'gray',   canAccept: false, canDecline: false },
+  expired:      { label: 'Hold expired',         tone: 'gray',   canAccept: false, canDecline: false },
 };
 
 function useCompanionBookings(enabled = true) {
@@ -2909,9 +3031,14 @@ function useCompanionBookings(enabled = true) {
 
 function useAcceptBooking() {
   const qc = useQueryClient();
-  return useMutation<BookingDetail, Error, { id: string; welcomeMessage?: string }>({
-    mutationFn: async ({ id, welcomeMessage }) => {
-      const res = await fetch(`/api/bookings/${id}/accept`, { method: 'POST', credentials: 'include' });
+  return useMutation<BookingDetail, Error, { id: string; welcomeMessage?: string; agreeReceipt?: boolean }>({
+    mutationFn: async ({ id, welcomeMessage, agreeReceipt }) => {
+      const res = await fetch(`/api/bookings/${id}/accept`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agreeReceipt: Boolean(agreeReceipt) }),
+      });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to accept');
       const booking = await res.json();
       // Optionally post a welcome message into the chat
@@ -2961,13 +3088,14 @@ function CompanionInbox() {
   const decline = useDeclineBooking();
   const [confirming, setConfirming] = useState<{ id: string; action: 'accept' | 'decline' } | null>(null);
   const [welcomeMsg, setWelcomeMsg] = useState('');
+  const [agreeReceipt, setAgreeReceipt] = useState(false);
 
   const active = (data ?? []).filter((b) => !['completed', 'cancelled'].includes(b.status));
   const past   = (data ?? []).filter((b) =>  ['completed', 'cancelled'].includes(b.status)).slice(0, 3);
 
   const handleAction = (id: string, action: 'accept' | 'decline') => {
     if (action === 'accept') {
-      accept.mutate({ id, welcomeMessage: welcomeMsg }, { onSuccess: () => { setConfirming(null); setWelcomeMsg(''); } });
+      accept.mutate({ id, welcomeMessage: welcomeMsg, agreeReceipt }, { onSuccess: () => { setConfirming(null); setWelcomeMsg(''); setAgreeReceipt(false); } });
     } else {
       decline.mutate(id, { onSuccess: () => setConfirming(null) });
     }
@@ -3064,8 +3192,13 @@ function CompanionInbox() {
                           autoFocus
                         />
                         <p className="mt-1 text-right font-mono text-[9px] text-[#90b597]">{welcomeMsg.length}/280</p>
+                        <label className="mt-3 flex items-start gap-2 text-[11px] leading-4 text-[#31533f]">
+                          <input type="checkbox" checked={agreeReceipt} onChange={(e) => setAgreeReceipt(e.target.checked)}
+                            className="mt-0.5 accent-[#477254]" data-testid={`checkbox-agree-receipt-${b.id}`} />
+                          I agree to the Boundary Receipt — public SafeSpot, platonic contact, no photos without consent, each person keeps their own transportation.
+                        </label>
                         <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <button type="button" disabled={isActing} onClick={() => handleAction(b.id, 'accept')}
+                          <button type="button" disabled={isActing || !agreeReceipt} onClick={() => handleAction(b.id, 'accept')}
                             className="inline-flex h-9 items-center gap-2 rounded-full bg-[#477254] px-4 text-xs font-bold text-white disabled:opacity-60 transition"
                             data-testid={`button-confirm-accept-${b.id}`}>
                             {isActing ? 'Accepting…' : welcomeMsg.trim() ? 'Accept & send welcome' : 'Accept booking'} <Check className="h-3.5 w-3.5" />
@@ -3148,7 +3281,7 @@ function CompanionInbox() {
 // Trust Circle — safety net contacts
 // ---------------------------------------------------------------------------
 
-type TrustContact = { id: string; name: string; phone: string; relation: string };
+type TrustContact = { id: string; name: string; phone: string; email?: string; relation: string };
 
 function useTrustCircle() {
   const { user } = useAuth();
@@ -3211,7 +3344,7 @@ function TrustCircleBookingPanel() {
         </div>
       ) : (
         <p className="mt-2 text-[10px] leading-4 text-[#7a5a12]">
-          Your Trust Circle is notified when the favor starts. Add at least one contact for a safer booking.
+          Your Trust Circle can be emailed at check-in or if you miss one — if they have an email. SMS is not configured.
         </p>
       )}
     </div>
@@ -3222,18 +3355,23 @@ function TrustCircleSetup() {
   const { contacts, add, remove } = useTrustCircle();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [relation, setRelation] = useState('Friend');
   const [addedName, setAddedName] = useState<string | null>(null);
+  const [trustError, setTrustError] = useState('');
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || contacts.length >= 3) return;
+    if (!name.trim() || (!phone.trim() && !email.trim()) || contacts.length >= 3) return;
+    setTrustError('');
     try {
-      await add({ name: name.trim(), phone: phone.trim(), relation });
+      await add({ name: name.trim(), phone: phone.trim(), email: email.trim(), relation });
       setAddedName(name.trim());
-      setName(''); setPhone(''); setRelation('Friend');
+      setName(''); setPhone(''); setEmail(''); setRelation('Friend');
       setTimeout(() => setAddedName(null), 3500);
-    } catch {}
+    } catch (err) {
+      setTrustError(err instanceof Error ? err.message : 'Could not add contact');
+    }
   };
 
   return (
@@ -3254,7 +3392,7 @@ function TrustCircleSetup() {
           </div>
         </div>
         <p className="mt-5 max-w-lg text-sm leading-7 text-[#725e69]">
-          Add up to 3 people who care about you. They get a quiet notification when your favor begins and an alert if you miss a check-in. No booking details are ever shared with them.
+          Add up to 3 people who care about you. They can be emailed when you check in, miss a check-in, or share an emergency map — if they have an email. SMS is not configured. They never receive a live companion pin or a home address.
         </p>
 
         {/* Contact list */}
@@ -3268,7 +3406,7 @@ function TrustCircleSetup() {
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-[#48213d]">{c.name}</p>
-                  <p className="text-xs text-[#806c76]">{c.relation} · {c.phone}</p>
+                  <p className="text-xs text-[#806c76]">{c.relation} · {c.email || c.phone || 'No contact method'}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="hidden items-center gap-1 text-[10px] font-bold text-[#477254] sm:flex">
@@ -3309,10 +3447,17 @@ function TrustCircleSetup() {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Phone number</span>
-                <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (808) 555-0123"
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 (504) 555-0123"
                   className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-white px-4 text-sm outline-none focus:border-[#7f2e62]"
                   data-testid="input-trust-phone" />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Email (needed for alerts until SMS is live)</span>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="alex@example.com"
+                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-white px-4 text-sm outline-none focus:border-[#7f2e62]"
+                  data-testid="input-trust-email" />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Relationship</span>
@@ -3330,6 +3475,7 @@ function TrustCircleSetup() {
                   <Check className="h-3.5 w-3.5" />{addedName} added to your Trust Circle
                 </p>
               )}
+              {trustError && <p className="text-xs text-[#a64742]">{trustError}</p>}
             </div>
           </form>
         )}
@@ -3343,9 +3489,9 @@ function TrustCircleSetup() {
         {/* How it works */}
         <div className="mt-8 grid gap-5 rounded-[20px] bg-[#f0e4db] p-6 sm:grid-cols-3">
           {([
-            { icon: Bell, label: 'Favor starts', desc: 'A quiet text goes out — no companion name, route, or booking details shared' },
-            { icon: Clock3, label: 'Hourly check-in', desc: 'You tap "I\'m safe" and they see your status update without location data' },
-            { icon: AlertTriangle, label: 'Missed check-in', desc: 'An alert fires automatically if you don\'t respond within the agreed window' },
+            { icon: Bell, label: 'Favor check-in', desc: 'If they have an email, they can be told you arrived at the public venue — no companion name or live pin' },
+            { icon: Clock3, label: 'Missed check-in', desc: 'Favor Mode sends one alert after 12 minutes without arrival. SMS is not configured yet' },
+            { icon: AlertTriangle, label: 'Emergency map', desc: 'Call 911 first. Then a temporary venue map can be emailed. It expires after the booking' },
           ] as { icon: typeof Bell; label: string; desc: string }[]).map(({ icon: Icon, label, desc }) => (
             <div key={label}>
               <Icon className="h-4 w-4 text-[#9b6b88]" />
@@ -3384,8 +3530,45 @@ function BoundaryReceipt({
   onAgree: (timestamp: string) => void;
 }) {
   const [agreed, setAgreed] = useState(false);
-  const boundaries = companion.boundaries?.length ? companion.boundaries : DEFAULT_BOUNDARIES;
+  const [clauses, setClauses] = useState<string[]>(
+    companion.boundaries?.length ? companion.boundaries : DEFAULT_BOUNDARIES,
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [endTime, setEndTime] = useState('');
   const firstName = companion.displayName.split(' ')[0];
+
+  useEffect(() => {
+    fetch(`/api/bookings/${booking.id}/boundary-receipt`, { credentials: 'include' })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({})) as { clauses?: string[]; endTime?: string; customerAgreedAt?: string | null; error?: string };
+        if (!res.ok) throw new Error(body.error ?? 'Could not load the Boundary Receipt');
+        if (body.clauses?.length) setClauses(body.clauses);
+        if (body.endTime) setEndTime(body.endTime);
+        if (body.customerAgreedAt) onAgree(new Date(body.customerAgreedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load the Boundary Receipt'));
+  }, [booking.id]);
+
+  const sign = async () => {
+    setBusy(true); setError('');
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}/boundary-receipt`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agreed: true }),
+      });
+      const body = await res.json().catch(() => ({})) as { customerAgreedAt?: string; error?: string };
+      if (!res.ok) throw new Error(body.error ?? 'Could not sign');
+      onAgree(body.customerAgreedAt
+        ? new Date(body.customerAgreedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sign the Boundary Receipt');
+      setBusy(false);
+    }
+  };
   return (
     <Shell>
       <main className="page-enter mx-auto max-w-2xl px-5 py-14 lg:px-8 lg:py-20">
@@ -3400,8 +3583,7 @@ function BoundaryReceipt({
           </div>
         </div>
         <p className="mt-5 text-sm leading-7 text-[#725e69]">
-          Read the agreements below. By signing, you confirm you understand how this time works and that you will respect every boundary.
-          A timestamped receipt is attached to your booking and visible to both parties.
+          This receipt is stored on the booking. Your companion must sign the same clauses to accept. Changing time, venue, or activity means a new request — both people would sign again.
         </p>
 
         {/* Booking summary */}
@@ -3416,7 +3598,7 @@ function BoundaryReceipt({
           </div>
           <div>
             <p className="font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">Date &amp; time</p>
-            <p className="mt-1.5 font-semibold text-[#48213d]">{booking.date} · {booking.startTime}</p>
+            <p className="mt-1.5 font-semibold text-[#48213d]">{booking.date} · {booking.startTime}{endTime ? `–${endTime}` : ''} CT</p>
           </div>
           <div>
             <p className="font-mono text-[9px] uppercase tracking-wider text-[#b0929f]">SafeSpot</p>
@@ -3428,7 +3610,7 @@ function BoundaryReceipt({
         <div className="mt-5 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
           <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Mutual agreements</p>
           <ul className="mt-5 space-y-4">
-            {boundaries.map((b, i) => (
+            {clauses.map((b, i) => (
               <li key={i} className="flex items-start gap-3 text-sm leading-5 text-[#654c5f]">
                 <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-mono text-[9px] font-bold text-[#7f2e62]">
                   {i + 1}
@@ -3444,10 +3626,10 @@ function BoundaryReceipt({
           <p className="font-mono text-[9px] uppercase tracking-wider text-[#477254]">Platform protections active on this booking</p>
           <div className="mt-4 space-y-2.5">
             {[
-              'Companion\'s location is approximate — never a precise address',
-              'Payment is held until companion confirms SafeSpot check-in',
-              'Trust Circle contacts notified when the favor begins',
-              'Either party can reach the OnlyFavors safety team at any time',
+              'Companion location stays approximate — never a home or work pin',
+              'Payment is captured at checkout, not at this signature',
+              'Trust Circle is emailed venue check-ins if they have an email — never a companion name or live pin',
+              'Chat is masked, not end-to-end encrypted. Reported threads can be reviewed by the safety team',
             ].map((p) => (
               <p key={p} className="flex items-start gap-2 text-xs leading-5 text-[#31533f]">
                 <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" />{p}
@@ -3466,12 +3648,13 @@ function BoundaryReceipt({
               and I commit to treating {firstName} with full respect for our entire time together.
             </span>
           </label>
-          <button type="button" disabled={!agreed}
-            onClick={() => onAgree(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}
+          <button type="button" disabled={!agreed || busy}
+            onClick={() => void sign()}
             className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e] disabled:cursor-not-allowed disabled:opacity-40"
             data-testid="button-boundary-continue">
-            Sign receipt and continue <ArrowRight className="h-4 w-4" />
+            {busy ? 'Saving receipt…' : 'Sign receipt and continue'} <ArrowRight className="h-4 w-4" />
           </button>
+          {error && <p className="mt-3 text-xs text-[#a64742]">{error}</p>}
         </div>
 
         <p className="mt-5 text-center font-mono text-[10px] text-[#a38c95]">
@@ -3485,6 +3668,12 @@ function BoundaryReceipt({
 function Book() {
   const search = new URLSearchParams(window.location.search); const companionId = search.get('companion') || '';
   const [, navigate] = useLocation();
+  const { user, loading: authLoading } = useAuth();
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate(`/login?intent=customer&next=${encodeURIComponent(`/book${window.location.search}`)}`);
+    }
+  }, [authLoading, user, navigate]);
   const companionQuery = useGetCompanion(companionId, { query: { queryKey: getGetCompanionQueryKey(companionId), enabled: Boolean(companionId) } });
   const companion = companionQuery.data;
   const spotsQuery = useListSafeSpots(companion?.city ? { city: companion.city } : undefined, { query: { queryKey: getListSafeSpotsQueryKey(companion?.city ? { city: companion.city } : undefined), enabled: Boolean(companion?.city), retry: false } });
@@ -3523,6 +3712,7 @@ function Book() {
       },
     });
   };
+  if (authLoading || !user) return <Shell><main className="mx-auto max-w-5xl px-5 py-16"><LoadingState label="Opening booking details" /></main></Shell>;
   if (companionQuery.isLoading) return <Shell><main className="mx-auto max-w-5xl px-5 py-16"><LoadingState label="Opening booking details" /></main></Shell>;
   if (!companionId || companionQuery.isError || !companion) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><EmptyState icon={CalendarDays} title="Start with a companion." body="Choose an approved companion first, then come back here to plan your time together." action={<Link href="/explore" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-[#fff5eb]" data-testid="link-book-explore">Explore companions <ArrowRight className="h-4 w-4" /></Link>} /></main></Shell>;
   const bookingStep = !created ? 1 : !receiptAgreed ? 2 : 3;
@@ -3588,8 +3778,8 @@ function Book() {
               className="flex w-full items-center justify-between rounded-[16px] bg-[#31533f] p-4 text-left hover:bg-[#254030] disabled:opacity-50"
               data-testid="button-pay-full">
               <div>
-                <p className="text-sm font-bold text-white">Pay {money(created.totalCents)} · Confirm now</p>
-                <p className="mt-0.5 text-xs text-white/60">Skip chat and go straight to a confirmed booking.</p>
+                <p className="text-sm font-bold text-white">Authorize {money(created.totalCents)}</p>
+                <p className="mt-0.5 text-xs text-white/60">Stripe holds the rest. The booking is confirmed only after the webhook and companion accept (or Instant Book).</p>
               </div>
               <WalletCards className="h-5 w-5 shrink-0 text-white/60" />
             </button>
@@ -3633,7 +3823,7 @@ function Book() {
         </div>
       ))}
     </div>
-    <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_340px]"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A thoughtful plan</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Book time with<br /><em>{companion.displayName}.</em></h1><p className="mt-4 max-w-lg text-sm leading-6 text-[#725e69]">Tell us the shape of your time together. Times are in New Orleans (Central Time). Minimum 1 hour, in 30-minute steps.</p><form onSubmit={submit} className="mt-10 space-y-5" data-testid="form-booking"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">What would you like to do?</span><select required value={activity} onChange={(e) => setActivity(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-activity"><option value="">Choose an activity</option>{companion.activities.map((x) => <option key={x} value={x}>{x}</option>)}</select></label><div className="grid gap-5 sm:grid-cols-2"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Date</span><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-date" /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Start time</span><input required type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-time" /></label></div><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">How long?</span><select required value={duration} onChange={(e) => setDuration(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-duration">{[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8].map((h) => <option key={h} value={String(h)}>{h === 7 ? 'Full day (7 hours)' : h === 1 ? '1 hour' : `${h} hours`}</option>)}</select></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Choose a SafeSpot in {companion.city}</span>{spotsQuery.isLoading ? <div className="skeleton h-12 rounded-xl" /> : spotsQuery.isError ? <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">SafeSpots are unavailable. Try again in a moment.</p> : spots.length === 0 ? <p className="rounded-xl border border-dashed border-[#cbbab5] p-3 text-xs text-[#806c76]">No public SafeSpots are listed for this area yet.</p> : <select required value={spot} onChange={(e) => setSpot(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-safe-spot"><option value="">Choose a public place</option>{spots.map((s: SafeSpot) => <option key={s.id} value={s.id}>{s.name} · {s.addressHint}{s.openLate ? ' · Open late' : ''}</option>)}</select>}</label><div className="flex items-start gap-2 rounded-xl bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />Your booking is only a request until your companion accepts. Exact details stay private.</div><Button type="submit" disabled={mutation.isPending || spots.length === 0} className="w-full sm:w-auto" testId="button-submit-booking">{mutation.isPending ? 'Pricing your request…' : 'Review server-priced request'} <ArrowRight className="h-4 w-4" /></Button>{mutation.isError && <p className="text-sm text-[#a64742]" data-testid="status-booking-error">We could not create this request. Please check the details and try again.</p>}</form></div><aside className="h-fit rounded-[24px] bg-[#3d2038] p-7 text-[#f9efe5] lg:sticky lg:top-28"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your companion</p><div className="mt-5 flex items-center gap-3"><Avatar companion={companion} /><div><p className="font-serif text-2xl">{companion.displayName}</p><p className="text-xs text-[#d3b6c4]">{companion.serviceArea}, {companion.city}</p></div></div><div className="mt-7 rounded-[16px] border border-[#65445d] bg-[#4a2842] p-5">{quoteQuery.isLoading ? <><div className="skeleton h-3 w-24 rounded-full opacity-30" /><div className="skeleton mt-3 h-8 w-32 rounded-full opacity-30" /><div className="skeleton mt-2 h-3 w-full rounded-full opacity-20" /></> : quote ? <><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[#c695ae]">Price estimate</p><div className="mt-4 space-y-2 text-xs text-[#d8c1cc]"><div className="flex items-center justify-between"><span>{Number(duration) === 7 && (companion as { dayRate?: number | null }).dayRate ? `Full day rate` : `${duration} hr × ${money(companion.hourlyRate * 100)}/hr`}</span><span>{money(quote.subtotalCents)}</span></div><div className="flex items-center justify-between text-[#b39dad]"><span>Safety &amp; service fee (5%)</span><span>+{money(quote.customerFeeCents)}</span></div></div><div className="my-3 border-t border-[#65445d]" /><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">You pay</span><span className="font-serif text-3xl text-[#f9efe5]" data-testid="value-quote-total">{money(quote.totalCents)}</span></div><p className="mt-1 text-right text-[10px] text-[#b39dad]">Companion receives {money(quote.companionPayoutCents)}</p><div className="mt-4 rounded-[10px] border border-[#8a4070] bg-[#5a2550] p-3"><div className="flex items-start gap-2"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#df9cbd]" /><p className="text-[10px] leading-4 text-[#dbc3cf]">Or pay a <strong className="text-[#f0c8dc]">$10 deposit</strong> to unlock chat first — credited toward your booking total.</p></div></div></> : <p className="text-xs text-[#b39dad]">Select a duration to see your price.</p>}</div><div className="mt-5 border-t border-[#65445d] pt-5"><p className="flex items-center gap-2 text-xs leading-5 text-[#d8c1cc]"><LockKeyhole className="h-4 w-4 text-[#df9cbd]" />All prices are calculated server-side. Your browser never sets amounts.</p></div></aside></div></main></Shell>;
+    <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_340px]"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A thoughtful plan</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Book time with<br /><em>{companion.displayName}.</em></h1><p className="mt-4 max-w-lg text-sm leading-6 text-[#725e69]">Tell us the shape of your time together. Times are in New Orleans (Central Time). Minimum 1 hour, in 30-minute steps.</p><form onSubmit={submit} className="mt-10 space-y-5" data-testid="form-booking"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">What would you like to do?</span><select required value={activity} onChange={(e) => setActivity(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-activity"><option value="">Choose an activity</option>{companion.activities.map((x) => <option key={x} value={x}>{x}</option>)}</select></label><div className="grid gap-5 sm:grid-cols-2"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Date</span><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-date" /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Start time</span><input required type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-time" /></label></div><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">How long?</span><select required value={duration} onChange={(e) => setDuration(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-duration">{[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8].map((h) => <option key={h} value={String(h)}>{h === 7 ? 'Full day (7 hours)' : h === 1 ? '1 hour' : `${h} hours`}</option>)}</select></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Meet Here — public SafeSpot in {companion.city}</span>{spotsQuery.isLoading ? <div className="skeleton h-12 rounded-xl" /> : spotsQuery.isError ? <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">SafeSpots are unavailable. Try again in a moment.</p> : spots.length === 0 ? <p className="rounded-xl border border-dashed border-[#cbbab5] p-3 text-xs text-[#806c76]">No public SafeSpots are listed for this area yet.</p> : <select required value={spot} onChange={(e) => setSpot(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-safe-spot"><option value="">Choose a public place</option>{spots.map((s: SafeSpot) => <option key={s.id} value={s.id}>{s.name} · {s.addressHint}{s.openLate ? ' · Open late' : ''}</option>)}</select>}<p className="mt-2 text-[11px] leading-5 text-[#806c76]">Your companion agrees to this venue by accepting. Home and work addresses are never used.</p></label><div className="flex items-start gap-2 rounded-xl bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />Your booking is only a request until your companion accepts. Exact details stay private.</div><Button type="submit" disabled={mutation.isPending || spots.length === 0} className="w-full sm:w-auto" testId="button-submit-booking">{mutation.isPending ? 'Pricing your request…' : 'Review server-priced request'} <ArrowRight className="h-4 w-4" /></Button>{mutation.isError && <p className="text-sm text-[#a64742]" data-testid="status-booking-error">We could not create this request. Please check the details and try again.</p>}</form></div><aside className="h-fit rounded-[24px] bg-[#3d2038] p-7 text-[#f9efe5] lg:sticky lg:top-28"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your companion</p><div className="mt-5 flex items-center gap-3"><Avatar companion={companion} /><div><p className="font-serif text-2xl">{companion.displayName}</p><p className="text-xs text-[#d3b6c4]">{companion.serviceArea}, {companion.city}</p></div></div><div className="mt-7 rounded-[16px] border border-[#65445d] bg-[#4a2842] p-5">{quoteQuery.isLoading ? <><div className="skeleton h-3 w-24 rounded-full opacity-30" /><div className="skeleton mt-3 h-8 w-32 rounded-full opacity-30" /><div className="skeleton mt-2 h-3 w-full rounded-full opacity-20" /></> : quote ? <><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[#c695ae]">Price estimate</p><div className="mt-4 space-y-2 text-xs text-[#d8c1cc]"><div className="flex items-center justify-between"><span>{Number(duration) === 7 && (companion as { dayRate?: number | null }).dayRate ? `Full day rate` : `${duration} hr × ${money(companion.hourlyRate * 100)}/hr`}</span><span>{money(quote.subtotalCents)}</span></div><div className="flex items-center justify-between text-[#b39dad]"><span>Safety &amp; service fee (5%)</span><span>+{money(quote.customerFeeCents)}</span></div></div><div className="my-3 border-t border-[#65445d]" /><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">You pay</span><span className="font-serif text-3xl text-[#f9efe5]" data-testid="value-quote-total">{money(quote.totalCents)}</span></div><p className="mt-1 text-right text-[10px] text-[#b39dad]">Companion receives {money(quote.companionPayoutCents)}</p><div className="mt-4 rounded-[10px] border border-[#8a4070] bg-[#5a2550] p-3"><div className="flex items-start gap-2"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#df9cbd]" /><p className="text-[10px] leading-4 text-[#dbc3cf]">Or pay a <strong className="text-[#f0c8dc]">$10 deposit</strong> to unlock chat first — credited toward your booking total.</p></div></div></> : <p className="text-xs text-[#b39dad]">Select a duration to see your price.</p>}</div><div className="mt-5 border-t border-[#65445d] pt-5"><p className="flex items-center gap-2 text-xs leading-5 text-[#d8c1cc]"><LockKeyhole className="h-4 w-4 text-[#df9cbd]" />All prices are calculated server-side. Your browser never sets amounts.</p></div></aside></div></main></Shell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -3649,6 +3839,13 @@ type BookingDetail = {
   createdAt: string;
   reviewed?: boolean;
   companionName?: string;
+  boundaryReceipt?: {
+    clauses: string[];
+    venueName: string;
+    endTime: string;
+    customerAgreedAt: string | null;
+    companionAgreedAt: string | null;
+  } | null;
 };
 
 const STATUS_LABEL: Record<string, { label: string; tone: 'green' | 'amber' | 'plum' | 'gray' }> = {
@@ -3737,7 +3934,7 @@ function BookingChat({ bookingId, status, viewerRole = 'customer' }: { bookingId
       <div className="mt-6 rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-5 text-center">
         <Lock className="mx-auto h-5 w-5 text-[#c6aeb8]" />
         <p className="mt-2 text-sm font-semibold text-[#48213d]">Chat unlocks after deposit</p>
-        <p className="mt-1 text-xs text-[#806c76]">Pay the $10 deposit to open a private thread with your companion.</p>
+        <p className="mt-1 text-xs text-[#806c76]">Pay the $10 deposit to open a private thread. Messages are masked, not end-to-end encrypted. If someone reports this booking, the safety team can read the thread.</p>
       </div>
     );
   }
@@ -3747,7 +3944,7 @@ function BookingChat({ bookingId, status, viewerRole = 'customer' }: { bookingId
       {/* Banner */}
       <div className="flex items-center gap-2 border-b border-[#ece1d9] bg-[#fbf7f1] px-4 py-2.5">
         <Lock className="h-3 w-3 shrink-0 text-[#9d557e]" />
-        <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Private · Phone numbers and emails are blocked</p>
+        <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Private · Phone numbers and emails are blocked · Not end-to-end encrypted</p>
       </div>
 
       {/* Thread */}
@@ -4632,7 +4829,7 @@ function ActivityDetail() {
               <section className="rounded-[22px] bg-[#3d2038] p-7 text-[#f9efe5]">
                 <ShieldCheck className="h-5 w-5 text-[#c695ae]" />
                 <h2 className="mt-4 font-serif text-2xl">Safety first, always</h2>
-                <p className="mt-2 text-sm leading-6 text-[#d9c4cf]">All {data.name.toLowerCase()} bookings begin at a verified SafeSpot. Your Trust Circle is notified at check-in. Boundaries are agreed in writing before anything is confirmed.</p>
+                <p className="mt-2 text-sm leading-6 text-[#d9c4cf]">All {data.name.toLowerCase()} bookings begin at a listed SafeSpot. Both people sign a Boundary Receipt first. Trust Circle can get a venue check-in email — never a companion name.</p>
                 <Link href="/safety" className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#c695ae] hover:text-white">
                   How safety works <ArrowRight className="h-3 w-3" />
                 </Link>
@@ -5761,10 +5958,10 @@ const FAQ_DATA = [
     category: 'Safety & privacy',
     items: [
       { q: 'How are companions verified?', a: 'A person reviews each application before a listing can appear in Explore. That is a human approval, not an automated ID scan or a guaranteed third-party background check.' },
-      { q: 'What is a SafeSpot?', a: 'SafeSpots are verified public venues — cafés, hotel lobbies, libraries, museum lobbies — where all bookings must begin. They are staff-aware, well-lit, and easy to leave. No home addresses, ever.' },
-      { q: 'What is a Boundary Receipt?', a: 'A Boundary Receipt is a mutual agreement documented before every confirmed booking. Both parties see the agreed-upon boundaries (platonic only, public venue, mutual respect) and these are stored securely.' },
-      { q: 'Who can see my booking details?', a: 'Only you and your companion. Our trust & safety team has access for safety and dispute purposes only. Companions see your first name and booking details — never your phone number, email, or address.' },
-      { q: 'What is the Trust Circle?', a: 'Trust Circle is a list of up to 3 people (friends, family) who receive a quiet notification when your favor begins and an alert if you miss a check-in. No booking details or companion identity are ever shared with them.' },
+      { q: 'What is a SafeSpot?', a: 'SafeSpots are listed public venues — cafés, hotel lobbies, libraries, museum lobbies — where bookings must begin. Check-in is recorded in the app. The pilot does not train venue staff, run an emergency desk, or offer venue discounts. No home addresses, ever.' },
+      { q: 'What is a Boundary Receipt?', a: 'A Boundary Receipt stores activity, SafeSpot, time, transportation, contact, photos, and alcohol expectations. Both people sign the same clauses. Changing time, venue, or activity means a new request so both can sign again.' },
+      { q: 'Who can see my booking details?', a: 'You and your companion. Trust & safety can review a reported chat thread. Companions see your first name and booking details — never your phone number, email, or home address. Trust Circle contacts never receive a companion name or live pin.' },
+      { q: 'What is the Trust Circle?', a: 'Up to 3 people you choose. If they have an email, they can be told you arrived at the public venue, or that a check-in was missed. SMS is not configured. They never receive booking details, a companion name, or a live pin.' },
     ],
   },
   {
@@ -6429,8 +6626,8 @@ function Help() {
     ]},
     { title: 'Safety', icon: ShieldCheck, items: [
       { q: 'How are companions verified?', a: "A person reviews each application before a listing can appear. There is no in-app government-ID upload or third-party background check yet. Location is shown as a service-area circle — never a home address." },
-      { q: 'What is a Boundary Receipt?', a: "Before every booking, both parties agree to a documented list of activities, comfort levels, and limits. This is stored securely and referenced if a dispute arises." },
-      { q: 'What is the Trust Circle?', a: "Up to 3 contacts who receive automatic check-in alerts during your booking. Configure it from your Safety page or workspace." },
+      { q: 'What is a Boundary Receipt?', a: "Both people sign the same stored clauses — activity, SafeSpot, time, transportation, contact, photos, and alcohol. Changing those details means a new request." },
+      { q: 'What is the Trust Circle?', a: "Up to 3 contacts. If they have an email, they can be told you arrived at the public venue or that a check-in was missed. SMS is not configured. They never receive a companion name or live pin." },
       { q: 'What if I feel unsafe during a booking?', a: 'If you are in danger, call local emergency services first. Favor Mode can alert your Trust Circle. Email hello@onlyfavors.com for platform concerns — we do not staff a 24/7 hotline.' },
     ]},
     { title: 'For companions', icon: UsersRound, items: [
@@ -7829,7 +8026,7 @@ function Pricing() {
                     ['Identity verification', '✓ Every companion', '~ Some platforms'],
                     ['SafeSpot meeting venues', '✓ Built-in network', '✗ No equivalent'],
                     ['Boundary Receipt', '✓ On every booking', '✗ None'],
-                    ['Trust Circle check-ins', '✓ Automatic', '✗ DIY'],
+                    ['Trust Circle check-ins', '✓ Venue email if configured', '✗ DIY'],
                     ['Companion commission', '15% — disclosed upfront', 'Up to 30% + hidden fees'],
                     ['Customer service fee', '5% flat, shown before pay', 'Variable, often hidden'],
                     ['$10 refundable deposit', '✓ Chat before committing', '✗ Full charge upfront'],
@@ -8062,6 +8259,7 @@ type CompanionProfileData = {
   activities: string[];
   languages: string[];
   serviceArea: string;
+  approvedAreas?: string[];
   availableDays: string[];
   availableHoursStart: string;
   availableHoursEnd: string;
@@ -8185,6 +8383,7 @@ function CompanionProfileEditor() {
   const [activities, setActivities] = useState<string[]>([]);
   const [languages, setLanguages] = useState<string[]>([]);
   const [serviceArea, setServiceArea] = useState('');
+  const [approvedAreas, setApprovedAreas] = useState<string[]>([]);
   const [availableDays, setAvailableDays] = useState<string[]>([]);
   const [hoursStart, setHoursStart] = useState('10:00');
   const [hoursEnd, setHoursEnd] = useState('20:00');
@@ -8202,6 +8401,7 @@ function CompanionProfileEditor() {
       setActivities(p.activities);
       setLanguages(p.languages);
       setServiceArea(p.serviceArea);
+      setApprovedAreas(p.approvedAreas?.length ? p.approvedAreas : (p.serviceArea ? [p.serviceArea] : []));
       setAvailableDays(p.availableDays);
       setHoursStart(p.availableHoursStart);
       setHoursEnd(p.availableHoursEnd);
@@ -8218,7 +8418,7 @@ function CompanionProfileEditor() {
     const rate = Math.round(parseFloat(hourlyRate) * 100);
     if (!displayName.trim() || !bio.trim() || isNaN(rate)) return;
     updateProfile.mutate(
-      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd, interviewAnswers: qaAnswers, instantBook, dayRateCents: dayRate ? Math.round(parseFloat(dayRate) * 100) : null },
+      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea: approvedAreas[0] || serviceArea, approvedAreas, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd, interviewAnswers: qaAnswers, instantBook, dayRateCents: dayRate ? Math.round(parseFloat(dayRate) * 100) : null },
       {
         onSuccess: () => {
           setSaved(true);
@@ -8486,18 +8686,26 @@ function CompanionProfileEditor() {
                 </div>
                 <p className="mt-1 text-[10px] text-[#9b858e]">Min $20 · Max $500 per hour</p>
               </label>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Service area</span>
-                <input
-                  value={serviceArea}
-                  onChange={(e) => setServiceArea(e.target.value)}
-                  placeholder="Bywater or Marigny"
-                  maxLength={100}
-                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
-                  data-testid="input-profile-area"
-                />
-                <p className="mt-1 text-[10px] text-[#9b858e]">Neighborhood in New Orleans. Public listings never show a live pin.</p>
-              </label>
+              <div className="sm:col-span-2">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Approved neighborhoods</span>
+                <div className="flex flex-wrap gap-2">
+                  {NOLA_AREAS.map((area) => {
+                    const on = approvedAreas.includes(area.name);
+                    return (
+                      <button
+                        key={area.name}
+                        type="button"
+                        onClick={() => setApprovedAreas((prev) => on ? prev.filter((name) => name !== area.name) : [...prev, area.name].slice(0, 8))}
+                        className={`h-9 rounded-full px-3 text-xs font-bold transition ${on ? 'bg-[#7f2e62] text-white' : 'border border-[#dfd2c9] bg-[#fbf7f1] text-[#806c76] hover:border-[#9d557e]'}`}
+                        data-testid={`toggle-area-${area.name.toLowerCase().replace(/ /g, '-')}`}
+                      >
+                        {area.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[10px] leading-4 text-[#9b858e]">Customers see these neighborhood centers — never your home, workplace, or a live pin. Each area is a roughly 15-mile service circle in New Orleans.</p>
+              </div>
             </div>
           </ProfileSection>
 
@@ -8606,6 +8814,7 @@ function CompanionBookingDetail() {
   const [confirming, setConfirming] = useState<'accept' | 'decline' | null>(null);
   const [welcomeMsg, setWelcomeMsg] = useState('');
   const [declineReason, setDeclineReason] = useState('');
+  const [agreeReceipt, setAgreeReceipt] = useState(false);
 
   if (!id) { navigate('/dashboard/companion'); return null; }
 
@@ -8618,7 +8827,7 @@ function CompanionBookingDetail() {
 
   const isConfirmed = b.status === 'confirmed' || b.status === 'completed';
   const isChatOpen = CHAT_ENABLED_STATUSES.has(b.status);
-  const canRespond = b.status === 'deposit_paid';
+  const canRespond = b.status === 'deposit_paid' || b.status === 'authorized';
 
   return (
     <Shell>
@@ -8668,11 +8877,25 @@ function CompanionBookingDetail() {
             </div>
           )}
 
+          {b.safeSpotId && (
+            <div className="mt-6 rounded-[16px] border border-[#c7d9cb] bg-[#eef6ef] p-5">
+              <p className="font-mono text-[9px] font-bold uppercase tracking-[.15em] text-[#477254]">Meet Here</p>
+              <p className="mt-2 text-sm font-semibold text-[#31533f]">
+                {['confirmed', 'authorized', 'completed'].includes(b.status)
+                  ? 'You agreed to the customer's public SafeSpot'
+                  : 'Customer proposed a public SafeSpot — accepting agrees to Meet Here'}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[#53725d]">
+                This is a public venue, never a home or workplace. Companions are never shown as live pins.
+              </p>
+            </div>
+          )}
+
           {/* Accept / Decline actions */}
           {canRespond && (
             <div className="mt-6 rounded-[20px] border border-[#c7d9cb] bg-[#f4faf5] p-5" data-testid="booking-response-panel">
               <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#477254]">Your response</p>
-              <p className="mt-1 text-xs leading-5 text-[#53725d]">Review the booking details above, then accept or decline. A welcome message is optional but appreciated.</p>
+              <p className="mt-1 text-xs leading-5 text-[#53725d]">Review the booking details above, then accept or decline. Accepting agrees to the customer's public SafeSpot (Meet Here). Home and work addresses are never used.</p>
 
               {confirming === 'accept' && (
                 <div className="mt-4 space-y-3">
@@ -8685,11 +8908,23 @@ function CompanionBookingDetail() {
                     className="w-full resize-none rounded-xl border border-[#c7d9cb] bg-white p-3 text-sm leading-6 outline-none focus:border-[#477254]"
                     data-testid="input-welcome-message"
                   />
+                  {b.boundaryReceipt?.clauses?.length ? (
+                    <ul className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl bg-white/70 p-3 text-[11px] leading-4 text-[#53725d]">
+                      {b.boundaryReceipt.clauses.map((clause) => (
+                        <li key={clause}>{clause}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <label className="flex items-start gap-2 text-[11px] leading-4 text-[#31533f]">
+                    <input type="checkbox" checked={agreeReceipt} onChange={(e) => setAgreeReceipt(e.target.checked)}
+                      className="mt-0.5 accent-[#477254]" data-testid="checkbox-companion-receipt" />
+                    I agree to this Boundary Receipt, including the public SafeSpot. Changing it later requires a new booking both people sign.
+                  </label>
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      disabled={accept.isPending}
-                      onClick={() => accept.mutate({ id: b.id, welcomeMessage: welcomeMsg }, { onSuccess: () => { setConfirming(null); refetch(); } })}
+                      disabled={accept.isPending || !agreeReceipt}
+                      onClick={() => accept.mutate({ id: b.id, welcomeMessage: welcomeMsg, agreeReceipt: true }, { onSuccess: () => { setConfirming(null); refetch(); } })}
                       className="inline-flex h-10 items-center gap-2 rounded-full bg-[#477254] px-5 text-xs font-bold text-white disabled:opacity-60"
                       data-testid="button-confirm-accept">
                       <Check className="h-3.5 w-3.5" />{accept.isPending ? 'Accepting…' : 'Accept booking'}
@@ -8756,10 +8991,15 @@ function CompanionBookingDetail() {
 
           <p className="mt-6 font-mono text-[10px] text-[#a38c95]">BOOKING {b.id}</p>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/dashboard/companion" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white">
               <ArrowLeft className="h-3.5 w-3.5" />Back to inbox
             </Link>
+            {(b.status === 'confirmed' || b.status === 'authorized') && (
+              <Link href={`/favor/${b.id}`} className="inline-flex h-10 items-center gap-2 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#654c5f]">
+                <ShieldCheck className="h-3.5 w-3.5" />Open Favor Mode
+              </Link>
+            )}
           </div>
         </div>
 
@@ -8824,17 +9064,12 @@ function BookingStatus() {
     query: { enabled: Boolean(bookingQuery.data?.companionId), queryKey: getGetCompanionQueryKey(bookingQuery.data?.companionId ?? '') },
   });
 
-  // Trigger Stripe reconciliation on mount so a delayed webhook doesn't leave status stale
-  useEffect(() => {
-    if (id) fetch(`/api/stripe/booking/${id}/status`).catch(() => {});
-  }, [id]);
-
-  // Poll every 15 s while awaiting companion action — must be declared before early returns (Rules of Hooks)
   const currentStatus = bookingQuery.data?.status ?? '';
+  // Poll the booking row while payment or accept is outstanding. Stripe.js success does not write status.
   useEffect(() => {
     const PENDING = new Set(['requested', 'deposit_paid', 'authorized']);
     if (!currentStatus || !PENDING.has(currentStatus)) return;
-    const interval = setInterval(() => bookingQuery.refetch(), 15_000);
+    const interval = setInterval(() => bookingQuery.refetch(), currentStatus === 'requested' ? 5_000 : 15_000);
     return () => clearInterval(interval);
   }, [currentStatus]);
 
@@ -8871,6 +9106,16 @@ function BookingStatus() {
                 {isConfirmed ? 'Booking confirmed.' : isDepositPaid ? 'Chat unlocked.' : 'Request received.'}
               </h1>
               {c && <p className="mt-2 text-sm text-[#725e69]">with {c.displayName} · {b.activity}</p>}
+              {b.status === 'requested' && (
+                <p className="mt-3 max-w-md text-xs leading-5 text-[#806c76]">
+                  If you just paid, wait here. Only a signed Stripe webhook marks this booking paid — the payment screen cannot.
+                </p>
+              )}
+              {b.status === 'expired' && (
+                <p className="mt-3 max-w-md text-xs leading-5 text-[#806c76]">
+                  The 10-minute reservation hold expired before payment was confirmed. Start a new request for this time.
+                </p>
+              )}
             </div>
             <div className={`grid h-12 w-12 place-items-center rounded-2xl ${isConfirmed ? 'bg-[#477254] text-white' : isDepositPaid ? 'bg-[#7f2e62] text-white' : 'bg-[#ead0dd] text-[#7f2e62]'}`}>
               {isConfirmed ? <Check /> : isDepositPaid ? <MessageSquare className="h-5 w-5" /> : <CalendarDays className="h-5 w-5" />}
@@ -8907,6 +9152,20 @@ function BookingStatus() {
             <div><p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Activity</p><p className="mt-1 font-semibold text-[#48213d]">{b.activity}</p></div>
           </div>
 
+          {b.safeSpotId && (
+            <div className="mt-4 rounded-[16px] border border-[#c7d9cb] bg-[#eef6ef] p-5">
+              <p className="font-mono text-[9px] font-bold uppercase tracking-[.15em] text-[#477254]">Meet Here</p>
+              <p className="mt-2 text-sm font-semibold text-[#31533f]">
+                {['confirmed', 'authorized', 'completed'].includes(b.status)
+                  ? 'Agreed public SafeSpot'
+                  : 'Proposed public SafeSpot — agreed when your companion accepts'}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[#53725d]">
+                This is a public venue, not a home or workplace. Exact pins stay off the directory.
+              </p>
+            </div>
+          )}
+
           {/* Price breakdown */}
           <div className="mt-6 space-y-2 border-t border-[#dfd2c9] pt-5">
             <div className="flex items-center justify-between text-sm text-[#725e69]"><span>Activity total</span><span>{money(b.subtotalCents)}</span></div>
@@ -8928,28 +9187,29 @@ function BookingStatus() {
             </div>
           )}
 
-          {/* Boundary receipt — shown on confirmed bookings */}
-          {isConfirmed && !isCompleted && c && (
+          {/* Boundary receipt — stored snapshot */}
+          {b.boundaryReceipt && (
             <div className="mt-6 rounded-[16px] border border-[#c7d9cb] bg-[#eef6ef] p-5">
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-4 w-4 text-[#477254]" />
                 <p className="font-mono text-[9px] font-bold uppercase tracking-[.15em] text-[#477254]">Boundary receipt</p>
               </div>
               <p className="mt-2 text-xs leading-5 text-[#53725d]">
-                You and {c.displayName} have agreed to the following before this booking was confirmed:
+                {b.boundaryReceipt.customerAgreedAt && b.boundaryReceipt.companionAgreedAt
+                  ? 'Both people signed this snapshot. A change to time, venue, or activity needs a new booking.'
+                  : b.boundaryReceipt.customerAgreedAt
+                    ? 'You signed. Your companion signs the same clauses when they accept.'
+                    : 'Sign this receipt before payment.'}
               </p>
               <ul className="mt-3 space-y-1.5">
-                {(c.boundaries?.length
-                  ? c.boundaries
-                  : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']
-                ).map((boundary) => (
+                {b.boundaryReceipt.clauses.map((boundary) => (
                   <li key={boundary} className="flex items-start gap-2 text-xs leading-5 text-[#31533f]">
                     <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" />{boundary}
                   </li>
                 ))}
               </ul>
               <p className="mt-3 text-[10px] text-[#63816a]">
-                Agreed at booking confirmation · Stored securely by OnlyFavors
+                Customer {b.boundaryReceipt.customerAgreedAt ? 'signed' : 'pending'} · Companion {b.boundaryReceipt.companionAgreedAt ? 'signed' : 'pending'}
               </p>
             </div>
           )}
@@ -8983,6 +9243,13 @@ function BookingStatus() {
                 <Link href="/dashboard/customer" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white" data-testid="link-booking-dashboard">
                   Go to workspace <ArrowRight className="h-4 w-4" />
                 </Link>
+                {isConfirmed && !isCompleted && (
+                  <Link href={`/favor/${id}`}
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] px-4 text-sm font-bold text-[#654c5f] hover:bg-[#eee2d9]"
+                    data-testid="link-open-favor-mode">
+                    <ShieldCheck className="h-4 w-4" />Open Favor Mode
+                  </Link>
+                )}
                 {isConfirmed && (
                   <Link href={`/receipt/${id}`}
                     className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] px-4 text-sm font-bold text-[#654c5f] hover:bg-[#eee2d9]"
@@ -9688,8 +9955,13 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   useEffect(() => {
-    if (!authLoading && !user) navigate('/login');
-  }, [authLoading, user, navigate]);
+    if (!authLoading && !user) navigate(mode === 'companion' ? '/login?intent=companion' : '/login?intent=customer');
+    if (!authLoading && user && mode === 'companion' && !user.roles.includes('companion')) {
+      navigate(user.companionApplicationStatus === 'pending' || user.companionApplicationStatus === 'draft'
+        ? '/companion/apply/status'
+        : '/companion/apply');
+    }
+  }, [authLoading, user, mode, navigate]);
   const isCustomer = mode === 'customer';
   const signedIn = Boolean(user);
   const customer  = useGetCustomerDashboard({ query: { enabled: isCustomer && signedIn,  queryKey: getGetCustomerDashboardQueryKey() } });
@@ -10092,15 +10364,25 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
 // ---------------------------------------------------------------------------
 
 function CompanionOnboarding() {
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
   const profile = useCompanionProfile();
   const p = profile.data;
   const payout = useCompanionPayoutStatus();
   const profileSaved = Boolean(p?.displayName?.trim() && p?.bio?.trim());
   const qaSaved = (p?.interviewAnswers ?? []).some(Boolean);
   const payoutStatus = payout.data?.status ?? 'not_started';
-
-  const safetyReviewed = Boolean((() => { try { return localStorage.getItem('of_safety_reviewed'); } catch { return null; } })());
   const availabilitySet = Boolean(p?.availableDays?.length);
+  const identityDone = p?.identityStatus === 'pending' || p?.identityStatus === 'verified';
+  const approved = Boolean(user?.companionApproved);
+
+  useEffect(() => {
+    if (user && !user.roles.includes('companion')) {
+      navigate(user.companionApplicationStatus === 'pending' || user.companionApplicationStatus === 'draft'
+        ? '/companion/apply/status'
+        : '/companion/apply');
+    }
+  }, [user, navigate]);
 
   const STEPS = [
     {
@@ -10113,29 +10395,20 @@ function CompanionOnboarding() {
       cta: 'Edit profile',
     },
     {
-      id: 'qa',
-      icon: MessageSquare,
-      title: 'Answer 3 quick questions',
-      body: 'Your personal Q&A appears on your profile and helps customers feel confident before booking.',
+      id: 'identity',
+      icon: BadgeCheck,
+      title: 'Submit identity for review',
+      body: 'A person on the trust team reviews companion ID. This is separate from listing approval.',
       href: '/dashboard/companion/profile',
-      done: qaSaved,
-      cta: 'Add answers',
-    },
-    {
-      id: 'activities',
-      icon: Sparkles,
-      title: 'Set your activities',
-      body: 'List the activities you genuinely enjoy. Customers search and filter by these.',
-      href: '/dashboard/companion/profile',
-      done: profileSaved,
-      cta: 'Set activities',
+      done: identityDone,
+      cta: 'Open profile',
     },
     {
       id: 'availability',
       icon: CalendarDays,
-      title: 'Set your weekly availability',
-      body: 'Let customers know when you are free. You can update this any time from your profile settings.',
-      href: '/dashboard/companion/profile',
+      title: 'Publish availability',
+      body: 'Set weekly windows. You will not receive bookings until you are approved and have availability.',
+      href: '/dashboard/companion/schedule',
       done: availabilitySet,
       cta: 'Set availability',
     },
@@ -10143,19 +10416,10 @@ function CompanionOnboarding() {
       id: 'payout',
       icon: WalletCards,
       title: 'Connect Stripe for payouts',
-      body: 'You\'ll receive 85% of every booking. Connect your bank account so payouts go directly to you.',
+      body: 'Connect your Stripe payout account so completed favors can be paid. Payouts follow Stripe’s schedule — we do not promise a weekday.',
       href: '/dashboard/companion/payout',
       done: payoutStatus === 'active',
       cta: 'Set up payouts',
-    },
-    {
-      id: 'safety',
-      icon: ShieldCheck,
-      title: 'Review the safety guidelines',
-      body: 'Every companion agrees to OnlyFavors\' community standards, boundary protocols, and SafeSpot rules.',
-      href: '/safety',
-      done: safetyReviewed,
-      cta: 'Review guidelines',
     },
   ];
 
@@ -10169,15 +10433,17 @@ function CompanionOnboarding() {
         {/* Header */}
         <div className="rounded-[28px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-12">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#d4a0bd]">
-            {allDone ? 'You\'re live! 🎉' : 'Welcome to OnlyFavors'}
+            {approved ? (allDone ? 'Approved and set up' : 'Approved — finish setup') : 'Pending approval'}
           </p>
           <h1 className="mt-3 font-serif text-5xl leading-none">
-            {allDone ? 'Ready for your first booking.' : 'Let\'s get you set up.'}
+            {approved ? (allDone ? 'Your listing can go live.' : 'Finish setup to take bookings.') : 'Waiting on a person to review you.'}
           </h1>
           <p className="mt-4 text-sm leading-7 text-[#dbc3cf]">
-            {allDone
-              ? 'Your profile is live and customers can find you on the explore page. You\'ll receive a notification when your first request arrives.'
-              : 'Complete these steps to go live and start accepting bookings. Most companions finish in under 15 minutes.'}
+            {approved
+              ? (allDone
+                ? 'You are approved. Customers can find you only while your listing is published and not paused.'
+                : 'Approval puts you in Explore. Complete profile, identity, availability, and Stripe before you can earn.')
+              : 'Until you are approved, you will not appear in search or receive bookings. Keep a customer account on the same email.'}
           </p>
 
           {/* Progress bar */}
@@ -10196,7 +10462,7 @@ function CompanionOnboarding() {
             </div>
           )}
 
-          {allDone && (
+          {allDone && approved && (
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/dashboard/companion"
                 className="inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]"
@@ -10535,16 +10801,27 @@ function CompanionStatsPage() {
 }
 
 function Apply() {
+  const { user, loading } = useAuth();
+  const [, navigate] = useLocation();
   const [sent, setSent] = useState(false);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [city, setCity] = useState('');
   const [about, setAbout] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!loading && user?.roles.includes('companion') && user.companionApproved) {
+      navigate('/dashboard/companion');
+    }
+  }, [loading, user, navigate]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!user) {
+      navigate('/login?intent=companion&next=/companion/apply');
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -10552,7 +10829,7 @@ function Apply() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: name, email, city, bio: about }),
+        body: JSON.stringify({ displayName: name, city, bio: about }),
       });
       if (!res.ok) throw new Error('Submission failed');
       setSent(true);
@@ -10591,7 +10868,7 @@ function Apply() {
             <div className="mt-10 space-y-4">
               <Step n="01" icon={HeartHandshake} title="Share your way of being" body="Tell us what kind of company you offer and what makes it feel natural." />
               <Step n="02" icon={ShieldCheck} title="Meet the trust team" body="We review every application with care. There is no instant approval." />
-              <Step n="03" icon={Sparkles} title="Set your own pace" body="Choose your activities, availability, and boundaries once you are approved." />
+              <Step n="03" icon={Sparkles} title="Set your own pace" body="After approval: identity review, Stripe payouts, profile, service area, then publish availability." />
             </div>
 
             {/* Companion voices */}
@@ -10622,15 +10899,26 @@ function Apply() {
           </div>
           <form onSubmit={handleSubmit} className="rounded-[26px] border border-[#dfd2c9] bg-[#fbf7f1] p-7 shadow-[0_15px_35px_rgba(88,37,70,.07)] md:p-10" data-testid="form-companion-application">
             <h2 className="font-serif text-3xl text-[#48213d]">Start an application</h2>
-            <p className="mt-2 text-sm leading-6 text-[#806c76]">A few honest details are enough for the first pass.</p>
+            <p className="mt-2 text-sm leading-6 text-[#806c76]">
+              {user
+                ? 'A few honest details are enough for the first pass. Companion status stays pending until a person approves you.'
+                : 'Sign in with your ordinary account first. Companion applications are not a separate login.'}
+            </p>
+            {!user ? (
+              <Link href="/login?intent=companion&next=/companion/apply"
+                className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white"
+                data-testid="link-apply-signin">
+                Sign in to apply <ArrowRight className="h-4 w-4" />
+              </Link>
+            ) : (
             <div className="mt-8 space-y-5">
               <label className="block">
                 <span className="mb-2 block text-xs font-bold text-[#654c5f]">Your name</span>
                 <input required value={name} onChange={(e) => setName(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fffaf4] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-application-name" />
               </label>
               <label className="block">
-                <span className="mb-2 block text-xs font-bold text-[#654c5f]">Email</span>
-                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fffaf4] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-application-email" />
+                <span className="mb-2 block text-xs font-bold text-[#654c5f]">Account email</span>
+                <input readOnly value={user.email} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#f0e4db] px-4 text-sm text-[#654c5f]" data-testid="input-application-email" />
               </label>
               <label className="block">
                 <span className="mb-2 block text-xs font-bold text-[#654c5f]">City or region</span>
@@ -10649,11 +10937,21 @@ function Apply() {
                 {submitting ? 'Sending…' : 'Send application'} <Send className="h-4 w-4" />
               </Button>
             </div>
+            )}
           </form>
         </div>
       </main>
     </Shell>
   );
+}
+
+function readLoginSearch() {
+  if (typeof window === 'undefined') return { intent: null as LoginIntent | null, next: null as string | null };
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('intent');
+  const intent: LoginIntent | null = raw === 'companion' || raw === 'customer' ? raw : null;
+  const next = params.get('next');
+  return { intent, next };
 }
 
 function Login() {
@@ -10664,7 +10962,20 @@ function Login() {
   const [busy, setBusy] = useState(false);
   const [devCode, setDevCode] = useState('');
   const [, navigate] = useLocation();
-  const { refresh } = useAuth();
+  const { user, loading, refresh } = useAuth();
+  const search = readLoginSearch();
+  const intent = search.intent;
+
+  useEffect(() => {
+    if (!loading && user) navigate(dashboardPath(user, intent, search.next));
+  }, [loading, user, intent, search.next, navigate]);
+
+  const chooseIntent = (nextIntent: LoginIntent) => {
+    const params = new URLSearchParams();
+    params.set('intent', nextIntent);
+    if (search.next) params.set('next', search.next);
+    navigate(`/login?${params.toString()}`, { replace: true });
+  };
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -10686,13 +10997,93 @@ function Login() {
       const result = await verifyOtp(email, code, 'login');
       try { await confirmAge(); } catch {}
       await refresh();
-      navigate(dashboardPath(result.user));
+      navigate(dashboardPath(result.user, intent, search.next));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not verify that code');
     } finally { setBusy(false); }
   };
 
-  return <Shell bare><main className="grid min-h-[100dvh] lg:grid-cols-[.8fr_1.2fr]"><div className="hidden bg-[#3E1027] p-10 text-[#f9efe5] lg:flex lg:flex-col lg:justify-between"><Brand dark /><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your private front door</p><h1 className="mt-5 max-w-md font-serif text-6xl leading-[.92]">Good company<br /><em>starts here.</em></h1><p className="mt-6 max-w-sm text-sm leading-7 text-[#d9c4cf]">Sign in with an 8-digit email code. No passwords to remember, no social profile to connect.</p></div><p className="text-xs text-[#b795a7]">OnlyFavors · Private by design.</p></div><div className="flex flex-col p-5 md:p-10"><div className="flex justify-between lg:justify-end"><div className="lg:hidden"><Brand /></div><Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-login-home"><ArrowLeft className="h-4 w-4" />Back home</Link></div><div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center"><div className="mb-8 lg:hidden"><h1 className="font-serif text-5xl leading-none text-[#48213d]">Welcome back.</h1><p className="mt-3 text-sm text-[#725e69]">Your private front door to good company.</p></div>{!sent ? <form onSubmit={send}><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Email sign in</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">A code, not a password.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We will send an 8-digit code to your email. It expires in 10 minutes and is never used for marketing.</p><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Email address</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#8F294C]" data-testid="input-login-email" /></label>{error && <p className="mt-3 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{error}</p>}<Button type="submit" disabled={busy} className="mt-5 w-full" testId="button-send-login-code">{busy ? 'Sending…' : 'Send secure code'} <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={verify}><button type="button" onClick={() => setSent(false)} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="button-change-login-email"><ArrowLeft className="h-4 w-4" />Change email</button><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Check your inbox</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">Enter your code.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We sent an 8-digit code to <strong>{email}</strong>.</p>{devCode && <p className="mt-3 rounded-xl bg-[#e8f0e8] p-3 text-xs text-[#31533f]">Development code: <span className="font-mono tracking-[.3em]">{devCode}</span></p>}<input required inputMode="numeric" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-8 h-14 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-center font-mono text-xl tracking-[.5em] outline-none focus:border-[#8F294C]" placeholder="00000000" data-testid="input-login-code" />{error && <p className="mt-3 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{error}</p>}<Button type="submit" disabled={busy || code.length !== 8} className="mt-5 w-full" testId="button-verify-login-code">{busy ? 'Verifying…' : 'Verify and continue'} <Check className="h-4 w-4" /></Button></form>}<p className="mt-8 text-center text-[11px] leading-5 text-[#9b858e]">By continuing, you confirm you are 18 or older and agree to our <Link href="/terms" className="font-bold text-[#8F294C]" data-testid="link-login-terms">community guidelines</Link> and <Link href="/privacy" className="font-bold text-[#8F294C]" data-testid="link-login-privacy">privacy policy</Link>.</p></div></div></main></Shell>;
+  const eyebrow = intent === 'companion' ? 'Become a companion' : intent === 'customer' ? 'Book a companion' : 'Your private front door';
+  const headline = intent === 'companion'
+    ? <>Apply from<br /><em>one account.</em></>
+    : intent === 'customer'
+      ? <>Good company<br /><em>starts here.</em></>
+      : <>Good company<br /><em>starts here.</em></>;
+  const sub = intent === 'companion'
+    ? 'Sign in with an 8-digit email code. You keep a customer account; companion status stays pending until a person approves you.'
+    : 'Sign in with an 8-digit email code. New accounts start as customers. You can apply to become a companion from the same identity.';
+
+  return (
+    <Shell bare>
+      <main className="grid min-h-[100dvh] lg:grid-cols-[.8fr_1.2fr]">
+        <div className="hidden bg-[#3E1027] p-10 text-[#f9efe5] lg:flex lg:flex-col lg:justify-between">
+          <Brand dark />
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">{eyebrow}</p>
+            <h1 className="mt-5 max-w-md font-serif text-6xl leading-[.92]">{headline}</h1>
+            <p className="mt-6 max-w-sm text-sm leading-7 text-[#d9c4cf]">{sub}</p>
+          </div>
+          <p className="text-xs text-[#b795a7]">OnlyFavors · One identity, two public flows.</p>
+        </div>
+        <div className="flex flex-col p-5 md:p-10">
+          <div className="flex justify-between lg:justify-end">
+            <div className="lg:hidden"><Brand /></div>
+            <Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-login-home"><ArrowLeft className="h-4 w-4" />Back home</Link>
+          </div>
+          <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center">
+            {!intent ? (
+              <>
+                <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Sign in</p>
+                <h2 className="mt-3 font-serif text-4xl text-[#48213d]">How do you want to use OnlyFavors?</h2>
+                <p className="mt-3 text-sm leading-6 text-[#725e69]">Same email, same account. Choose the door you need today — you can switch later if you hold both roles.</p>
+                <div className="mt-8 grid gap-3">
+                  <button type="button" onClick={() => chooseIntent('customer')}
+                    className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 text-left transition hover:border-[#9d557e]"
+                    data-testid="button-login-intent-customer">
+                    <p className="text-sm font-bold text-[#48213d]">Book a companion</p>
+                    <p className="mt-1 text-xs leading-5 text-[#725e69]">Browse, request, book, and pay as a customer. This is the default for new signups.</p>
+                  </button>
+                  <button type="button" onClick={() => chooseIntent('companion')}
+                    className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 text-left transition hover:border-[#9d557e]"
+                    data-testid="button-login-intent-companion">
+                    <p className="text-sm font-bold text-[#48213d]">Become a companion</p>
+                    <p className="mt-1 text-xs leading-5 text-[#725e69]">Create an ordinary account, then apply. You will not appear in search or receive bookings until you are approved.</p>
+                  </button>
+                </div>
+              </>
+            ) : !sent ? (
+              <form onSubmit={send}>
+                <button type="button" onClick={() => navigate('/login', { replace: true })} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="button-login-change-intent">
+                  <ArrowLeft className="h-4 w-4" />{intent === 'companion' ? 'Not applying right now' : 'Choose a different door'}
+                </button>
+                <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Email sign in</p>
+                <h2 className="mt-3 font-serif text-4xl text-[#48213d]">A code, not a password.</h2>
+                <p className="mt-3 text-sm leading-6 text-[#725e69]">We will send an 8-digit code to your email. It expires in 10 minutes and is never used for marketing.</p>
+                <label className="mt-8 block">
+                  <span className="mb-2 block text-xs font-bold text-[#654c5f]">Email address</span>
+                  <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#8F294C]" data-testid="input-login-email" />
+                </label>
+                {error && <p className="mt-3 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{error}</p>}
+                <Button type="submit" disabled={busy} className="mt-5 w-full" testId="button-send-login-code">{busy ? 'Sending…' : 'Send secure code'} <ArrowRight className="h-4 w-4" /></Button>
+              </form>
+            ) : (
+              <form onSubmit={verify}>
+                <button type="button" onClick={() => setSent(false)} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="button-change-login-email"><ArrowLeft className="h-4 w-4" />Change email</button>
+                <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Check your inbox</p>
+                <h2 className="mt-3 font-serif text-4xl text-[#48213d]">Enter your code.</h2>
+                <p className="mt-3 text-sm leading-6 text-[#725e69]">We sent an 8-digit code to <strong>{email}</strong>.</p>
+                {devCode && <p className="mt-3 rounded-xl bg-[#e8f0e8] p-3 text-xs text-[#31533f]">Development code: <span className="font-mono tracking-[.3em]">{devCode}</span></p>}
+                <input required inputMode="numeric" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-8 h-14 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-center font-mono text-xl tracking-[.5em] outline-none focus:border-[#8F294C]" placeholder="00000000" data-testid="input-login-code" />
+                {error && <p className="mt-3 rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">{error}</p>}
+                <Button type="submit" disabled={busy || code.length !== 8} className="mt-5 w-full" testId="button-verify-login-code">{busy ? 'Verifying…' : 'Verify and continue'} <Check className="h-4 w-4" /></Button>
+              </form>
+            )}
+            <p className="mt-8 text-center text-[11px] leading-5 text-[#9b858e]">By continuing, you confirm you are 18 or older and agree to our <Link href="/terms" className="font-bold text-[#8F294C]" data-testid="link-login-terms">community guidelines</Link> and <Link href="/privacy" className="font-bold text-[#8F294C]" data-testid="link-login-privacy">privacy policy</Link>.</p>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -10945,7 +11336,7 @@ function SafeSpots() {
           </p>
           <h1 className="mt-4 font-serif text-6xl leading-[.9] text-[#48213d]">SafeSpot<br />Network</h1>
           <p className="mt-5 max-w-lg text-[15px] leading-7 text-[#725e69]">
-            Verified public venues where every favor begins. Staff-aware, well-lit, and easy to leave.
+            Approved public venues in New Orleans where every favor begins. The mint shield marks a listed SafeSpot — not a staffed partnership, discount, or emergency desk.
             No home addresses, ever.
           </p>
         </div>
@@ -11002,8 +11393,8 @@ function SafeSpots() {
           ) : filtered.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-12 text-center">
               <MapPin className="mx-auto h-8 w-8 text-[#c6aeb8]" />
-              <p className="mt-4 font-serif text-xl text-[#48213d]">No SafeSpots match those filters.</p>
-              <p className="mt-2 text-xs text-[#806c76]">Try a different city or clear the category filter.</p>
+              <p className="mt-4 font-serif text-xl text-[#48213d]">No approved SafeSpots yet.</p>
+              <p className="mt-2 text-xs text-[#806c76]">We do not invent cafés or hotels. When a venue is approved, it appears here with a mint shield.</p>
             </div>
           ) : (
             <>
@@ -11018,8 +11409,8 @@ function SafeSpots() {
         {/* Network stats strip */}
         <div className="mt-12 grid gap-4 sm:grid-cols-3" data-testid="safespot-stats">
           {[
-            { value: String(filtered.length), label: 'Verified venues in this view', icon: MapPin },
-            { value: '100%', label: 'Staff-aware before bookings begin', icon: ShieldCheck },
+            { value: String(filtered.length), label: 'Approved venues in this view', icon: MapPin },
+            { value: 'QR', label: 'Check-in records arrival on the booking — not a staff scan network', icon: ShieldCheck },
             { value: '0', label: 'Home address meetings — ever', icon: EyeOff },
           ].map(({ value, label, icon: Icon }) => (
             <div key={label} className="flex items-center gap-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
@@ -11040,8 +11431,7 @@ function SafeSpots() {
             <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">For venue managers</p>
             <h2 className="mt-3 font-serif text-4xl leading-none text-[#f9efe5]">List your venue as a SafeSpot.</h2>
             <p className="mt-4 text-sm leading-6 text-[#d9c4cf]">
-              OnlyFavors partners with cafés, hotel lobbies, libraries, and other public spaces to build
-              a network people can trust. No special equipment — just a staff-friendly environment.
+              Venue applications are stored for the trust team. The pilot does not include discounts, staff training packs, or a paid partnership program.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/safespots/register" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]" data-testid="link-safespot-register">
@@ -11165,18 +11555,18 @@ function SafeSpotDetail() {
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               <div className="rounded-[20px] bg-[#e8f0e8] p-6">
                 <ShieldCheck className="h-5 w-5 text-[#477254]" />
-                <p className="mt-4 font-bold text-[#31533f]">Staff aware</p>
-                <p className="mt-1.5 text-xs leading-5 text-[#53725d]">Venue staff know OnlyFavors customers may use their space. You're never out of place.</p>
+                <p className="mt-4 font-bold text-[#31533f]">Public meeting point</p>
+                <p className="mt-1.5 text-xs leading-5 text-[#53725d]">A listed café, hotel lobby, or other public venue. We do not claim staff are trained or on call.</p>
               </div>
               <div className="rounded-[20px] bg-[#f0e4db] p-6">
                 <Navigation2 className="h-5 w-5 text-[#7f5042]" />
-                <p className="mt-4 font-bold text-[#5c3625]">Easy to find and leave</p>
-                <p className="mt-1.5 text-xs leading-5 text-[#7f5042]">Public entrances, multiple exits. Never feel locked in.</p>
+                <p className="mt-4 font-bold text-[#5c3625]">QR arrival check-in</p>
+                <p className="mt-1.5 text-xs leading-5 text-[#7f5042]">Favor Mode records that you arrived. It does not share your route or message venue staff.</p>
               </div>
               <div className="rounded-[20px] bg-[#f9efe5] p-6">
                 <EyeOff className="h-5 w-5 text-[#9d557e]" />
                 <p className="mt-4 font-bold text-[#48213d]">Privacy first</p>
-                <p className="mt-1.5 text-xs leading-5 text-[#725e69]">Your exact location is never shared. Your Trust Circle only knows a SafeSpot is involved.</p>
+                <p className="mt-1.5 text-xs leading-5 text-[#725e69]">Home and work addresses are never listed. Trust Circle sees a venue map, not a live companion pin.</p>
               </div>
             </div>
 
@@ -11187,8 +11577,8 @@ function SafeSpotDetail() {
                 {[
                   { n: '01', title: 'Booking confirmed', body: 'After your companion accepts, Favor Mode can show a check-in control for this booking.' },
                   { n: '02', title: 'Arrive and check in', body: 'Open Favor Mode and record check-in. That stores a check-in row. It does not message venue staff.' },
-                  { n: '03', title: 'Trust Circle', body: 'Trusted contacts are stored on your account. Check-in does not send them an SMS yet.' },
-                  { n: '04', title: 'Missed check-in', body: 'There is no automatic hourly alert to your Trust Circle yet. If something feels wrong, contact local emergency services and email hello@onlyfavors.com.' },
+                  { n: '03', title: 'Trust Circle', body: 'If a contact has an email, they can be told you arrived at the public venue. SMS is not configured. They never receive a companion name or live pin.' },
+                  { n: '04', title: 'Missed check-in', body: 'Favor Mode sends one alert after 12 minutes without arrival. If someone may be in danger, call 911 first.' },
                 ].map(({ n, title, body }) => (
                   <div key={n} className="flex gap-4">
                     <span className="font-mono text-[10px] text-[#c6aeb8] mt-0.5">{n}</span>
@@ -11221,7 +11611,13 @@ function AdminLogin() {
   const [busy, setBusy] = useState(false);
   const [devCode, setDevCode] = useState('');
   const [, navigate] = useLocation();
-  const { refresh } = useAuth();
+  const { user, loading, refresh } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user?.sessionKind === 'admin' && user.roles.includes('admin')) {
+      navigate('/admin/operations');
+    }
+  }, [loading, user, navigate]);
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -11242,7 +11638,7 @@ function AdminLogin() {
     try {
       const result = await verifyOtp(email, code, 'admin');
       await refresh();
-      if (!result.user.roles.includes('admin')) {
+      if (!result.user.roles.includes('admin') || result.user.sessionKind !== 'admin') {
         setError('This workspace is restricted to approved trust staff.');
         return;
       }
@@ -11252,7 +11648,7 @@ function AdminLogin() {
     } finally { setBusy(false); }
   };
 
-  return <Shell bare><main className="grid min-h-[100dvh] place-items-center bg-[#3E1027] px-5"><div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#5D1833] p-8 text-[#f9efe5] md:p-10"><div className="flex items-center justify-between"><Brand dark /><span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span></div>{sent ? <form onSubmit={verify} className="mt-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><KeyRound /></div><h1 className="mt-7 font-serif text-4xl">Enter your operations code.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">An 8-digit code was sent to <strong>{email}</strong>. This workspace is restricted to approved trust staff.</p>{devCode && <p className="mt-3 rounded-xl bg-[#3E1027] p-3 font-mono text-xs tracking-[.3em] text-[#BDEBD7]">{devCode}</p>}<input required inputMode="numeric" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-6 h-12 w-full rounded-xl border border-[#79556d] bg-[#3E1027] px-4 text-center font-mono tracking-[.4em] text-[#f9efe5] outline-none focus:border-[#d897b6]" placeholder="00000000" data-testid="input-admin-code" />{error && <p className="mt-3 text-xs text-[#FF625D]">{error}</p>}<Button type="submit" disabled={busy || code.length !== 8} variant="primary" className="mt-5 w-full" testId="button-admin-verify">{busy ? 'Verifying…' : 'Continue to operations'} <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={send} className="mt-12"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p><h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations email</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3E1027] px-4 text-sm text-[#f9efe5] outline-none focus:border-[#d897b6]" data-testid="input-admin-email" /></label>{error && <p className="mt-3 text-xs text-[#FF625D]">{error}</p>}<Button type="submit" disabled={busy} variant="primary" className="mt-5 w-full" testId="button-admin-login">{busy ? 'Sending…' : 'Send secure code'} <KeyRound className="h-4 w-4" /></Button></form>}<Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home"><ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors</Link></div></main></Shell>;
+  return <Shell bare><main className="grid min-h-[100dvh] place-items-center bg-[#3E1027] px-5"><div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#5D1833] p-8 text-[#f9efe5] md:p-10"><div className="flex items-center justify-between"><Brand dark /><span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span></div>{sent ? <form onSubmit={verify} className="mt-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><KeyRound /></div><h1 className="mt-7 font-serif text-4xl">Enter your operations code.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">An 8-digit code was sent to <strong>{email}</strong>. Staff accounts are provisioned — this is not public signup. Sessions expire in 8 hours.</p>{devCode && <p className="mt-3 rounded-xl bg-[#3E1027] p-3 font-mono text-xs tracking-[.3em] text-[#BDEBD7]">{devCode}</p>}<input required inputMode="numeric" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-6 h-12 w-full rounded-xl border border-[#79556d] bg-[#3E1027] px-4 text-center font-mono tracking-[.4em] text-[#f9efe5] outline-none focus:border-[#d897b6]" placeholder="00000000" data-testid="input-admin-code" />{error && <p className="mt-3 text-xs text-[#FF625D]">{error}</p>}<Button type="submit" disabled={busy || code.length !== 8} variant="primary" className="mt-5 w-full" testId="button-admin-verify">{busy ? 'Verifying…' : 'Continue to operations'} <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={send} className="mt-12"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p><h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">Staff accounts are created manually. Public signup never grants admin. This portal uses the same identity as the rest of OnlyFavors, with an 8-hour session.</p><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations email</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3E1027] px-4 text-sm text-[#f9efe5] outline-none focus:border-[#d897b6]" data-testid="input-admin-email" /></label>{error && <p className="mt-3 text-xs text-[#FF625D]">{error}</p>}<Button type="submit" disabled={busy} variant="primary" className="mt-5 w-full" testId="button-admin-login">{busy ? 'Sending…' : 'Send secure code'} <KeyRound className="h-4 w-4" /></Button></form>}<Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home"><ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors</Link></div></main></Shell>;
 }
 
 function AdminAnnouncementControl() {
@@ -11342,7 +11738,7 @@ function AdminOperations() {
   const { user, loading } = useAuth();
   const [, navigate] = useLocation();
   useEffect(() => {
-    if (!loading && (!user || !user.roles.includes('admin'))) {
+    if (!loading && (!user || !user.roles.includes('admin') || user.sessionKind !== 'admin')) {
       navigate('/admin/login');
     }
   }, [loading, user, navigate]);
@@ -11702,7 +12098,7 @@ function AdminIdentitySection() {
 
 function AdminReportsSection() {
   const qc = useQueryClient();
-  const reports = useQuery<{ id: string; reportType: string; detail: string; urgent: boolean; status: string; createdAt: string; riskLevel: string }[]>({
+  const reports = useQuery<{ id: string; reportType: string; detail: string; urgent: boolean; status: string; createdAt: string; riskLevel: string; bookingId?: string | null }[]>({
     queryKey: ['admin-reports'],
     queryFn: async () => {
       const res = await fetch('/api/admin/reports', { credentials: 'include' });
@@ -11713,6 +12109,7 @@ function AdminReportsSection() {
     retry: false,
   });
   const [acting, setActing] = useState<string | null>(null);
+  const [thread, setThread] = useState<{ bookingId: string; messages: { id: string; senderRole: string; body: string; createdAt: string }[] } | null>(null);
 
   const resolve = async (id: string) => {
     setActing(id);
@@ -11746,6 +12143,18 @@ function AdminReportsSection() {
                 <p className="text-sm font-bold text-[#48213d]">{report.reportType}</p>
                 <p className="mt-1 text-xs leading-5 text-[#725e69]">{report.detail}</p>
                 <p className="mt-2 font-mono text-[10px] text-[#9b858e]">{new Date(report.createdAt).toLocaleString()} · {report.status} · {report.riskLevel}</p>
+                {report.bookingId && (
+                  <button type="button"
+                    onClick={async () => {
+                      const res = await fetch(`/api/admin/bookings/${report.bookingId}/messages`, { credentials: 'include' });
+                      const messages = res.ok ? await res.json() : [];
+                      setThread({ bookingId: report.bookingId!, messages });
+                    }}
+                    className="mt-2 text-[10px] font-bold text-[#7f2e62] underline"
+                  >
+                    Review reported thread
+                  </button>
+                )}
               </div>
               {report.status === 'open' && (
                 <button type="button" disabled={acting === report.id} onClick={() => void resolve(report.id)}
@@ -11757,6 +12166,22 @@ function AdminReportsSection() {
           </div>
         ))}
       </div>
+      {thread && (
+        <div className="mt-4 rounded-[18px] border border-[#dfd2c9] bg-white p-5">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-[#9d557e]">Reported thread · {thread.bookingId}</p>
+          <p className="mt-1 text-[10px] text-[#806c76]">Chat is not end-to-end encrypted. Opening this thread is written to the audit log.</p>
+          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+            {thread.messages.length === 0 && <p className="text-xs text-[#806c76]">No messages on this booking.</p>}
+            {thread.messages.map((msg) => (
+              <p key={msg.id} className="text-xs leading-5 text-[#48213d]">
+                <span className="font-bold">{msg.senderRole}</span> · {new Date(msg.createdAt).toLocaleString()}
+                <span className="mt-0.5 block text-[#725e69]">{msg.body}</span>
+              </p>
+            ))}
+          </div>
+          <button type="button" onClick={() => setThread(null)} className="mt-3 text-[10px] font-bold text-[#7f2e62]">Close thread</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -13546,6 +13971,7 @@ function Router() {
         <Route path="/companion/onboarding" component={CompanionOnboarding} />
         <Route path="/companion/apply" component={Apply} />
         <Route path="/login" component={Login} />
+        <Route path="/safety/share/:token" component={LocationShare} />
         <Route path="/safety/report" component={SafetyReportPage} />
         <Route path="/safety" component={Safety} />
         <Route path="/privacy"><Legal kind="privacy" /></Route>

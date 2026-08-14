@@ -1,6 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -28,10 +30,14 @@ export const bookings = pgTable("bookings", {
   durationHours: numeric("duration_hours").notNull(),
   timezone: text("timezone").notNull().default("America/Chicago"),
   startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  holdExpiresAt: timestamp("hold_expires_at"),
   safeSpotId: text("safe_spot_id"),
   payoutHeld: boolean("payout_held").notNull().default(false),
 
-  // Lifecycle
+  // Lifecycle — server state machine only. Clients cannot skip states via PostgREST.
+  // Pilot map: requested (10-min hold) → deposit_paid → confirmed → authorized → completed
+  // Endings: expired, cancelled (covers declined/refunded/no_show via booking_events).
   status: text("status").notNull().default("draft"),
 
   // Pricing — written once from server-side pricing.ts, never updated
@@ -48,6 +54,7 @@ export const bookings = pgTable("bookings", {
 
   // Full payment
   fullPaymentIntentId: text("full_payment_intent_id"),
+  stripeTransferId: text("stripe_transfer_id"),
   authorizedAt: timestamp("authorized_at"),
   confirmedAt: timestamp("confirmed_at"),
   completedAt: timestamp("completed_at"),
@@ -105,6 +112,23 @@ export const bookingEvents = pgTable("booking_events", {
   toStatus: text("to_status").notNull(),
   actorId: text("actor_id"),
   note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const boundaryReceipts = pgTable("boundary_receipts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  bookingId: text("booking_id").notNull().unique(),
+  activity: text("activity").notNull(),
+  venueName: text("venue_name").notNull(),
+  date: text("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  durationHours: numeric("duration_hours").notNull(),
+  clauses: jsonb("clauses").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  customerAgreedAt: timestamp("customer_agreed_at"),
+  companionAgreedAt: timestamp("companion_agreed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

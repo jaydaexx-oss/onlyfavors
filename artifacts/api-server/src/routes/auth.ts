@@ -51,8 +51,8 @@ router.post("/auth/otp/verify", async (req, res) => {
     return;
   }
   try {
-    const { token, user } = await verifyOtp(email, code, purpose);
-    setSessionCookie(res, token);
+    const { token, user, ttlMs } = await verifyOtp(email, code, purpose);
+    setSessionCookie(res, token, ttlMs);
     res.json({ user });
   } catch (err) {
     const { status, message } = readError(err);

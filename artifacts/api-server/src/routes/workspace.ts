@@ -9,6 +9,7 @@ import {
   companionProfiles,
   notifications,
   savedCompanions,
+  serviceAreas,
   sessions,
   trustedContacts,
 } from "@workspace/db/schema";
@@ -22,6 +23,7 @@ import {
   windowsToEditor,
 } from "../lib/availability";
 import { PILOT_CITY } from "../lib/pilot";
+import { normalizeApprovedAreas, SERVICE_RADIUS_KM } from "../lib/nolaAreas";
 import { recordBookingEvent } from "../lib/bookingLifecycle";
 import { refundOrCancelIntent } from "../lib/stripeMoney";
 
@@ -63,7 +65,9 @@ async function persistAvailability(
 function profilePayload(
   profile: typeof companionProfiles.$inferSelect,
   availability: ReturnType<typeof windowsToEditor>,
+  approvedAreas: string[] = [],
 ) {
+  const areas = approvedAreas.length ? approvedAreas : normalizeApprovedAreas([], profile.serviceArea);
   return {
     id: profile.id,
     displayName: profile.displayName || "Companion",
@@ -71,7 +75,8 @@ function profilePayload(
     hourlyRateCents: Math.round((profile.hourlyRate || 0) * 100),
     activities: profile.activities ?? [],
     languages: profile.languages ?? [],
-    serviceArea: profile.serviceArea || profile.city,
+    serviceArea: areas[0] || profile.serviceArea || profile.city,
+    approvedAreas: areas,
     availableDays: availability.availableDays,
     availableHoursStart: availability.availableHoursStart,
     availableHoursEnd: availability.availableHoursEnd,
@@ -84,6 +89,36 @@ function profilePayload(
     dayRateCents: profile.dayRate != null ? Math.round(profile.dayRate * 100) : null,
     interviewAnswers: profile.interviewAnswers ?? [],
   };
+}
+
+async function loadApprovedAreas(companionId: string, fallback = "") {
+  try {
+    const rows = await db.select().from(serviceAreas).where(eq(serviceAreas.companionId, companionId));
+    return normalizeApprovedAreas(rows.map((row) => row.label), fallback);
+  } catch (err) {
+    if (isMissingTableError(err)) return normalizeApprovedAreas([], fallback);
+    throw err;
+  }
+}
+
+async function persistApprovedAreas(companionId: string, raw: unknown, fallback: string) {
+  const labels = normalizeApprovedAreas(raw, fallback);
+  try {
+    await db.delete(serviceAreas).where(eq(serviceAreas.companionId, companionId));
+    if (labels.length) {
+      await db.insert(serviceAreas).values(
+        labels.map((label) => ({
+          companionId,
+          label,
+          city: PILOT_CITY,
+          radiusKm: SERVICE_RADIUS_KM,
+        })),
+      );
+    }
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
+  return labels;
 }
 
 router.get("/trust-circle", async (req, res) => {
@@ -114,8 +149,9 @@ router.post("/trust-circle", async (req, res) => {
   if (!accountId) { res.status(401).json({ error: "Authentication required" }); return; }
   const name = String(req.body?.name ?? "").trim();
   const phone = String(req.body?.phone ?? "").trim();
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
   const relation = String(req.body?.relation ?? "Friend").trim().slice(0, 40);
-  if (!name || !phone) { res.status(400).json({ error: "Name and phone are required" }); return; }
+  if (!name || (!phone && !email)) { res.status(400).json({ error: "Name and a phone or email are required" }); return; }
   try {
     const existing = await db.select().from(trustedContacts).where(eq(trustedContacts.accountId, accountId));
     if (existing.length >= 3) {
@@ -124,13 +160,15 @@ router.post("/trust-circle", async (req, res) => {
     const [row] = await db.insert(trustedContacts).values({
       accountId,
       name: name.slice(0, 80),
-      phone: phone.slice(0, 40),
+      phone: phone.slice(0, 40) || null,
+      email: email.slice(0, 120) || null,
       relation,
     }).returning();
     res.status(201).json({
       id: row.id,
       name: row.name,
       phone: row.phone ?? "",
+      email: row.email ?? "",
       relation: row.relation ?? "Friend",
     });
   } catch (err) {
@@ -217,18 +255,20 @@ router.get("/companion/applications/me", async (req, res) => {
       .where(email ? eq(companionApplications.email, email) : eq(companionApplications.accountId, accountId))
       .orderBy(desc(companionApplications.createdAt))
       .limit(1);
-    if (!rows[0]) { res.json({ status: "none" }); return; }
+    if (!rows[0]) { res.json({ status: "none", stage: -1 }); return; }
     const row = rows[0];
     const submitted = row.status !== "draft";
+    const stage = row.status === "approved" ? 2 : row.status === "pending" ? 1 : 0;
     res.json({
       id: row.id,
       status: row.status,
       submitted,
+      stage,
       city: row.city,
       submittedAt: row.createdAt.toISOString(),
     });
   } catch (err) {
-    if (isMissingTableError(err)) { res.json({ status: "none" }); return; }
+    if (isMissingTableError(err)) { res.json({ status: "none", stage: -1 }); return; }
     req.log.error({ err }, "Application status failed");
     res.status(503).json({ error: "Could not load application status" });
   }
@@ -409,6 +449,7 @@ router.get("/companion/profile", async (req, res) => {
       activities: [],
       languages: [],
       serviceArea: "",
+      approvedAreas: [],
       availableDays: [],
       availableHoursStart: "10:00",
       availableHoursEnd: "20:00",
@@ -425,7 +466,8 @@ router.get("/companion/profile", async (req, res) => {
   }
   try {
     const availability = await loadAvailability(profile.id);
-    res.json(profilePayload(profile, availability));
+    const areas = await loadApprovedAreas(profile.id, profile.serviceArea);
+    res.json(profilePayload(profile, availability, areas));
   } catch (err) {
     req.log.error({ err }, "Companion profile load failed");
     res.status(503).json({ error: "Could not load profile" });
@@ -441,7 +483,7 @@ router.put("/companion/profile", async (req, res) => {
   }
   const accountId = req.user.id;
   const {
-    displayName, bio, hourlyRateCents, activities, languages, serviceArea, interviewAnswers,
+    displayName, bio, hourlyRateCents, activities, languages, serviceArea, approvedAreas, interviewAnswers,
     availableDays, availableHoursStart, availableHoursEnd, instantBook, dayRateCents,
   } = req.body ?? {};
   if (!displayName?.trim()) { res.status(400).json({ error: "Display name is required" }); return; }
@@ -453,6 +495,7 @@ router.put("/companion/profile", async (req, res) => {
   if (!Array.isArray(languages) || languages.length === 0) { res.status(400).json({ error: "At least one language is required" }); return; }
 
   const hourlyRate = Math.round(hourlyRateCents / 100);
+  const areas = normalizeApprovedAreas(approvedAreas, String(serviceArea ?? ""));
   const dayRate =
     dayRateCents == null || dayRateCents === ""
       ? null
@@ -468,7 +511,7 @@ router.put("/companion/profile", async (req, res) => {
       hourlyRate,
       activities: activities.slice(0, 12).map((a: unknown) => String(a).slice(0, 50)),
       languages: languages.slice(0, 8).map((l: unknown) => String(l).slice(0, 40)),
-      serviceArea: String(serviceArea ?? PILOT_CITY).slice(0, 100) || PILOT_CITY,
+      serviceArea: areas[0] ?? PILOT_CITY,
       city: PILOT_CITY,
       instantBook: Boolean(instantBook),
       dayRate,
@@ -493,8 +536,9 @@ router.put("/companion/profile", async (req, res) => {
         if (!isMissingTableError(err)) throw err;
       }
     }
+    const storedAreas = await persistApprovedAreas(saved.id, areas, saved.serviceArea);
     const availability = await loadAvailability(saved.id);
-    res.json(profilePayload(saved, availability));
+    res.json(profilePayload(saved, availability, storedAreas));
   } catch (err) {
     req.log.error({ err }, "Companion profile save failed");
     res.status(503).json({ error: "Could not save profile" });

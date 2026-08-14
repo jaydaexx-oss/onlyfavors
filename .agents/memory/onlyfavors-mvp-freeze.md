@@ -35,10 +35,12 @@ Pricing stays server-only: **5% customer fee**, **15% companion commission**, **
 - **Approved** companion profiles (human review). Do not claim government-ID product copy until identity status is real.
 - Favor Request (structured, no chat).
 - Booking + Stripe payment (deposit then authorize/capture).
-- Booking-only masked chat (after deposit).
+- Booking-only masked chat (after **$10 deposit**). Phone/email stay hidden. **Do not promise end-to-end encryption** — staff must be able to review a reported thread.
+- **Boundary Receipt:** both people sign a stored snapshot (activity, SafeSpot, time, transportation, contact, photos, alcohol, companion boundaries) before deposit / accept. Changing those details means a **new booking**. Apply SQL `0009`.
 - Cancellation **and Stripe refund** per the table above.
-- Trust Circle (max 3) + check-in / checkout records. SMS to contacts is in-scope for the pilot **only as a real send or an honest “not configured” error** — never a fake ping.
+- Trust Circle (max **3**) + check-in / checkout records. Contacts may get a **venue** check-in or missed-check-in notice if email is configured — **never** companion identity, full booking details, addresses, or live pins. SMS is in-scope **only as a real send or an honest “not configured” error**.
 - Block, report, emergency copy that tells people to call **911** first; in-app report must persist.
+- **Help me leave** during an active booking: directions to the listed SafeSpot, call a Trust Circle contact, stop ordinary location sharing after checkout. Do not fake a venue cancellation SMS or dispatch emergency services.
 - Booking history and rebook (same companion, new request).
 
 ## In scope — companion
@@ -60,7 +62,7 @@ Pricing stays server-only: **5% customer fee**, **15% companion commission**, **
 - Review identity status.
 - Manage users and bookings.
 - Refunds, disputes, no-shows (execute Stripe refund / hold payout).
-- Safety reports queue.
+- Safety reports queue. Admin may **read a reported booking thread** (audited). Chat is not E2E.
 - Suspend / ban.
 - Hold companion payouts.
 - Audit log on every sensitive action (`writeAudit` already exists — use it everywhere money, roles, or safety change).
@@ -81,7 +83,9 @@ Pricing stays server-only: **5% customer fee**, **15% companion commission**, **
 
 ## Deferred until after the first working pilot
 
-AI matching, paid memberships/subscriptions, gift cards, loyalty, referrals-with-credits, recurring bookings, venue partnership programs, social/community feeds, kudos, tips, compare-companions, city waitlists, careers ATS, press kits, newsletters, 14-day trials, invented SLAs.
+AI matching, paid memberships/subscriptions (Plus), gift cards, loyalty, referrals-with-credits, recurring bookings, venue partnership programs (staff training, discounts, emergency desks), social/community feeds, kudos, tips, compare-companions, city waitlists, careers ATS, press kits, newsletters, 14-day trials, invented SLAs, voice intros, Duo Favors, reliability scores, disappearing media, photo watermarks, concierge matching, selling “best match.”
+
+SafeSpot in the pilot is a **listed public venue + QR/app check-in**. Do not claim venue staff awareness or partnerships until those exist.
 
 Do not re-seed Maya/Jordan/Sam or fake SafeSpots.
 

@@ -12,7 +12,12 @@ export type SessionUser = {
   banned: boolean;
   deactivated: boolean;
   riskLevel: string;
+  sessionKind: "login" | "admin";
+  companionApproved: boolean;
+  companionApplicationStatus: "none" | "draft" | "pending" | "approved" | "rejected";
 };
+
+export type LoginIntent = "customer" | "companion";
 
 type AuthContextValue = {
   user: SessionUser | null;
@@ -113,9 +118,20 @@ export async function confirmAge() {
   if (!res.ok) throw new Error("Could not confirm age");
 }
 
-export function dashboardPath(user: SessionUser | null) {
+export function dashboardPath(user: SessionUser | null, intent?: LoginIntent | null, next?: string | null) {
+  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
   if (!user) return "/login";
-  if (user.roles.includes("admin")) return "/admin/operations";
-  if (user.roles.includes("companion")) return "/dashboard/companion";
+  if (user.sessionKind === "admin" && user.roles.includes("admin")) return "/admin/operations";
+  const application = user.companionApplicationStatus ?? "none";
+  const approved = Boolean(user.companionApproved);
+  if (intent === "companion") {
+    if (user.roles.includes("companion") && approved) return "/dashboard/companion";
+    if (application === "pending" || application === "draft") {
+      return "/companion/apply/status";
+    }
+    if (application === "approved") return "/companion/onboarding";
+    return "/companion/apply";
+  }
+  if (user.roles.includes("companion") && !user.roles.includes("customer")) return "/dashboard/companion";
   return "/dashboard/customer";
 }

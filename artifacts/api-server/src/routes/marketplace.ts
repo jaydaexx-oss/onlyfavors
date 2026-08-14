@@ -28,6 +28,8 @@ import {
   safespots,
   savedCompanions,
   availabilityWindows,
+  serviceAreas,
+  locationShareLinks,
 } from "@workspace/db/schema";
 import { desc, eq, and, inArray, or, sql } from "drizzle-orm";
 import {
@@ -39,15 +41,27 @@ import {
 } from "../lib/supabase";
 import { priceForBooking } from "../lib/pricing";
 import { getUncachableStripeClient } from "../lib/stripeClient";
-import { getActorId, requireAdmin, revokeAllSessions, writeAudit } from "../lib/auth";
+import { getActorId, requireAdmin, requireAuth, revokeAllSessions, writeAudit } from "../lib/auth";
 import { assertCanTransact } from "../lib/accountState";
 import { resolveCompanionId, resolveCompanionProfile, isCompanionUser } from "../lib/companionIdentity";
 import { decryptExactLocation, encryptExactLocation, locationEncryptionReady } from "../lib/locationCrypto";
-import { mergeWorkspacePrefs, windowsToPublic } from "../lib/availability";
-import { assertDurationHours, chicagoDateTime, isPilotCity, PILOT_CITY, PILOT_TZ } from "../lib/pilot";
-import { companionHasOverlap, recordBookingEvent } from "../lib/bookingLifecycle";
-import { captureIntentIfHeld, customerCancelPlan, refundOrCancelIntent } from "../lib/stripeMoney";
+import { mergeWorkspacePrefs, windowsMatchWhen, windowsHint, windowsToPublic } from "../lib/availability";
+import { neighborhoodCenter } from "../lib/nolaAreas";
+import { assertDurationHours, bookingRange, chicagoDateTime, isPilotCity, PILOT_CITY, PILOT_TZ } from "../lib/pilot";
+import { companionHasOverlap, expireUnpaidHolds, HOLD_TTL_MS, isExclusionViolation, recordBookingEvent, assertBookingTransition } from "../lib/bookingLifecycle";
+import { captureIntentIfHeld, customerCancelPlan, refundOrCancelIntent, transferCompanionPayout } from "../lib/stripeMoney";
 import { clientKey, rateLimit } from "../lib/rateLimit";
+import {
+  hashShareToken,
+  LOCATION_RETENTION_MS,
+  mintShareToken,
+  notifyTrustCircle,
+  purgeExpiredLocations,
+  SHARING_STATUSES,
+  stopOrdinarySharing,
+  venueRevealed,
+} from "../lib/locationLadder";
+import { loadBoundaryReceipt, previewBoundaryReceipt, signBoundaryReceipt } from "../lib/boundaryReceipt";
 
 const router: IRouter = Router();
 
@@ -90,16 +104,52 @@ const devCompanionStripeAccounts = new Map<string, string>(); // companionId →
 // ---------------------------------------------------------------------------
 
 router.get("/companions", async (req, res) => {
-  const query = ListCompanionsQueryParams.parse(req.query);
-  if (query.city && !isPilotCity(query.city)) {
-    res.json([]);
+  const limited = rateLimit(clientKey(req.ip, "explore"), 80, 15 * 60_000);
+  if (!limited.ok) {
+    res.setHeader("Retry-After", String(limited.retryAfterSec));
+    res.status(429).json({ error: "Too many directory requests. Try again shortly." });
     return;
   }
+  const query = ListCompanionsQueryParams.parse(req.query);
+  const when = typeof req.query.when === "string" ? req.query.when : undefined;
+  const areaRaw = typeof req.query.area === "string" ? req.query.area.trim() : "";
+  const place = (areaRaw || query.city || "").trim();
+  const placeIsPilot = !place || isPilotCity(place);
   try {
     const rows = await getApprovedCompanions();
+    const ids = rows.map((row) => row.id);
+    const windowsByCompanion = new Map<string, Array<{ weekday: number; startTime: string; endTime: string }>>();
+    const areasByCompanion = new Map<string, string[]>();
+    if (ids.length) {
+      try {
+        const windows = await db.select().from(availabilityWindows).where(inArray(availabilityWindows.companionId, ids));
+        for (const w of windows) {
+          const list = windowsByCompanion.get(w.companionId) ?? [];
+          list.push({ weekday: w.weekday, startTime: w.startTime, endTime: w.endTime });
+          windowsByCompanion.set(w.companionId, list);
+        }
+      } catch (err) {
+        if (!isMissingTableError(err)) throw err;
+      }
+      try {
+        const areas = await db.select().from(serviceAreas).where(inArray(serviceAreas.companionId, ids));
+        for (const area of areas) {
+          const list = areasByCompanion.get(area.companionId) ?? [];
+          if (!list.includes(area.label)) list.push(area.label);
+          areasByCompanion.set(area.companionId, list);
+        }
+      } catch (err) {
+        if (!isMissingTableError(err)) throw err;
+      }
+    }
     const companions = rows
       .filter((row) => {
         if (!isPilotCity(row.city) && !isPilotCity(row.service_area)) return false;
+        const labels = areasByCompanion.get(row.id) ?? [];
+        if (!placeIsPilot) {
+          const hay = `${row.service_area} ${row.city} ${labels.join(" ")}`.toLowerCase();
+          if (!hay.includes(place.toLowerCase())) return false;
+        }
         if (
           query.activity &&
           !row.activities.some((a) =>
@@ -116,9 +166,17 @@ router.get("/companions", async (req, res) => {
           row.instant_book !== query.instantBook
         )
           return false;
+        const windows = windowsByCompanion.get(row.id) ?? [];
+        if (when && !windowsMatchWhen(windows, when)) return false;
         return true;
       })
-      .map((row) => mapCompanionRow(row));
+      .map((row) =>
+        mapCompanionRow(
+          row,
+          windowsHint(windowsByCompanion.get(row.id) ?? []),
+          areasByCompanion.get(row.id) ?? [],
+        ),
+      );
     req.log.info({ count: companions.length }, "Listed approved companions");
     res.json(companions);
   } catch (err) {
@@ -195,6 +253,12 @@ router.post("/companion/availability/today", async (req, res) => {
 export const DEV_BOOKING_FIXTURES: Record<string, any> = {};
 
 router.get("/companions/:id", async (req, res) => {
+  const limited = rateLimit(clientKey(req.ip, "profile"), 60, 15 * 60_000);
+  if (!limited.ok) {
+    res.setHeader("Retry-After", String(limited.retryAfterSec));
+    res.status(429).json({ error: "Too many profile views. Try again shortly." });
+    return;
+  }
   const { id } = GetCompanionParams.parse(req.params);
   try {
     const [row] = await getPublicCompanion(id);
@@ -203,7 +267,8 @@ router.get("/companions/:id", async (req, res) => {
       return;
     }
     const extras = await publicCompanionExtras(id);
-    res.json({ ...mapCompanionRow(row), ...extras });
+    const mapped = mapCompanionRow(row, extras.availabilityHint, extras.approvedAreas);
+    res.json({ ...mapped, ...extras, approvedAreas: mapped.approvedAreas, serviceArea: mapped.serviceArea });
   } catch (err) {
     req.log.error({ err }, "Unable to read companion profile");
     res.status(503).json({ error: "Companion profile is temporarily unavailable" });
@@ -287,6 +352,7 @@ router.post("/bookings", async (req, res) => {
       res.status(400).json({ error: "Choose a future date and time in New Orleans time." }); return;
     }
 
+    await expireUnpaidHolds();
     const overlap = await companionHasOverlap({
       companionId: body.companionId,
       date: dateStr,
@@ -295,10 +361,11 @@ router.post("/bookings", async (req, res) => {
       startsAt,
     });
     if (overlap) {
-      res.status(409).json({ error: "That time overlaps another confirmed booking." }); return;
+      res.status(409).json({ error: "That time overlaps another hold or confirmed booking." }); return;
     }
 
     const price = priceForBooking(row.hourly_rate, hours, body.companionId, row.day_rate);
+    const { end: endsAt } = bookingRange(dateStr, body.startTime, hours, startsAt);
 
     const [booking] = await db
       .insert(bookings)
@@ -311,6 +378,8 @@ router.post("/bookings", async (req, res) => {
         durationHours: String(hours),
         timezone: PILOT_TZ,
         startsAt,
+        endsAt,
+        holdExpiresAt: new Date(Date.now() + HOLD_TTL_MS),
         safeSpotId: body.safeSpotId,
         status: "requested",
         subtotalCents: price.subtotalCents,
@@ -341,6 +410,10 @@ router.post("/bookings", async (req, res) => {
 
     res.status(201).json(formatBooking(booking));
   } catch (err) {
+    if (isExclusionViolation(err)) {
+      res.status(409).json({ error: "That time overlaps another hold or confirmed booking." });
+      return;
+    }
     req.log.error({ err }, "Unable to create booking intent");
     res.status(500).json({ error: "Unable to create booking" });
   }
@@ -384,7 +457,8 @@ router.get("/bookings/:id", async (req, res) => {
       return;
     }
     const [payload] = await withReviewedFlag([formatBookingFull(booking)]);
-    res.json(payload);
+    const boundaryReceipt = await loadBoundaryReceipt(booking.id);
+    res.json({ ...payload, boundaryReceipt });
   } catch (err: unknown) {
     if (process.env.NODE_ENV === "development") {
       const fixture = DEV_BOOKING_FIXTURES[id];
@@ -393,6 +467,68 @@ router.get("/bookings/:id", async (req, res) => {
     if (isMissingTableError(err)) { res.status(404).json({ error: "Booking not found" }); return; }
     req.log.error({ err }, "Unable to load booking");
     res.status(503).json({ error: "Booking temporarily unavailable" });
+  }
+});
+
+router.get("/bookings/:id/boundary-receipt", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) {
+    res.status(401).json({ error: "Authentication required" }); return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    const view = await previewBoundaryReceipt(id);
+    if (!view) { res.status(404).json({ error: "Booking not found" }); return; }
+    res.json(view);
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      res.status(503).json({ error: "Boundary Receipts are not available yet. Apply migration 0009." }); return;
+    }
+    req.log.error({ err }, "Boundary receipt preview failed");
+    res.status(503).json({ error: "Could not load the Boundary Receipt" });
+  }
+});
+
+router.post("/bookings/:id/boundary-receipt", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) {
+    res.status(401).json({ error: "Authentication required" }); return;
+  }
+  if (req.body?.agreed !== true) {
+    res.status(400).json({ error: "You must agree to every clause to sign." }); return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+    const party = booking.companionId === companionId ? "companion" as const : "customer" as const;
+    if (party === "customer" && booking.customerId !== customerId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (party === "companion" && booking.companionId !== companionId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    const view = await signBoundaryReceipt(id, party);
+    await writeAudit({
+      actorId: req.user?.id ?? customerId ?? companionId ?? "unknown",
+      action: "boundary_receipt.sign",
+      subjectType: "booking",
+      subjectId: id,
+      note: party,
+    });
+    res.json(view);
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      res.status(503).json({ error: "Boundary Receipts are not available yet. Apply migration 0009." }); return;
+    }
+    req.log.error({ err }, "Boundary receipt sign failed");
+    res.status(503).json({ error: "Could not sign the Boundary Receipt" });
   }
 });
 
@@ -408,14 +544,14 @@ router.get("/bookings/:id/session", async (req, res) => {
     if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
-    if (!["confirmed", "authorized", "deposit_paid"].includes(booking.status)) {
+    if (!["confirmed", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "This favor is not active yet" }); return;
     }
     const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
-    let venue = { name: "Public SafeSpot", hint: "Exact meeting details are shared after confirmation." };
-    if (booking.safeSpotId) {
+    let venue = { name: "Public SafeSpot", hint: "The agreed meeting venue is shared after your companion accepts.", agreed: false };
+    if (venueRevealed(booking.status) && booking.safeSpotId) {
       const [spot] = await db.select().from(safespots).where(eq(safespots.id, booking.safeSpotId)).limit(1);
-      if (spot) venue = { name: spot.name, hint: spot.addressHint };
+      if (spot) venue = { name: spot.name, hint: spot.addressHint, agreed: true };
     }
     const [checkIn] = await db.select().from(checkIns).where(eq(checkIns.bookingId, id)).limit(1);
     res.json({
@@ -442,7 +578,7 @@ router.get("/bookings/:id/session", async (req, res) => {
         startTime: "10:00",
         durationHours: 2,
         companion: { name: "Your companion", boundaries: ["Platonic only", "Public spaces only"] },
-        venue: { name: "Public SafeSpot", hint: "Approximate meeting area only until you arrive." },
+        venue: { name: "Public SafeSpot", hint: "Approximate meeting area only until you arrive.", agreed: false },
         checkedInAt: null,
       });
       return;
@@ -487,6 +623,15 @@ router.post("/bookings/:id/deposit", async (req, res) => {
         creditedToFinal: true,
       });
       return;
+    }
+
+    try {
+      const receipt = await previewBoundaryReceipt(id);
+      if (receipt && !receipt.customerAgreedAt) {
+        res.status(409).json({ error: "Agree to the Boundary Receipt before paying." }); return;
+      }
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
     }
 
     const pi = await stripe.paymentIntents.create({
@@ -559,21 +704,22 @@ router.post("/bookings/:id/authorize", async (req, res) => {
       return;
     }
 
-    // Full payment: customer pays totalCents.
-    // When companion has a Stripe Connect account, platform keeps application_fee_amount
-    // and the rest is transferred to the companion's account automatically.
-    const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
-    const companionAccountId = profile?.stripeAccountId ?? devCompanionStripeAccounts.get(booking.companionId);
+    try {
+      const receipt = await previewBoundaryReceipt(id);
+      if (receipt && !receipt.customerAgreedAt) {
+        res.status(409).json({ error: "Agree to the Boundary Receipt before paying." }); return;
+      }
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+    }
+
+    // Full payment: charge the platform account (separate charges and transfers).
+    // Capture stays manual until checkout. Companion payout is a Transfer after complete.
     const pi = await stripe.paymentIntents.create({
       amount: booking.totalCents,
       currency: "usd",
       capture_method: "manual",
-      ...(companionAccountId && !profile?.payoutsHeld && !booking.payoutHeld
-        ? {
-            application_fee_amount: booking.platformRevenueCents,
-            transfer_data: { destination: companionAccountId },
-          }
-        : {}),
+      transfer_group: booking.id,
       metadata: {
         bookingId: booking.id,
         customerId,
@@ -640,7 +786,8 @@ router.get("/companion/bookings/:id", async (req, res) => {
       res.status(404).json({ error: "Booking not found" }); return;
     }
     const [payload] = await withReviewedFlag([formatBookingFull(booking)]);
-    res.json({ ...payload, viewerRole: "companion" });
+    const boundaryReceipt = await loadBoundaryReceipt(booking.id);
+    res.json({ ...payload, viewerRole: "companion", boundaryReceipt });
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
       const fixture = DEV_BOOKING_FIXTURES[id] as any;
@@ -669,6 +816,15 @@ router.post("/bookings/:id/accept", async (req, res) => {
     if (!["deposit_paid", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "Booking cannot be accepted in its current state" }); return;
     }
+    if (req.body?.agreeReceipt !== true) {
+      res.status(400).json({ error: "Agree to the Boundary Receipt to accept. That agrees to the public SafeSpot and every listed boundary." }); return;
+    }
+    try {
+      await signBoundaryReceipt(id, "companion");
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+    }
+    assertBookingTransition(booking.status, "confirmed");
     const overlap = await companionHasOverlap({
       companionId,
       date: booking.date,
@@ -678,7 +834,7 @@ router.post("/bookings/:id/accept", async (req, res) => {
       startsAt: booking.startsAt,
     });
     if (overlap) {
-      res.status(409).json({ error: "That time overlaps another confirmed booking." }); return;
+      res.status(409).json({ error: "That time overlaps another hold or confirmed booking." }); return;
     }
     const [updated] = await db
       .update(bookings)
@@ -798,14 +954,18 @@ router.post("/bookings/:id/extend", async (req, res) => {
     if (!["confirmed", "deposit_paid"].includes(booking.status)) {
       res.status(409).json({ error: "Booking cannot be extended in its current state" }); return;
     }
-    const newDuration = booking.durationHours + extraMinutes / 60;
+    const hours = Number(booking.durationHours) + extraMinutes / 60;
+    const range = bookingRange(booking.date, booking.startTime, hours, booking.startsAt);
     const [updated] = await db
       .update(bookings)
-      .set({ durationHours: newDuration, updatedAt: new Date() })
+      .set({ durationHours: String(hours), endsAt: range.end, updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
     res.json({ ...formatBookingFull(updated), extendedBy: extraMinutes });
   } catch (err: any) {
+    if (isExclusionViolation(err)) {
+      res.status(409).json({ error: "That time overlaps another hold or confirmed booking." }); return;
+    }
     if (isMissingTableError(err)) {
       res.json({ id, extendedBy: extraMinutes }); return;
     }
@@ -828,18 +988,38 @@ router.post("/bookings/:id/complete", async (req, res) => {
     if (!["confirmed", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "Booking is not in a completable state" }); return;
     }
+    assertBookingTransition(booking.status, "completed");
     const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
-    const held = Boolean(booking.payoutHeld || profile?.payoutsHeld);
-    if (booking.fullPaymentIntentId && !held) {
+    const [openReport] = await db.select({ id: incidentReports.id }).from(incidentReports)
+      .where(and(eq(incidentReports.bookingId, id), eq(incidentReports.status, "open")))
+      .limit(1);
+    const held = Boolean(booking.payoutHeld || profile?.payoutsHeld || openReport);
+    if (booking.fullPaymentIntentId) {
       const captured = await captureIntentIfHeld(booking.fullPaymentIntentId);
       if (!captured.ok && captured.detail !== "already_captured") {
         req.log.error({ bookingId: id, captured }, "Capture on complete failed");
         res.status(503).json({ error: "Payment could not be captured. Try again or email hello@onlyfavors.com." }); return;
       }
     }
+    let transferId = booking.stripeTransferId ?? null;
+    const companionAccountId = profile?.stripeAccountId ?? devCompanionStripeAccounts.get(booking.companionId);
+    if (!held && companionAccountId && !transferId) {
+      const transferred = await transferCompanionPayout({
+        bookingId: id,
+        amountCents: booking.companionPayoutCents,
+        destinationAccountId: companionAccountId,
+      });
+      if (transferred.ok) transferId = transferred.transferId ?? null;
+      else req.log.warn({ bookingId: id, transferred }, "Companion transfer deferred");
+    }
     const [updated] = await db
       .update(bookings)
-      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status: "completed",
+        completedAt: new Date(),
+        updatedAt: new Date(),
+        ...(transferId ? { stripeTransferId: transferId } : {}),
+      })
       .where(eq(bookings.id, id))
       .returning();
     await recordBookingEvent({
@@ -849,6 +1029,8 @@ router.post("/bookings/:id/complete", async (req, res) => {
       actorId: req.user?.id,
       note: held ? "completed_payout_held" : "completed",
     });
+    await stopOrdinarySharing(id);
+    await purgeExpiredLocations();
     res.json({ ...formatBookingFull(updated), payoutHeld: held });
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
@@ -913,13 +1095,22 @@ router.post("/bookings/:id/checkin", async (req, res) => {
       audience: booking.customerId === customerId ? "customer" : "companion",
     });
     req.log.info({ bookingId: id, venue, kind }, "SafeSpot check-in");
+    const trust = kind === "arrival" || kind === "missed"
+      ? await notifyTrustCircle(booking.customerId, {
+          title: kind === "missed" ? "Missed check-in on OnlyFavors" : "SafeSpot check-in recorded",
+          body: kind === "missed"
+            ? "A booking check-in was not recorded on time. Ask your person if they are okay. Call 911 if this is an emergency. No companion name or live map is included."
+            : `They checked in at the agreed public venue${venue ? ` (${String(venue).slice(0, 80)})` : ""}. This is not a live location.`,
+        }).catch(() => ({ notified: 0, attempted: 0, reason: "Could not reach Trust Circle." }))
+      : { notified: 0, attempted: 0, reason: undefined as string | undefined };
     res.json({
       bookingId: id,
       checkedInAt: row.createdAt,
       venue: row.venue,
       kind,
       smsNotified: false,
-      reason: process.env.TWILIO_AUTH_TOKEN ? "SMS sending is not wired yet" : "SMS is not configured",
+      trustNotified: trust.notified,
+      reason: trust.reason ?? (process.env.TWILIO_AUTH_TOKEN ? "SMS sending is not wired yet" : "SMS is not configured"),
     });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
@@ -939,6 +1130,7 @@ router.post("/bookings/:id/exact-location", async (req, res) => {
   if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
   const lat = Number(req.body?.lat);
   const lng = Number(req.body?.lng);
+  const kind = String(req.body?.kind ?? "checkin").slice(0, 40);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     res.status(400).json({ error: "A valid latitude and longitude are required" }); return;
   }
@@ -946,25 +1138,51 @@ router.post("/bookings/:id/exact-location", async (req, res) => {
     res.status(503).json({ error: "Exact location storage is not configured" }); return;
   }
   try {
+    await purgeExpiredLocations();
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
-    if (!["confirmed", "authorized", "deposit_paid"].includes(booking.status)) {
-      res.status(409).json({ error: "Exact location is only stored for an active favor" }); return;
+    if (!SHARING_STATUSES.has(booking.status)) {
+      res.status(409).json({ error: "Exact location is only stored during an active booking" }); return;
     }
     const ciphertext = encryptExactLocation({ lat, lng });
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + LOCATION_RETENTION_MS);
     await db.delete(exactLocations).where(eq(exactLocations.bookingId, id));
-    await db.insert(exactLocations).values({ bookingId: id, ciphertext, expiresAt });
-    req.log.info({ bookingId: id }, "Exact location stored encrypted");
-    res.json({ stored: true, expiresAt: expiresAt.toISOString() });
+    await db.insert(exactLocations).values({
+      bookingId: id,
+      ciphertext,
+      expiresAt,
+      sharing: true,
+      accountId: req.user?.id ?? customerId ?? null,
+      kind: ["checkin", "walk", "emergency"].includes(kind) ? kind : "checkin",
+    });
+    req.log.info({ bookingId: id, kind }, "Exact location stored encrypted");
+    res.json({ stored: true, sharing: true, expiresAt: expiresAt.toISOString(), retentionHours: 24 });
   } catch (err) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
-      res.json({ stored: true, expiresAt: new Date(Date.now() + 86400_000).toISOString() }); return;
+      res.json({ stored: true, sharing: true, expiresAt: new Date(Date.now() + LOCATION_RETENTION_MS).toISOString(), retentionHours: 24 }); return;
     }
     req.log.error({ err }, "Exact location store failed");
     res.status(503).json({ error: "Could not store exact location" });
+  }
+});
+
+router.post("/bookings/:id/exact-location/stop", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    await stopOrdinarySharing(id);
+    res.json({ sharing: false });
+  } catch (err) {
+    req.log.error({ err }, "Stop location sharing failed");
+    res.status(503).json({ error: "Could not stop location sharing" });
   }
 });
 
@@ -973,10 +1191,8 @@ router.get("/bookings/:id/exact-location", async (req, res) => {
   const customerId = getActorId(req, "customer");
   const companionId = await resolveCompanionId(req);
   if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-  if (!locationEncryptionReady()) {
-    res.status(404).json({ error: "Exact location is not available" }); return;
-  }
   try {
+    await purgeExpiredLocations();
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
@@ -984,13 +1200,228 @@ router.get("/bookings/:id/exact-location", async (req, res) => {
     const [row] = await db.select().from(exactLocations).where(eq(exactLocations.bookingId, id)).orderBy(desc(exactLocations.createdAt)).limit(1);
     if (!row || row.expiresAt.getTime() < Date.now()) {
       if (row) await db.delete(exactLocations).where(eq(exactLocations.bookingId, id));
-      res.status(404).json({ error: "Exact location is not available" }); return;
+      res.json({ stored: false, sharing: false });
+      return;
     }
-    const coords = decryptExactLocation(row.ciphertext);
-    res.json({ lat: coords.lat, lng: coords.lng, expiresAt: row.expiresAt.toISOString() });
+    res.json({
+      stored: true,
+      sharing: row.sharing,
+      kind: row.kind,
+      expiresAt: row.expiresAt.toISOString(),
+      retentionHours: 24,
+    });
   } catch (err) {
-    req.log.error({ err }, "Exact location read failed");
-    res.status(404).json({ error: "Exact location is not available" });
+    req.log.error({ err }, "Exact location status failed");
+    res.json({ stored: false, sharing: false });
+  }
+});
+
+router.post("/bookings/:id/trust-link", async (req, res) => {
+  const { id } = req.params;
+  const limited = rateLimit(clientKey(req.ip, `trust-link:${id}`), 8, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many share links. Try again later." }); return;
+  }
+  const customerId = getActorId(req, "customer");
+  if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const purpose = String(req.body?.purpose ?? "trust_circle");
+  if (!["trust_circle", "walk"].includes(purpose)) {
+    res.status(400).json({ error: "Unknown share purpose" }); return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || booking.customerId !== customerId) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!SHARING_STATUSES.has(booking.status)) {
+      res.status(409).json({ error: "A Trust Circle map is only available during an active booking" }); return;
+    }
+    const token = mintShareToken();
+    const expiresAt = new Date(Date.now() + LOCATION_RETENTION_MS);
+    await db.insert(locationShareLinks).values({
+      bookingId: id,
+      accountId: customerId,
+      tokenHash: hashShareToken(token),
+      purpose,
+      expiresAt,
+    });
+    const path = `/safety/share/${token}`;
+    const origin = String(req.headers.origin ?? "").replace(/\/$/, "");
+    const href = origin ? `${origin}${path}` : path;
+    const trust = await notifyTrustCircle(customerId, {
+      title: purpose === "walk" ? "OnlyFavors walk-me-there map" : "OnlyFavors safety map",
+      body: "Your person shared a temporary map of the agreed public venue. This is not a live GPS pin of a person, and the link expires after the booking.",
+      href,
+    }).catch(() => ({ notified: 0, attempted: 0, reason: "Could not reach Trust Circle." }));
+    res.json({ path, expiresAt: expiresAt.toISOString(), purpose, trustNotified: trust.notified, reason: trust.reason });
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      res.status(503).json({ error: "Location links are not available yet. Apply migration 0008." }); return;
+    }
+    req.log.error({ err }, "Trust link create failed");
+    res.status(503).json({ error: "Could not create a Trust Circle link" });
+  }
+});
+
+router.post("/bookings/:id/missed-checkin", async (req, res) => {
+  const { id } = req.params;
+  const limited = rateLimit(clientKey(req.ip, `missed:${id}`), 4, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many missed-check-in alerts." }); return;
+  }
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!SHARING_STATUSES.has(booking.status)) {
+      res.status(409).json({ error: "Missed check-in alerts are only for an active favor." }); return;
+    }
+    const [arrival] = await db.select().from(checkIns).where(and(eq(checkIns.bookingId, id), eq(checkIns.kind, "arrival"))).limit(1);
+    if (arrival) {
+      res.json({ alerted: false, reason: "A check-in was already recorded." }); return;
+    }
+    const [already] = await db.select().from(checkIns).where(and(eq(checkIns.bookingId, id), eq(checkIns.kind, "missed"))).limit(1);
+    if (already) {
+      res.json({ alerted: true, reason: "Trust Circle was already notified about a missed check-in." }); return;
+    }
+    const trust = await notifyTrustCircle(booking.customerId, {
+      title: "Missed check-in on OnlyFavors",
+      body: "A booking check-in was not recorded on time. Ask your person if they are okay. Call 911 if this is an emergency. No companion name or live map is included.",
+    });
+    await db.insert(checkIns).values({
+      bookingId: id,
+      accountId: req.user?.id ?? customerId ?? null,
+      venue: null,
+      kind: "missed",
+    });
+    res.json({ alerted: trust.notified > 0, ...trust });
+  } catch (err) {
+    req.log.error({ err }, "Missed check-in alert failed");
+    res.status(503).json({ error: "Could not alert Trust Circle", reason: "Notification failed. Call 911 if this is an emergency." });
+  }
+});
+
+router.post("/bookings/:id/emergency-share", async (req, res) => {
+  const { id } = req.params;
+  const limited = rateLimit(clientKey(req.ip, `emergency:${id}`), 6, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many emergency shares. Call 911 if this is an emergency." }); return;
+  }
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (locationEncryptionReady() && Number.isFinite(lat) && Number.isFinite(lng)) {
+      const ciphertext = encryptExactLocation({ lat, lng });
+      const expiresAt = new Date(Date.now() + LOCATION_RETENTION_MS);
+      await db.delete(exactLocations).where(eq(exactLocations.bookingId, id));
+      await db.insert(exactLocations).values({
+        bookingId: id,
+        ciphertext,
+        expiresAt,
+        sharing: true,
+        accountId: req.user?.id ?? customerId ?? null,
+        kind: "emergency",
+      });
+    }
+    const token = mintShareToken();
+    const expiresAt = new Date(Date.now() + LOCATION_RETENTION_MS);
+    const accountId = req.user?.id ?? customerId ?? booking.customerId;
+    try {
+      await db.insert(locationShareLinks).values({
+        bookingId: id,
+        accountId,
+        tokenHash: hashShareToken(token),
+        purpose: "emergency",
+        expiresAt,
+      });
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+    }
+    const path = `/safety/share/${token}`;
+    const origin = String(req.headers.origin ?? "").replace(/\/$/, "");
+    const href = origin ? `${origin}${path}` : path;
+    const trust = await notifyTrustCircle(booking.customerId, {
+      title: "OnlyFavors emergency share",
+      body: "Your person asked OnlyFavors to share a temporary safety map. Call 911 if they may be in danger. This link expires in 24 hours and is not a live GPS pin.",
+      href,
+    });
+    await writeAudit({
+      actorId: accountId,
+      action: "emergency_location_share",
+      subjectType: "booking",
+      subjectId: id,
+      note: `trust_notified=${trust.notified}`,
+    });
+    res.json({
+      call911: true,
+      path,
+      expiresAt: expiresAt.toISOString(),
+      ...trust,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Emergency share failed");
+    res.status(503).json({ error: "Could not share location. Call 911 if this is an emergency." });
+  }
+});
+
+router.get("/safety/share/:token", async (req, res) => {
+  const limited = rateLimit(clientKey(req.ip, "share"), 30, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many requests" }); return;
+  }
+  const token = String(req.params.token ?? "");
+  if (token.length < 16) { res.status(404).json({ error: "This link is not available" }); return; }
+  try {
+    await purgeExpiredLocations();
+    const [link] = await db.select().from(locationShareLinks).where(eq(locationShareLinks.tokenHash, hashShareToken(token))).limit(1);
+    if (!link || link.revokedAt || link.expiresAt.getTime() < Date.now()) {
+      res.status(404).json({ error: "This link has expired or was stopped." }); return;
+    }
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, link.bookingId)).limit(1);
+    if (!booking) { res.status(404).json({ error: "This link is not available" }); return; }
+    let venue: { name: string; hint: string; area?: { name: string; lat: number; lng: number } } | null = null;
+    if (venueRevealed(booking.status) && booking.safeSpotId) {
+      const [spot] = await db.select().from(safespots).where(eq(safespots.id, booking.safeSpotId)).limit(1);
+      if (spot) {
+        const area = neighborhoodCenter(`${spot.addressHint} ${spot.city}`);
+        venue = { name: spot.name, hint: spot.addressHint, area };
+      }
+    }
+    let lastCheckIn: { lat: number; lng: number } | null = null;
+    if (link.purpose === "emergency") {
+      const [row] = await db.select().from(exactLocations).where(eq(exactLocations.bookingId, booking.id)).orderBy(desc(exactLocations.createdAt)).limit(1);
+      if (row && row.expiresAt.getTime() >= Date.now() && locationEncryptionReady()) {
+        try { lastCheckIn = decryptExactLocation(row.ciphertext); } catch { lastCheckIn = null; }
+      }
+    }
+    const [account] = await db.select().from(accounts).where(eq(accounts.id, link.accountId)).limit(1);
+    const firstName = (account?.displayName ?? "Someone").trim().split(/\s+/)[0];
+    res.json({
+      purpose: link.purpose,
+      firstName,
+      activity: booking.activity,
+      venue,
+      lastCheckIn: lastCheckIn ? { ...lastCheckIn, live: false } : null,
+      expiresAt: link.expiresAt.toISOString(),
+      livePin: false,
+    });
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      res.status(404).json({ error: "This link is not available" }); return;
+    }
+    req.log.error({ err }, "Share link read failed");
+    res.status(404).json({ error: "This link is not available" });
   }
 });
 
@@ -1029,6 +1460,7 @@ router.post("/bookings/:id/cancel", async (req, res) => {
       note: plan.keepFeeCents ? `late_cancel_fee_${plan.keepFeeCents}` : "customer_cancel",
     });
     req.log.info({ bookingId: id, reason, keepFeeCents: plan.keepFeeCents }, "Booking cancelled by customer");
+    await stopOrdinarySharing(id);
     res.json({ ...formatBookingFull(updated), keepFeeCents: plan.keepFeeCents });
   } catch (err: any) {
     if (isMissingTableError(err)) { res.status(503).json({ error: "Could not cancel booking" }); return; }
@@ -1721,7 +2153,7 @@ type DevCompanionApplication = {
 };
 const DEV_COMPANION_APPLICATIONS: DevCompanionApplication[] = [];
 
-function formatApplicationfunction formatApplication(row: typeof companionApplications.$inferSelect) {
+function formatApplication(row: typeof companionApplications.$inferSelect) {
   return {
     id: row.id,
     displayName: row.displayName,
@@ -1769,14 +2201,15 @@ router.get("/admin/overview", requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/companion/applications", async (req, res) => {
-  const { displayName, email, city, bio, activities, languages, hourlyRate } = req.body as {
-    displayName: string; email: string; city: string; bio: string;
+router.post("/companion/applications", requireAuth, async (req, res) => {
+  const { displayName, city, bio, activities, languages, hourlyRate } = req.body as {
+    displayName: string; city: string; bio: string;
     activities?: unknown; languages?: unknown; hourlyRate?: unknown;
   };
-  if (!displayName || !email || !city || !bio) {
+  if (!displayName || !city || !bio) {
     res.status(400).json({ error: "All fields required" }); return;
   }
+  const email = req.user!.email;
   const activityList = Array.isArray(activities)
     ? activities.map((a) => String(a).trim()).filter(Boolean).slice(0, 12)
     : [];
@@ -1789,9 +2222,9 @@ router.post("/companion/applications", async (req, res) => {
   const asDraft = Boolean((req.body as { draft?: boolean })?.draft);
   try {
     const values = {
-      accountId: req.user?.id ?? null,
+      accountId: req.user!.id,
       displayName: String(displayName).slice(0, 80),
-      email: String(email).trim().toLowerCase().slice(0, 160),
+      email,
       city: String(city).slice(0, 80),
       bio: String(bio).slice(0, 2000),
       activities: activityList,
@@ -2129,21 +2562,33 @@ router.post("/admin/bookings/:id/capture", requireAdmin, async (req, res) => {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, req.params.id)).limit(1);
     if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
     const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
-    if (booking.payoutHeld || profile?.payoutsHeld) {
-      res.status(409).json({ error: "Payout is held. Release the hold before capturing." }); return;
-    }
     const captured = await captureIntentIfHeld(booking.fullPaymentIntentId);
     if (!captured.ok && captured.detail !== "already_captured") {
       res.status(503).json({ error: "Could not capture payment." }); return;
+    }
+    const holdPayout = Boolean(booking.payoutHeld || profile?.payoutsHeld);
+    let transferId = booking.stripeTransferId ?? null;
+    const companionAccountId = profile?.stripeAccountId ?? devCompanionStripeAccounts.get(booking.companionId);
+    if (!holdPayout && companionAccountId && !transferId) {
+      const transferred = await transferCompanionPayout({
+        bookingId: booking.id,
+        amountCents: booking.companionPayoutCents,
+        destinationAccountId: companionAccountId,
+        existingTransferId: booking.stripeTransferId,
+      });
+      if (transferred.ok && transferred.transferId) {
+        transferId = transferred.transferId;
+        await db.update(bookings).set({ stripeTransferId: transferId, updatedAt: new Date() }).where(eq(bookings.id, booking.id));
+      }
     }
     await writeAudit({
       actorId: req.user!.id,
       action: "booking.capture",
       subjectType: "booking",
       subjectId: booking.id,
-      note: captured.detail,
+      note: holdPayout ? `${captured.detail};payout_held` : captured.detail,
     });
-    res.json({ id: booking.id, captured: captured.detail });
+    res.json({ id: booking.id, captured: captured.detail, payoutHeld: holdPayout, transferId });
   } catch (err) {
     req.log.error({ err }, "Admin capture failed");
     res.status(503).json({ error: "Could not capture payment" });
@@ -2177,6 +2622,30 @@ router.get("/admin/reports", requireAdmin, async (req, res) => {
     if (isMissingTableError(err)) { res.json([]); return; }
     req.log.error({ err }, "Admin reports failed");
     res.status(503).json({ error: "Reports temporarily unavailable" });
+  }
+});
+
+router.get("/admin/bookings/:id/messages", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const rows = await db.select().from(messages).where(eq(messages.bookingId, id));
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "messages.review",
+      subjectType: "booking",
+      subjectId: id,
+      note: "reported_thread",
+    });
+    res.json(rows.map((row) => ({
+      id: row.id,
+      senderRole: row.senderRole,
+      body: row.body,
+      createdAt: row.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Admin message review failed");
+    res.status(503).json({ error: "Could not load the reported thread" });
   }
 });
 
@@ -2609,9 +3078,11 @@ router.get("/companion/stripe/status", async (req, res) => {
 
 async function publicCompanionExtras(companionId: string) {
   let availability: Array<{ day: string; hours: string }> = [];
+  let availabilityHint: "now" | "tonight" | "weekend" | null = null;
   try {
     const windows = await db.select().from(availabilityWindows).where(eq(availabilityWindows.companionId, companionId));
     availability = windowsToPublic(windows);
+    availabilityHint = windowsHint(windows);
   } catch (err) {
     if (!isMissingTableError(err)) throw err;
   }
@@ -2619,6 +3090,13 @@ async function publicCompanionExtras(companionId: string) {
   let away: { enabled: boolean; returnDate: string; note: string } | undefined;
   let memberSince: string | undefined;
   let totalBookings = 0;
+  let approvedAreas: string[] = [];
+  try {
+    const rows = await db.select().from(serviceAreas).where(eq(serviceAreas.companionId, companionId));
+    approvedAreas = rows.map((row) => row.label).filter(Boolean);
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
   try {
     const [row] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, companionId)).limit(1);
     if (row) {
@@ -2634,49 +3112,61 @@ async function publicCompanionExtras(companionId: string) {
   } catch (err) {
     if (!isMissingTableError(err)) throw err;
   }
-  return { availability, paused, away, memberSince, totalBookings };
+  return { availability, availabilityHint, approvedAreas, paused, away, memberSince, totalBookings };
 }
 
-function mapCompanionRow(row: {
-  id: string;
-  display_name: string;
-  city: string;
-  service_area: string;
-  activities: string[];
-  languages: string[];
-  hourly_rate: number;
-  day_rate?: number | null;
-  response_time: string;
-  rating: number;
-  review_count: number;
-  verified: boolean;
-  instant_book: boolean;
-  biography?: string | null;
-  boundaries?: string[];
-  interview_answers?: string[];
-  photo_url?: string | null;
-  available_today?: boolean;
-  created_at?: string;
-}) {
+function mapCompanionRow(
+  row: {
+    id: string;
+    display_name: string;
+    city: string;
+    service_area: string;
+    activities: string[];
+    languages: string[];
+    hourly_rate: number;
+    day_rate?: number | null;
+    response_time: string;
+    rating: number;
+    review_count: number;
+    verified: boolean;
+    instant_book: boolean;
+    biography?: string | null;
+    boundaries?: string[];
+    interview_answers?: string[];
+    photo_url?: string | null;
+    available_today?: boolean;
+    identity_status?: string;
+    created_at?: string;
+  },
+  availabilityHint: "now" | "tonight" | "weekend" | null = null,
+  approvedAreas: string[] = [],
+) {
+  const identityVerified = row.identity_status === "verified";
+  const responseTime =
+    row.response_time && row.response_time !== "Usually within a day" ? row.response_time : "";
+  const areas = approvedAreas.length ? approvedAreas : row.service_area ? [row.service_area] : [];
   return {
     id: row.id,
     displayName: row.display_name,
     city: row.city,
-    serviceArea: row.service_area,
+    serviceArea: areas[0] ?? row.service_area,
+    approvedAreas: areas,
     activities: row.activities,
     languages: row.languages,
     hourlyRate: row.hourly_rate,
     dayRate: row.day_rate ?? null,
-    responseTime: row.response_time,
+    responseTime,
     rating: row.rating,
     reviewCount: row.review_count,
-    verified: row.verified,
+    verified: identityVerified,
+    identityVerified,
     instantBook: row.instant_book,
     biography: row.biography ?? null,
     boundaries: row.boundaries ?? [],
     interviewAnswers: (row.interview_answers ?? []).filter(Boolean).slice(0, 3),
     photoUrl: row.photo_url ?? null,
-    availableNow: Boolean(row.available_today),
+    availableNow: availabilityHint === "now",
+    availabilityHint,
     createdAt: row.created_at ?? undefined,
   };
 }

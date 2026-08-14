@@ -14,7 +14,8 @@ export function isCompanionUser(req: Request): boolean {
   return Boolean(
     req.user?.id &&
       req.user.status === "active" &&
-      req.user.roles.includes("companion"),
+      req.user.roles.includes("companion") &&
+      req.user.companionApproved,
   );
 }
 

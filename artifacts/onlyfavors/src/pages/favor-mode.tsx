@@ -10,11 +10,11 @@
  *  - Location sharing indicator
  *  - Boundaries summary
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle, ArrowRight, Check, CheckCircle2, ChevronRight,
+  AlertCircle, ArrowRight, Check, CheckCircle2,
   Clock, Heart, HeartHandshake, LifeBuoy, LockKeyhole, MapPin,
-  Navigation, Phone, QrCode, Radio, Shield, ShieldCheck, TimerReset, Users, X,
+  Navigation, Phone, QrCode, ShieldCheck, TimerReset, Users, X,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Link, useParams } from 'wouter';
@@ -34,11 +34,12 @@ type LiveFavor = {
   activity: string;
   venueName: string;
   venueHint: string;
+  venueAgreed: boolean;
   boundaries: string[];
   totalMinutes: number;
 };
 
-type TrustContact = { id: string; name: string; phone: string; relation: string };
+type TrustContact = { id: string; name: string; phone: string; email?: string; relation: string };
 
 export default function FavorMode() {
   const { id } = useParams<{ id: string }>();
@@ -72,7 +73,7 @@ export default function FavorMode() {
           durationHours: number;
           checkedInAt: string | null;
           companion: { name: string; boundaries: string[] };
-          venue: { name: string; hint: string };
+          venue: { name: string; hint: string; agreed?: boolean };
         };
       })
       .then((data) => {
@@ -81,6 +82,7 @@ export default function FavorMode() {
           activity: data.activity ?? 'Favor',
           venueName: data.venue?.name ?? 'SafeSpot',
           venueHint: data.venue?.hint ?? '',
+          venueAgreed: Boolean(data.venue?.agreed),
           boundaries: data.companion?.boundaries?.length ? data.companion.boundaries : ['Platonic only', 'Public spaces only'],
           totalMinutes: Math.round(Number(data.durationHours ?? 2) * 60),
         });
@@ -94,28 +96,97 @@ export default function FavorMode() {
   const [showExit, setShowExit] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
-  const [locationSharing, setLocationSharing] = useState(true);
+  const [locationSharing, setLocationSharing] = useState(false);
+  const [shareKind, setShareKind] = useState<'checkin' | 'walk' | 'emergency'>('checkin');
+  const [locConsentError, setLocConsentError] = useState('');
+  const [trustLink, setTrustLink] = useState('');
+  const [trustLinkNote, setTrustLinkNote] = useState('');
+  const [missedNote, setMissedNote] = useState('');
+  const [emergencyNote, setEmergencyNote] = useState('');
+  const [showEmergency, setShowEmergency] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [completedAt, setCompletedAt] = useState('');
   const [bonusMinutes, setBonusMinutes] = useState(0);
   const [extending, setExtending] = useState<number | null>(null);
+  const missedSent = useRef(false);
 
   useEffect(() => {
-    if (!id || !live || !locationSharing || !navigator.geolocation) return;
+    if (!id) return;
+    fetch(`/api/bookings/${id}/exact-location`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : { sharing: false }))
+      .then((body: { sharing?: boolean; kind?: string }) => {
+        setLocationSharing(Boolean(body.sharing));
+        if (body.kind === 'walk' || body.kind === 'emergency' || body.kind === 'checkin') {
+          setShareKind(body.kind);
+        }
+      })
+      .catch(() => {});
+  }, [id]);
+
+  const storeExactLocation = useCallback((kind: 'checkin' | 'walk' | 'emergency') => {
+    if (!id || !navigator.geolocation) {
+      setLocConsentError('This device cannot share a location pin. Check-in still works without GPS.');
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         fetch(`/api/bookings/${id}/exact-location`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        }).catch(() => {});
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, kind }),
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({})) as { error?: string };
+              throw new Error(body.error ?? 'Could not store location');
+            }
+            setLocationSharing(true);
+            setShareKind(kind);
+            setLocConsentError('');
+          })
+          .catch((err) => {
+            setLocConsentError(err instanceof Error ? err.message : 'Could not store location');
+          });
       },
-      () => {},
+      () => {
+        setLocConsentError('Location permission was declined. Check-in still works without sharing a route or pin.');
+      },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
     );
-  }, [id, live, locationSharing]);
+  }, [id]);
+
+  const stopSharing = useCallback(async () => {
+    if (!id) return;
+    await fetch(`/api/bookings/${id}/exact-location/stop`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {});
+    setLocationSharing(false);
+    setShareKind('checkin');
+  }, [id]);
+
+  const createTrustLink = useCallback(async (purpose: 'trust_circle' | 'walk' = 'trust_circle') => {
+    if (!id) return '';
+    const res = await fetch(`/api/bookings/${id}/trust-link`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purpose }),
+    });
+    const body = await res.json().catch(() => ({})) as { path?: string; error?: string; reason?: string; trustNotified?: number };
+    if (!res.ok || !body.path) {
+      setTrustLinkNote(body.error ?? 'Could not create a Trust Circle link.');
+      return '';
+    }
+    const url = `${window.location.origin}${body.path}`;
+    setTrustLink(url);
+    const notified = body.trustNotified ? ` Emailed ${body.trustNotified} contact${body.trustNotified === 1 ? '' : 's'}.` : '';
+    setTrustLinkNote((body.reason ? `${body.reason} ` : '') + `Link expires after this booking.${notified} It shows the agreed venue, not a live pin.`);
+    return url;
+  }, [id]);
 
   const totalMinutes = (live?.totalMinutes ?? 120) + bonusMinutes;
   const progress = Math.min(elapsed / (totalMinutes * 60), 1);
@@ -130,6 +201,27 @@ export default function FavorMode() {
       body: JSON.stringify({ venue: live.venueName, kind }),
     });
   };
+
+  useEffect(() => {
+    if (!id || !live || checkedIn || missedSent.current || elapsed < 12 * 60) return;
+    missedSent.current = true;
+    fetch(`/api/bookings/${id}/missed-checkin`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({})) as { alerted?: boolean; reason?: string; error?: string };
+        setMissedNote(
+          body.alerted
+            ? 'Trust Circle was emailed about a missed check-in. Call 911 if this is an emergency.'
+            : (body.reason ?? body.error ?? 'Trust Circle could not be notified. Call 911 if this is an emergency.'),
+        );
+      })
+      .catch(() => {
+        setMissedNote('Trust Circle could not be notified. Call 911 if this is an emergency.');
+      });
+  }, [id, live, checkedIn, elapsed]);
 
   if (loadError) {
     return (
@@ -233,7 +325,9 @@ export default function FavorMode() {
             <div>
               <p className="font-bold text-[#f9efe5]">{live.venueName}</p>
               <p className="mt-0.5 text-xs text-[#d9c4cf]">{live.venueHint}</p>
-              <p className="mt-1 text-[10px] text-[#3dbd8c] font-semibold">Verified SafeSpot</p>
+              <p className="mt-1 text-[10px] font-semibold text-[#3dbd8c]">
+                {live.venueAgreed ? 'Meet Here · both of you agreed to this public SafeSpot' : 'Proposed public SafeSpot — agreed when your companion accepts'}
+              </p>
             </div>
           </div>
         </div>
@@ -257,7 +351,7 @@ export default function FavorMode() {
               {checkedIn ? 'Checked in ✓' : 'Check in'}
             </p>
             <p className="mt-0.5 text-[10px] text-[#d9c4cf]">
-              {checkedIn ? 'Arrival recorded' : 'Scan at SafeSpot'}
+              {checkedIn ? 'Arrival recorded at this SafeSpot' : 'Confirm you arrived — no route is stored'}
             </p>
           </button>
 
@@ -293,8 +387,7 @@ export default function FavorMode() {
             <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Trust Circle</p>
             {trustContacts.length > 0 ? (
               <span className="flex items-center gap-1 text-[10px] text-[#3dbd8c]">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#3dbd8c]" />
-                Watching
+                On this booking
               </span>
             ) : (
               <a href="/trust-circle" className="text-[10px] font-bold text-[#df9cbd] underline">Add contacts</a>
@@ -309,14 +402,30 @@ export default function FavorMode() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-[#f9efe5]">{contact.name}</p>
-                    <p className="text-[10px] text-[#d9c4cf]">{contact.relation} · {contact.phone}</p>
+                    <p className="text-[10px] text-[#d9c4cf]">{contact.relation} · {contact.email || contact.phone || 'Add an email for alerts'}</p>
                   </div>
                   <Users className="h-4 w-4 text-[#3dbd8c]" />
                 </div>
               ))}
               <p className="mt-4 text-[10px] leading-5 text-[#9d7e8e]">
-                They receive check-in updates. A missed check-in alert fires automatically if you don't respond.
+                They can be emailed a venue map if they have an email on file. SMS is not configured. A missed check-in alert is sent once if you have not arrived after 12 minutes.
               </p>
+              {missedNote && <p className="mt-2 text-[10px] leading-5 text-[#df9cbd]">{missedNote}</p>}
+              <button
+                type="button"
+                onClick={async () => {
+                  const url = await createTrustLink('trust_circle');
+                  if (url) await navigator.clipboard.writeText(url).catch(() => {});
+                }}
+                className="mt-4 w-full rounded-[12px] bg-[#4a2842] px-4 py-3 text-left text-xs font-bold text-[#f9efe5]"
+                data-testid="button-trust-link"
+              >
+                Copy expiring Trust Circle map
+              </button>
+              {trustLink && (
+                <p className="mt-2 break-all text-[10px] leading-5 text-[#c695ae]">{trustLink}</p>
+              )}
+              {trustLinkNote && <p className="mt-1 text-[10px] leading-5 text-[#9d7e8e]">{trustLinkNote}</p>}
             </>
           ) : (
             <div className="mt-4 rounded-[12px] border border-[#4a2040] p-4 text-center">
@@ -367,39 +476,71 @@ export default function FavorMode() {
             <div className="flex items-center gap-3">
               <Navigation className={`h-5 w-5 ${locationSharing ? 'text-[#3dbd8c]' : 'text-[#9d7e8e]'}`} />
               <div>
-                <p className="text-sm font-bold text-[#f9efe5]">Location sharing</p>
+                <p className="text-sm font-bold text-[#f9efe5]">Temporary location sharing</p>
                 <p className="text-[10px] text-[#d9c4cf]">
-                  {locationSharing ? 'Shared with Trust Circle only · auto-stops after checkout' : 'Off'}
+                  {locationSharing
+                    ? `On for this favor · ${shareKind === 'walk' ? 'Walk me there' : shareKind === 'emergency' ? 'Emergency' : 'encrypted check-in'} · either of you can stop it`
+                    : 'Off until you consent'}
                 </p>
               </div>
             </div>
             <button
-              onClick={() => setLocationSharing(!locationSharing)}
+              type="button"
+              onClick={() => {
+                if (locationSharing) void stopSharing();
+                else storeExactLocation(shareKind === 'walk' ? 'walk' : 'checkin');
+              }}
               className={`h-7 w-12 rounded-full transition-colors ${locationSharing ? 'bg-[#3dbd8c]' : 'bg-[#4a2842]'}`}
               data-testid="toggle-location"
+              aria-pressed={locationSharing}
+              aria-label={locationSharing ? 'Stop location sharing' : 'Start location sharing'}
             >
               <span
                 className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${locationSharing ? 'translate-x-6' : 'translate-x-1'}`}
               />
             </button>
           </div>
+          {locConsentError && <p className="mt-3 text-[10px] leading-5 text-[#df9cbd]">{locConsentError}</p>}
           <p className="mt-3 text-[10px] leading-5 text-[#9d7e8e]">
-            Precise location is encrypted for this favor. It stops being readable after 24 hours. Sharing does not send a live pin to the public directory.
+            Precise location is encrypted for this booking only, readable for 24 hours, then deleted. It is never shown as a live pin, never used for ads, and never stored outside an active favor.
           </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                storeExactLocation('walk');
+                const url = await createTrustLink('walk');
+                if (url) await navigator.clipboard.writeText(url).catch(() => {});
+                window.open(`https://www.google.com/maps/search/transit+station+near+${encodeURIComponent(live.venueName)}`, '_blank', 'noopener,noreferrer');
+              }}
+              className="rounded-[12px] bg-[#4a2842] px-3 py-3 text-left text-[11px] font-bold text-[#f9efe5]"
+              data-testid="button-walk-me-there"
+            >
+              Walk me there
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEmergency(true)}
+              className="rounded-[12px] bg-[#5a1d32] px-3 py-3 text-left text-[11px] font-bold text-[#f9efe5]"
+              data-testid="button-emergency-share"
+            >
+              Emergency share
+            </button>
+          </div>
         </div>
 
         {/* Discreet Exit — intentionally understated */}
         <div className="rounded-[20px] border border-[#3a1832] p-5">
-          <p className="text-xs font-semibold text-[#9d7e8e]">Need to step away?</p>
+          <p className="text-xs font-semibold text-[#9d7e8e]">Need to leave?</p>
           <button
             onClick={() => setShowExit(true)}
             className="mt-3 text-sm font-bold text-[#c695ae] hover:text-[#f9efe5]"
             data-testid="button-discreet-exit"
           >
-            Change plans quietly →
+            Help me leave →
           </button>
           <p className="mt-1 text-[10px] text-[#6a4a60]">
-            No explanation needed. We will help you leave gracefully and notify your Trust Circle.
+            Ends ordinary location sharing after you confirm. Call 911 if this is an emergency — OnlyFavors cannot dispatch help.
           </p>
         </div>
 
@@ -413,15 +554,22 @@ export default function FavorMode() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowExit(false)}>
           <div className="w-full max-w-md rounded-t-[28px] bg-[#1f0c1b] p-8" onClick={(e) => e.stopPropagation()}>
             <LifeBuoy className="h-8 w-8 text-[#df9cbd]" />
-            <h2 className="mt-4 font-serif text-3xl text-[#f9efe5]">We will help you leave.</h2>
+            <h2 className="mt-4 font-serif text-3xl text-[#f9efe5]">Help me leave.</h2>
             <p className="mt-3 text-sm leading-6 text-[#d9c4cf]">
-              Your Trust Circle will be notified. You don't need to explain anything to anyone right now.
+              You do not need to explain. Call 911 if you are in danger. Ordinary location sharing can stop as soon as you end the booking.
             </p>
             <div className="mt-6 space-y-3">
-              {/* Opens Google Maps walking directions to nearest transit */}
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(live.venueName)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex w-full items-center justify-between rounded-[16px] bg-[#3dbd8c] p-4 text-sm font-bold text-[#1f0c1b]"
+                data-testid="button-exit-safespot">
+                <span>Directions to this SafeSpot</span><MapPin className="h-4 w-4" />
+              </a>
               <a
                 href={`https://www.google.com/maps/search/transit+station+near+${encodeURIComponent(live.venueName)}`}
                 target="_blank" rel="noopener noreferrer"
+                onClick={() => { storeExactLocation('walk'); void createTrustLink('walk'); }}
                 className="flex w-full items-center justify-between rounded-[16px] bg-[#7f2e62] p-4 text-sm font-bold text-white"
                 data-testid="button-exit-walk">
                 <span>Walk me to transport</span><Navigation className="h-4 w-4" />
@@ -445,6 +593,7 @@ export default function FavorMode() {
                   setShowExit(false);
                   setCompleting(true);
                   try {
+                    try { await stopSharing(); } catch {}
                     await fetch(`/api/bookings/${id}/complete`, {
                       method: 'POST',
                       credentials: 'include',
@@ -537,7 +686,7 @@ export default function FavorMode() {
             </div>
 
             <p className="mt-4 text-center text-[11px] leading-5 text-[#9d7e8e]">
-              This QR opens the check-in page for this booking. Venue staff are not in a scan network. Trust Circle is not texted.
+              Confirming arrival records that you are at this public SafeSpot. It does not share the route you took.
             </p>
 
             <div className="mt-6 space-y-3">
@@ -560,7 +709,73 @@ export default function FavorMode() {
         </div>
       )}
 
-      {/* End booking modal */}
+      {/* Emergency share — 911 first */}
+      {showEmergency && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowEmergency(false)}>
+          <div className="w-full max-w-md rounded-t-[28px] bg-[#1f0c1b] p-8" onClick={(e) => e.stopPropagation()}>
+            <AlertCircle className="h-8 w-8 text-[#df9cbd]" />
+            <h2 className="mt-4 font-serif text-3xl text-[#f9efe5]">Call 911 first.</h2>
+            <p className="mt-3 text-sm leading-6 text-[#d9c4cf]">
+              OnlyFavors cannot dispatch emergency services. After you are in touch with 911, you can share a temporary map of your last check-in with your Trust Circle. That map is not a live pin.
+            </p>
+            <div className="mt-6 space-y-3">
+              <a
+                href="tel:911"
+                className="flex w-full items-center justify-between rounded-[16px] bg-[#7f2e62] p-4 text-sm font-bold text-white"
+                data-testid="button-call-911"
+              >
+                <span>Call 911</span><Phone className="h-4 w-4" />
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!id) return;
+                  const send = (lat?: number, lng?: number) => {
+                    fetch(`/api/bookings/${id}/emergency-share`, {
+                      method: 'POST',
+                      credentials: 'include',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(lat != null && lng != null ? { lat, lng } : {}),
+                    })
+                      .then(async (res) => {
+                        const body = await res.json().catch(() => ({})) as { path?: string; reason?: string; notified?: number; error?: string };
+                        if (body.path) {
+                          const url = `${window.location.origin}${body.path}`;
+                          setTrustLink(url);
+                          await navigator.clipboard.writeText(url).catch(() => {});
+                        }
+                        setLocationSharing(true);
+                        setShareKind('emergency');
+                        setEmergencyNote(
+                          body.error
+                            ?? (body.notified
+                              ? `Trust Circle was emailed a temporary map.${body.reason ? ` ${body.reason}` : ''}`
+                              : (body.reason ?? 'Could not reach Trust Circle. Call 911 if this is an emergency.')),
+                        );
+                      })
+                      .catch(() => setEmergencyNote('Could not share. Call 911 if this is an emergency.'));
+                  };
+                  if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => send(pos.coords.latitude, pos.coords.longitude),
+                      () => send(),
+                      { enableHighAccuracy: false, timeout: 8000, maximumAge: 30_000 },
+                    );
+                  } else send();
+                }}
+                className="flex w-full items-center justify-between rounded-[16px] bg-[#2d1228] p-4 text-sm font-bold text-[#f9efe5]"
+                data-testid="button-confirm-emergency-share"
+              >
+                <span>Then share a temporary map</span><MapPin className="h-4 w-4" />
+              </button>
+            </div>
+            {emergencyNote && <p className="mt-4 text-[11px] leading-5 text-[#df9cbd]">{emergencyNote}</p>}
+            <button type="button" onClick={() => setShowEmergency(false)} className="mt-5 w-full text-center text-sm text-[#9d7e8e]">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       {showEnd && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => { if (!completing) setShowEnd(false); }}>
           <div className="w-full max-w-md rounded-t-[28px] bg-[#1f0c1b] p-8" onClick={(e) => e.stopPropagation()}>
@@ -573,6 +788,7 @@ export default function FavorMode() {
                 setCompleting(true);
                 try {
                   try { await postCheckIn('checkout'); } catch {}
+                  try { await stopSharing(); } catch {}
                   await fetch(`/api/bookings/${id}/complete`, {
                     method: 'POST',
                     credentials: 'include',

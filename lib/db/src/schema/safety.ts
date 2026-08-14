@@ -35,6 +35,21 @@ export const checkIns = pgTable("check_ins", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const locationShareLinks = pgTable("location_share_links", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  bookingId: text("booking_id")
+    .notNull()
+    .references(() => bookings.id),
+  accountId: text("account_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  purpose: text("purpose").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const incidentReports = pgTable("incident_reports", {
   id: text("id")
     .primaryKey()

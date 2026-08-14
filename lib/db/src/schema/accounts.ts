@@ -16,8 +16,10 @@ export type AccountPrefs = {
 };
 
 /**
- * One account per email. Roles live in `account_roles` — never in
- * client-editable metadata.
+ * Shared identity (one person, one email). Public copy says "companion";
+ * provider records live on companion_profiles. Roles live in `account_roles`
+ * (customer | companion | admin) — never user_metadata or client claims.
+ * Granular admin_permissions are deferred; staff access is requireAdmin.
  */
 export const accounts = pgTable(
   "accounts",
