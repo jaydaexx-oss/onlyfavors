@@ -1615,7 +1615,7 @@ function Explore() {
     catch { return new Set(); }
   });
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc'>('best');
+  const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc' | 'most_experienced'>('best');
   const [filters, setFilters] = useState(false);
   const [vibe, setVibe] = useState<string | null>(null);
 
@@ -1675,12 +1675,14 @@ function Explore() {
   const safeSpots = spotsQuery.data ?? [];
 
   const VIBE_KEYWORDS: Record<string, string[]> = {
-    adventurous: ['hiking', 'climbing', 'outdoor', 'adventure', 'walk', 'cycling'],
+    adventurous: ['hiking', 'climbing', 'outdoor', 'adventure', 'walk', 'cycling', 'trail'],
     cultural:    ['museum', 'gallery', 'art', 'theatre', 'history', 'architecture', 'exhibitions'],
-    'low-key':   ['coffee', 'conversation', 'walk', 'quiet', 'bookstore', 'reading'],
-    foodie:      ['dinner', 'cooking', 'food', 'restaurant', 'cuisine', 'dining', 'brunch', 'lunch'],
+    'low-key':   ['coffee', 'conversation', 'walk', 'quiet', 'bookstore', 'reading', 'book'],
+    foodie:      ['dinner', 'cooking', 'food', 'restaurant', 'cuisine', 'dining', 'brunch', 'lunch', 'taco', 'brewery', 'wine'],
     creative:    ['art', 'photography', 'craft', 'sketch', 'creative', 'painting', 'writing'],
     social:      ['event', 'networking', 'party', 'social', 'concert', 'festival', 'meetup'],
+    outdoorsy:   ['park', 'nature', 'trail', 'botanical', 'garden', 'farmers', 'market', 'hiking', 'walk', 'outdoor'],
+    wellness:    ['yoga', 'meditation', 'spa', 'wellness', 'mindful', 'journal', 'breathwork', 'quiet', 'calm'],
   };
 
   const baseCompanions = (availNow || timeWindow) ? companions.filter((c) => (c as any).availableNow) : companions;
@@ -1693,6 +1695,7 @@ function Explore() {
   const shownCompanions = [...vibeFiltered].sort((a, b) => {
     if (sortBy === 'price_asc') return a.hourlyRate - b.hourlyRate;
     if (sortBy === 'price_desc') return b.hourlyRate - a.hourlyRate;
+    if (sortBy === 'most_experienced') return ((b as any).totalBookings ?? 0) - ((a as any).totalBookings ?? 0);
     return (b.rating ?? 0) - (a.rating ?? 0); // 'best' — highest rated first
   });
 
@@ -1908,6 +1911,11 @@ function Explore() {
               { label: 'Gallery tours', emoji: '🖼️' },
               { label: 'Evening walks', emoji: '🌆' },
               { label: 'Cooking together', emoji: '🍳' },
+              { label: 'Hiking', emoji: '🥾' },
+              { label: 'Brewery tours', emoji: '🍺' },
+              { label: 'Bookstore visits', emoji: '📚' },
+              { label: 'Jazz evenings', emoji: '🎷' },
+              { label: 'Farmers market visits', emoji: '🌿' },
             ].map(({ label, emoji }) => (
               <button key={label} type="button"
                 onClick={() => setActivity(label)}
@@ -1936,6 +1944,7 @@ function Explore() {
               <option value="best">Best rated</option>
               <option value="price_asc">Price: low → high</option>
               <option value="price_desc">Price: high → low</option>
+              <option value="most_experienced">Most experienced</option>
             </select>
           )}
           <Link href="/compare"
@@ -5267,6 +5276,46 @@ const COMMUNITY_STORIES = [
     role: 'companion',
     story: 'The Boundary Receipt feature is what made me comfortable joining. Before every booking both parties confirm the same expectations. It\'s in writing. It\'s mutual. That\'s the kind of safety I needed to see before I trusted the platform.',
     activity: 'Bookstore visits · Coffee',
+    rating: 5,
+  },
+  {
+    name: 'Elena M.',
+    city: 'Boston, MA',
+    role: 'customer',
+    story: 'I was visiting Boston for a conference and had one free afternoon. My companion took me on a walk through the Back Bay I would never have found on TripAdvisor. We ended up at a tiny bookshop and talked for two hours. Best afternoon of the trip.',
+    activity: 'History walks · Bookstore visits',
+    rating: 5,
+  },
+  {
+    name: 'Omar J.',
+    city: 'Atlanta, GA',
+    role: 'customer',
+    story: 'Post-divorce, I wasn\'t ready for dating but I also wasn\'t ready to be alone. OnlyFavors was exactly the middle ground I needed. No expectations, just someone interesting to spend an afternoon with. I\'ve been a regular customer for four months now.',
+    activity: 'Street art walks · Coffee',
+    rating: 5,
+  },
+  {
+    name: 'Lily C.',
+    city: 'Austin, TX',
+    role: 'companion',
+    story: 'I\'m a musician and I was between gigs. Joining OnlyFavors let me set my own schedule around shows and recording sessions. The live music scene here means I can share something I actually love — and get paid for it.',
+    activity: 'Live music evenings · Food tours',
+    rating: 5,
+  },
+  {
+    name: 'Ben A.',
+    city: 'Portland, OR',
+    role: 'customer',
+    story: 'I have social anxiety that makes meeting strangers in unstructured settings really difficult. The SafeSpot system took so much pressure off — I knew exactly where we\'d meet, what we\'d do, and how long it would last. That structure is everything for someone like me.',
+    activity: 'Trail walks · Farmers market visits',
+    rating: 5,
+  },
+  {
+    name: 'Nia F.',
+    city: 'Washington D.C.',
+    role: 'companion',
+    story: 'I\'ve given informal D.C. tours to visiting relatives my whole life. Joining OnlyFavors just made it official — and gave me a way to meet fascinating people from all over the world who are genuinely curious about the city.',
+    activity: 'Monument tours · Dining',
     rating: 5,
   },
 ];
