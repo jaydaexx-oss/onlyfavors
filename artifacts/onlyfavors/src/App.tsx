@@ -1619,6 +1619,20 @@ function Explore() {
   const [language, setLanguage] = useState('');
   const [maxRate, setMaxRate] = useState('');
   const [instant, setInstant] = useState(false);
+
+  // Sync key filters to URL so results are shareable / survive back-navigation
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams();
+      if (city) params.set('city', city);
+      if (activity) params.set('activity', activity);
+      if (language) params.set('lang', language);
+      if (vibe) params.set('vibe', vibe);
+      const qs = params.toString();
+      const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+      window.history.replaceState(null, '', next);
+    } catch {}
+  }, [city, activity, language, vibe]);
   const [availNow, setAvailNow] = useState(false);
   const [timeWindow, setTimeWindow] = useState<'now' | 'tonight' | 'weekend' | null>(null);
   const [customDate, setCustomDate] = useState('');
@@ -4604,11 +4618,18 @@ function ActivityDetail() {
                 <WalletCards className="h-3.5 w-3.5 text-[#9b858e]" />{data.avgRate}
               </span>
             </div>
-            <Link href={`/explore?activity=${encodeURIComponent(data.name)}`}
-              className="mt-8 inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white shadow-[0_8px_20px_rgba(127,46,98,.2)] transition hover:bg-[#65234e]"
-              data-testid="link-activity-find-companions">
-              Find companions for {data.name.toLowerCase()} <ArrowRight className="h-4 w-4" />
-            </Link>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href={`/explore?activity=${encodeURIComponent(data.name)}`}
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white shadow-[0_8px_20px_rgba(127,46,98,.2)] transition hover:bg-[#65234e]"
+                data-testid="link-activity-find-companions">
+                Find companions <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link href={`/book?activity=${encodeURIComponent(data.name)}`}
+                className="inline-flex h-12 items-center gap-2 rounded-full border border-[#7f2e62] px-6 text-sm font-bold text-[#7f2e62] transition hover:bg-[#f8eef4]"
+                data-testid="link-activity-book-now">
+                Book now <CalendarDays className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -5600,11 +5621,19 @@ function CityWaitlistPage() {
 
   const COMING_SOON = ['Houston', 'Nashville', 'Toronto', 'London', 'San Diego', 'Phoenix', 'Minneapolis', 'New Orleans', 'Detroit', 'Philadelphia'];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !city.trim()) return;
     setLoading(true);
-    setTimeout(() => { setDone(true); setLoading(false); }, 800);
+    try {
+      await fetch('/api/waitlist/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), city: city.trim(), role }),
+      });
+    } catch {}
+    setDone(true);
+    setLoading(false);
   };
 
   if (done) return (

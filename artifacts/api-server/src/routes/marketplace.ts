@@ -1683,6 +1683,33 @@ router.get("/referrals/count", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// City waitlist — email capture for pre-launch cities
+// ---------------------------------------------------------------------------
+
+type WaitlistEntry = { email: string; city: string; role: 'customer' | 'companion'; joinedAt: string };
+const waitlistEntries: WaitlistEntry[] = [];
+
+router.post("/waitlist/join", (req, res) => {
+  const { email, city, role } = req.body ?? {};
+  if (!email || !city || !email.includes('@')) {
+    res.status(400).json({ error: 'email and city required' });
+    return;
+  }
+  const entry: WaitlistEntry = {
+    email: email.toLowerCase().trim(),
+    city: city.trim(),
+    role: role === 'companion' ? 'companion' : 'customer',
+    joinedAt: new Date().toISOString(),
+  };
+  // Deduplicate by email+city
+  const existing = waitlistEntries.findIndex((e) => e.email === entry.email && e.city === entry.city);
+  if (existing >= 0) { waitlistEntries[existing] = entry; }
+  else { waitlistEntries.push(entry); }
+  req.log.info({ email: entry.email, city: entry.city, role: entry.role }, 'Waitlist signup');
+  res.json({ ok: true, position: waitlistEntries.filter((e) => e.city === entry.city).length });
+});
+
+// ---------------------------------------------------------------------------
 // Admin / ops — restricted to trust staff
 // ---------------------------------------------------------------------------
 
