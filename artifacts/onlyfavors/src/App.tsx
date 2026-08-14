@@ -5383,7 +5383,7 @@ function CityWaitlistPage() {
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const COMING_SOON = ['Miami', 'Portland', 'Denver', 'Boston', 'Atlanta', 'Washington DC', 'Houston', 'Nashville', 'Toronto', 'London'];
+  const COMING_SOON = ['Houston', 'Nashville', 'Toronto', 'London', 'San Diego', 'Phoenix', 'Minneapolis', 'New Orleans', 'Detroit', 'Philadelphia'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5786,7 +5786,7 @@ function CityPage() {
     },
     'Portland': {
       tagline: 'Farmers markets, trails, and craft coffee.',
-      companions: [],
+      companions: ['companion-finn'],
       safespots: ['Portland Art Museum Lobby · Downtown', 'Powell\'s City of Books · Pearl District', 'Stumptown Coffee Roasters · Belmont'],
       activities: ['Farmers market visits', 'Trail walks', 'Bookshop tours', 'Coffee conversations'],
       count: 5,

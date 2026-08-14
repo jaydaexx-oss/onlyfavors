@@ -362,6 +362,21 @@ const DEV_COMPANIONS: Record<string, object> = {
     ],
     memberSince: "Sep 2025", totalBookings: 33, acceptanceRate: 94, lastActiveLabel: "30 min ago",
   },
+  "companion-finn": {
+    id: "companion-finn", displayName: "Finn O.", verified: true,
+    biography: "Portland transplant by way of the Pacific Coast Trail. I came for the trails and stayed for Powell's, the farmers markets, and the most underrated coffee scene in the country. Whether you want a misty morning walk along the Willamette or a slow afternoon in the Pearl District, I'm your person.",
+    activities: ["Trail walks", "Farmers market visits", "Bookshop tours", "Coffee conversations", "Neighborhood walks"],
+    languages: ["English"], hourlyRate: 55,
+    serviceArea: "Portland", city: "OR",
+    photoUrl: null, rating: 4.8, reviewCount: 14, responseTime: "within 1h",
+    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
+    availability: [
+      { day: "Mon", hours: "8am – 5pm" }, { day: "Wed", hours: "8am – 5pm" },
+      { day: "Fri", hours: "8am – 6pm" }, { day: "Sat", hours: "7am – 4pm" },
+      { day: "Sun", hours: "8am – 3pm" },
+    ],
+    memberSince: "Oct 2025", totalBookings: 28, acceptanceRate: 96, lastActiveLabel: "2 hrs ago",
+  },
 };
 
 router.get("/companions/:id", async (req, res) => {
