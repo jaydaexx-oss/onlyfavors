@@ -6,7 +6,7 @@ import {
   CircleAlert, ClipboardCheck, Clock3, Coffee, Compass, EyeOff, FileText, Gift, Heart, HeartHandshake, HelpCircle,
   KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Mail, Map, MapPin, Menu, MessageCircle, MessageSquare,
   Navigation2, PanelLeft, Pencil, Plus, RefreshCw, Search, Send, Share2, Shield, ShieldCheck, SlidersHorizontal,
-  Sparkles, Star, Sunrise, TrendingUp, User, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap, Lock, Lightbulb,
+  Sparkles, Star, Sunrise, TrendingUp, User, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, Wine, X, Zap, Lock, Lightbulb, Mountain,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
@@ -5762,6 +5762,16 @@ function CityPage() {
         </section>
 
         <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+
+          {/* Featured companions for this city */}
+          {data.companions.length > 0 && (
+            <section className="mb-14">
+              <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Featured companions</p>
+              <h2 className="mt-2 font-serif text-4xl text-[#48213d]">Meet someone in {cityName}.</h2>
+              <CityCompanionStrip companionIds={data.companions} city={cityName} />
+            </section>
+          )}
+
           <div className="grid gap-10 lg:grid-cols-[1.2fr_.8fr]">
             {/* Left column */}
             <div className="space-y-10">
