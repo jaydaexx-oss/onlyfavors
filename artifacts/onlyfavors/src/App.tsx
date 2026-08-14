@@ -5933,14 +5933,14 @@ function CityPage() {
   const CITY_DATA: Record<string, { tagline: string; companions: string[]; safespots: string[]; activities: string[]; count: number }> = {
     'San Francisco': {
       tagline: 'Art, coffee, and coastline.',
-      companions: ['companion-maya'],
+      companions: ['companion-maya', 'companion-priya'],
       safespots: ['Blue Bottle Coffee · Hayes Valley', 'SFMOMA Lobby · SoMa', 'The Interval at Long Now · Fort Mason'],
       activities: ['Museum visits', 'Gallery tours', 'Coffee conversations', 'Coastal walks'],
       count: 12,
     },
     'New York': {
       tagline: 'The city that never stops surprising.',
-      companions: ['companion-jordan'],
+      companions: ['companion-jordan', 'companion-simone'],
       safespots: ['The Ace Hotel Lobby · Midtown', 'NYPL Stephen A. Schwarzman · Midtown', 'Chelsea Market · Meatpacking'],
       activities: ['Gallery tours', 'Cooking classes', 'Evening walks', 'Museum visits'],
       count: 18,
@@ -11082,8 +11082,9 @@ function Apply() {
             {/* Companion voices */}
             <div className="mt-10 space-y-4">
               {[
-                { initials: 'MR', name: 'Maya R.', city: 'San Francisco', text: '"The boundary receipt removed any ambiguity before we even met. It made the whole thing feel professional and safe — for both of us."' },
-                { initials: 'JK', name: 'Jordan K.', city: 'New York', text: '"I control my schedule completely. I accept the requests that feel right and decline the ones that don\'t. No pressure, ever."' },
+                { initials: 'IV', name: 'Isadora V.', city: 'Miami', text: '"About a third of my bookings are international visitors. When I speak Spanish or Portuguese with them, something relaxes. The city looks different when you\'re not translating in your head."' },
+                { initials: 'CM', name: 'Cass M.', city: 'Austin', text: '"I\'m a musician between shows and this fits perfectly around my schedule. I take the bookings that feel right and skip the ones that don\'t. No pressure, ever."' },
+                { initials: 'NB', name: 'Nadia B.', city: 'Atlanta', text: '"The boundary receipt was what made me sign up. Before every booking, we both agree in writing to the same terms. That clarity is everything."' },
               ].map(({ initials, name, city, text }) => (
                 <div key={name} className="rounded-[18px] border border-[#dfd2c9] bg-white p-5">
                   <p className="text-sm leading-6 text-[#654c5f] italic">{text}</p>
@@ -13879,6 +13880,36 @@ function App() {
         "Honestly? The variety. Every person brings a completely different perspective. I've had cooking class bookings turn into conversations about architecture and hiking trips turn into deep dives on local history. It keeps me genuinely engaged.",
         "A cooking class where we both have absolutely no idea what we're doing, followed by eating whatever we made with a bottle of wine and good conversation. Low stakes, high fun.",
         "I'm punctual and I follow through — if I say I'll be somewhere, I'm there. I also genuinely research the spots we're meeting at so I can suggest the best table or the quietest corner.",
+      ],
+      'companion-isadora': [
+        "Miami is three cities at once — the art district, the water, the food scene. I love introducing people to the version they haven't seen yet. And I work in three languages, so I get to do that for a lot of different people.",
+        "Wynwood in the morning — the murals are quieter before noon — then a really good cortadito, then maybe the beach if the afternoon feels right. Miami is best when it's unhurried.",
+        "Warm and genuinely curious. I remember details from past conversations. I ask follow-up questions. I show up knowing something about what you told me you cared about.",
+      ],
+      'companion-simone': [
+        "Chicago is one of the most architecturally interesting cities in the world and most people who visit barely scratch the surface. Getting to be the person who shows someone the real thing — that's genuinely satisfying.",
+        "A Saturday morning at the Chicago Cultural Center — the mosaics, the quiet — then a long walk along the lakefront to wherever the conversation takes us.",
+        "I'm knowledgeable without being lecture-y about it. I share what I know when it's interesting, not to fill silence. Jazz and architecture are my wheelhouses.",
+      ],
+      'companion-cass': [
+        "Austin's music scene is the real thing and most visitors only see the tourist version of Sixth Street. I like showing people the live music venues that locals actually go to — the ones without a cover charge and a real sound system.",
+        "An evening that starts at a taco truck I've been going to for years, then two or three sets at different venues depending on who's playing. We end up somewhere unexpected. That's the best Austin night.",
+        "Easy to talk to, hard to impress. If something's good, I'll say so. If it's overhyped, I'll say that too. People trust me because I'm honest about the city.",
+      ],
+      'companion-nadia': [
+        "Atlanta is having a cultural moment and not everyone realizes it yet. Street art, food, music — the city is genuinely interesting right now and I love being the person who shows that to someone who expected less.",
+        "A slow walk through the Old Fourth Ward stopping at the murals, then somewhere for lunch that doesn't have a line but absolutely should, then maybe the High Museum if we're in the mood.",
+        "High acceptance rate for a reason — I say yes when I mean it and no when I don't. Customers know I'm actually going to show up excited, not going through the motions.",
+      ],
+      'companion-devon': [
+        "Boston has layers that most visitors don't find — the jazz scene is real, the architecture is underrated, and the harbor is beautiful in a way that doesn't get enough credit. I love getting to show all of it.",
+        "A late-afternoon walk through Back Bay, stopping at a good bookstore, then catching whoever's playing at Wally's that evening. Jazz in a small room — there's nothing better.",
+        "I'm a musician, so I listen well. I notice what people respond to and adjust. Quiet if you need quiet, animated if the music or the history is exciting. I follow your lead.",
+      ],
+      'companion-finn': [
+        "Portland is a city of trails and bookshops and farmers markets and great coffee and I've never gotten tired of any of it. The outdoor scene here is genuinely accessible — trails right inside the city.",
+        "A Saturday morning at the PSU Farmers Market, then Powell's for an hour, then coffee somewhere without a line. That's a perfect Portland morning and I've done it hundreds of times.",
+        "Easy-going and attentive. I'll match your pace — if you want to move fast and cover a lot of ground, I can do that. If you want to stand in front of one painting for twenty minutes, I'm good at that too.",
       ],
     };
     Object.entries(DEV_QA).forEach(([id, answers]) => {
