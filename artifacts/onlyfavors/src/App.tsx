@@ -92,7 +92,7 @@ function Footer() {
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Policies</p><div className="space-y-2 text-sm text-[#654c5f]"><Link href="/about" className="block hover:text-[#7f2e62]" data-testid="footer-link-about">About</Link><Link href="/help" className="block hover:text-[#7f2e62]" data-testid="footer-link-help">Help centre</Link><Link href="/pricing" className="block hover:text-[#7f2e62]" data-testid="footer-link-pricing">Pricing</Link><Link href="/membership" className="block hover:text-[#7f2e62]" data-testid="footer-link-membership">Membership</Link><Link href="/privacy" className="block hover:text-[#7f2e62]" data-testid="footer-link-privacy">Privacy</Link><Link href="/terms" className="block hover:text-[#7f2e62]" data-testid="footer-link-terms">Terms & community</Link><Link href="/cancellation" className="block hover:text-[#7f2e62]" data-testid="footer-link-cancellation">Cancellations</Link><Link href="/community" className="block hover:text-[#7f2e62]" data-testid="footer-link-community">Community</Link><Link href="/faq" className="block hover:text-[#7f2e62]" data-testid="footer-link-faq">FAQ</Link><Link href="/press" className="block hover:text-[#7f2e62]" data-testid="footer-link-press">Press</Link><Link href="/careers" className="block hover:text-[#7f2e62]" data-testid="footer-link-careers">Careers</Link><Link href="/accessibility" className="block hover:text-[#7f2e62]" data-testid="footer-link-accessibility">Accessibility</Link><Link href="/admin/operations" className="block text-[#c6aeb8] hover:text-[#7f2e62]" data-testid="footer-link-admin">Trust team ↗</Link></div></div>
       <div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.18em] text-[#9a7d8c]">Need a hand?</p><div className="space-y-2 text-sm text-[#654c5f]"><p>Our trust team is here every day.</p><Link href="/help" className="inline-flex items-center gap-1 font-bold text-[#7f2e62]" data-testid="footer-link-support">Help centre <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </div>
-    <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-[#ddcfc6] px-5 py-5 text-[11px] text-[#927e87] md:flex-row md:justify-between lg:px-8"><span>© 2025 OnlyFavors, Inc.</span><span>Private by design. Human by nature.</span></div>
+    <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-[#ddcfc6] px-5 py-5 text-[11px] text-[#927e87] md:flex-row md:justify-between lg:px-8"><span>© 2026 OnlyFavors, Inc. · San Francisco, CA</span><span>Private by design. Human by nature.</span></div>
   </footer>;
 }
 
@@ -6880,8 +6880,8 @@ function MembershipPage() {
         'Early access to new companions',
         'Priority support (12 hr response)',
       ],
-      cta: 'Join Insider',
-      ctaHref: '/login',
+      cta: 'Start 14-day free trial',
+      ctaHref: '/login?intent=insider',
       highlighted: true,
     },
     {
@@ -6902,7 +6902,7 @@ function MembershipPage() {
         'Direct line to Trust team (4 hr response)',
       ],
       cta: 'Apply for Founding Friend',
-      ctaHref: '/login',
+      ctaHref: '/login?intent=founding',
       highlighted: false,
     },
   ];
