@@ -4885,11 +4885,19 @@ function NewsletterPage() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
-    setTimeout(() => { setDone(true); setLoading(false); }, 900);
+    try {
+      await fetch('/api/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), interests: Array.from(interests) }),
+      });
+    } catch {}
+    setDone(true);
+    setLoading(false);
   };
 
   if (done) return (
@@ -6220,6 +6228,21 @@ function GiftPage() {
                 {amount && <p className="mt-2 text-[10px] text-[#9b858e]">Covers approx. {Math.floor(amount / 65)}–{Math.ceil(amount / 55)}h with most companions.</p>}
               </div>
 
+              {/* Popular experiences hint */}
+              <div>
+                <p className="mb-2 text-xs font-bold text-[#654c5f]">Popular experiences to suggest <span className="font-normal text-[#9b858e]">(optional hint)</span></p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Museum visit', 'Coffee & conversation', 'Evening walk', 'Gallery tour', 'Farmers market', 'Jazz evening'].map((exp) => (
+                    <button key={exp} type="button"
+                      onClick={() => setNote((n) => n ? `${n} — I thought a ${exp} might be nice.` : `I thought a ${exp} might be nice.`)}
+                      className="rounded-full border border-[#dfd2c9] bg-white px-3 py-1 text-[11px] text-[#654c5f] hover:border-[#9d557e] hover:text-[#7f2e62] transition">
+                      {exp}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[9px] text-[#9b858e]">Tapping adds a suggestion to your note. The recipient always chooses freely.</p>
+              </div>
+
               <label className="block">
                 <span className="mb-2 block text-xs font-bold text-[#654c5f]">Personal note <span className="font-normal text-[#9b858e]">(optional)</span></span>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={200}
@@ -6652,11 +6675,15 @@ function Refer() {
     }).catch(() => {});
   };
 
-  const sendInvite = (e: FormEvent) => {
+  const sendInvite = async (e: FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim()) return;
-    // Simulate a referral: increment the count in localStorage
     try {
+      await fetch('/api/referrals/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referrerCode: REF_CODE, inviteeEmail: emailInput.trim() }),
+      });
       const prev = Number(localStorage.getItem('of_referral_count') ?? '0');
       localStorage.setItem('of_referral_count', String(prev + 1));
     } catch {}

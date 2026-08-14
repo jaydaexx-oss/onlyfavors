@@ -1636,6 +1636,53 @@ router.post("/notifications/:id/read", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Newsletter subscriptions (in-memory store for dev)
+// ---------------------------------------------------------------------------
+
+type NewsletterSub = { email: string; interests: string[]; subscribedAt: string };
+const newsletterSubs = new Map<string, NewsletterSub>();
+
+router.post("/newsletter/subscribe", (req, res) => {
+  const { email, interests } = req.body ?? {};
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    res.status(400).json({ error: 'Valid email required' });
+    return;
+  }
+  newsletterSubs.set(email.toLowerCase().trim(), {
+    email: email.toLowerCase().trim(),
+    interests: Array.isArray(interests) ? interests : [],
+    subscribedAt: new Date().toISOString(),
+  });
+  req.log.info({ email, interests }, 'Newsletter subscription');
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Referral invitations (in-memory store for dev)
+// ---------------------------------------------------------------------------
+
+type ReferralInvite = { referrerCode: string; inviteeEmail: string; sentAt: string };
+const referralInvites: ReferralInvite[] = [];
+
+router.post("/referrals/invite", (req, res) => {
+  const { referrerCode, inviteeEmail } = req.body ?? {};
+  if (!referrerCode || !inviteeEmail || !inviteeEmail.includes('@')) {
+    res.status(400).json({ error: 'referrerCode and valid inviteeEmail required' });
+    return;
+  }
+  referralInvites.push({ referrerCode, inviteeEmail, sentAt: new Date().toISOString() });
+  req.log.info({ referrerCode, inviteeEmail }, 'Referral invite sent');
+  res.json({ ok: true, message: `Invite sent to ${inviteeEmail}` });
+});
+
+router.get("/referrals/count", (req, res) => {
+  const code = req.query.code as string | undefined;
+  if (!code) { res.status(400).json({ error: 'code required' }); return; }
+  const count = referralInvites.filter((r) => r.referrerCode === code).length;
+  res.json({ code, invitesSent: count });
+});
+
+// ---------------------------------------------------------------------------
 // Admin / ops — restricted to trust staff
 // ---------------------------------------------------------------------------
 
