@@ -5637,6 +5637,66 @@ function NotificationsPage() {
   );
 }
 
+function CityCompanionStrip({ companionIds, city }: { companionIds: string[]; city: string }) {
+  const query = useQuery<Companion[]>({
+    queryKey: ['companions', city],
+    queryFn: async () => {
+      const r = await fetch(`/api/companions?city=${encodeURIComponent(city)}`);
+      if (!r.ok) throw new Error('Failed to fetch');
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+  const companions = (query.data ?? []).filter((c) => companionIds.includes(c.id));
+  if (query.isLoading) return (
+    <div className="mt-6 flex gap-4 overflow-x-auto pb-2">
+      {companionIds.map((id) => <div key={id} className="h-[220px] w-[240px] shrink-0 animate-pulse rounded-[20px] bg-[#f0e4db]" />)}
+    </div>
+  );
+  if (companions.length === 0) return null;
+  return (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {companions.map((c) => {
+        const initials = c.displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
+        const palette = ['bg-[#e1b1bd]', 'bg-[#b7c4b3]', 'bg-[#c4b3bd]', 'bg-[#b3bdc4]', 'bg-[#c4c4b3]'];
+        const bg = palette[c.id.charCodeAt(c.id.length - 1) % palette.length];
+        return (
+          <Link key={c.id} href={`/companion/${c.id}`}
+            className="group flex flex-col rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:border-[#9d557e] hover:shadow-md"
+            data-testid={`city-companion-${c.id}`}>
+            <div className="flex items-center gap-3">
+              <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${bg} font-serif text-xl text-[#48213d]`}>
+                {initials}
+              </div>
+              <div>
+                <p className="font-semibold text-[#48213d] group-hover:text-[#7f2e62]">{c.displayName}</p>
+                <p className="flex items-center gap-1 text-xs text-[#9b858e]">
+                  <MapPin className="h-3 w-3" />{c.city}
+                  {c.verified && <BadgeCheck className="ml-1 h-3 w-3 text-[#7f2e62]" />}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {(c.activities ?? []).slice(0, 3).map((a: string) => (
+                <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[11px] text-[#654c5f]">{a}</span>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between border-t border-[#ede3da] pt-3">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${c.hourlyRate}/hr</span>
+              <span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View <ChevronRight className="h-3.5 w-3.5" /></span>
+            </div>
+          </Link>
+        );
+      })}
+      <Link href={`/explore?city=${encodeURIComponent(city)}`}
+        className="flex items-center justify-center rounded-[20px] border border-dashed border-[#dfd2c9] px-5 py-8 text-sm font-semibold text-[#9d557e] transition hover:border-[#9d557e] hover:bg-[#fbf0f5]"
+        data-testid="city-companion-browse-all">
+        See all companions in {city} <ArrowRight className="ml-1.5 h-4 w-4" />
+      </Link>
+    </div>
+  );
+}
+
 function CityPage() {
   const { city } = useParams<{ city: string }>();
   const cityName = city ? city.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
