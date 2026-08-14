@@ -332,6 +332,36 @@ const DEV_COMPANIONS: Record<string, object> = {
     ],
     memberSince: "Jun 2025", totalBookings: 37, acceptanceRate: 91, lastActiveLabel: "4 hrs ago",
   },
+  "companion-cass": {
+    id: "companion-cass", displayName: "Cass M.", verified: true,
+    biography: "Austin musician, food writer, and perpetual live-music fan. I know every taco truck, every hidden bar patio, and every venue worth your Friday night. Whether you want to walk the trails or catch a set on 6th Street, I'll make sure you leave with a story.",
+    activities: ["Live music evenings", "Food tours", "Trail walks", "Coffee conversations", "Taco crawls"],
+    languages: ["English", "Spanish"], hourlyRate: 62,
+    serviceArea: "Austin", city: "TX",
+    photoUrl: null, rating: 4.8, reviewCount: 22, responseTime: "within 3h",
+    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
+    availability: [
+      { day: "Wed", hours: "3pm – 11pm" }, { day: "Thu", hours: "3pm – 11pm" },
+      { day: "Fri", hours: "4pm – 12am" }, { day: "Sat", hours: "12pm – 12am" },
+      { day: "Sun", hours: "12pm – 8pm" },
+    ],
+    memberSince: "Aug 2025", totalBookings: 41, acceptanceRate: 89, lastActiveLabel: "1 hr ago",
+  },
+  "companion-nadia": {
+    id: "companion-nadia", displayName: "Nadia B.", verified: true,
+    biography: "Atlanta native, art lover, and lifelong Southerner. I grew up walking Ponce City Market before it was cool and know every mural in the Old Fourth Ward. I love showing people the Atlanta they'd never find on a tourist map — the food, the art, the people.",
+    activities: ["Street art walks", "Food & culture tours", "Museum visits", "Coffee conversations", "Neighborhood walks"],
+    languages: ["English"], hourlyRate: 60,
+    serviceArea: "Atlanta", city: "GA",
+    photoUrl: null, rating: 4.9, reviewCount: 17, responseTime: "within 2h",
+    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
+    availability: [
+      { day: "Mon", hours: "10am – 7pm" }, { day: "Tue", hours: "10am – 7pm" },
+      { day: "Fri", hours: "12pm – 9pm" }, { day: "Sat", hours: "10am – 9pm" },
+      { day: "Sun", hours: "11am – 6pm" },
+    ],
+    memberSince: "Sep 2025", totalBookings: 33, acceptanceRate: 94, lastActiveLabel: "30 min ago",
+  },
 };
 
 router.get("/companions/:id", async (req, res) => {

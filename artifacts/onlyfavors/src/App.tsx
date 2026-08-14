@@ -1422,7 +1422,12 @@ function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: {
           <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">{money(companion.hourlyRate * 100)}/hr</span>
           <span className="ml-2 text-[10px] text-[#b0929f]">· {money(companion.hourlyRate * 7 * 100)}/day</span>
         </div>
-        {companion.instantBook && <span className="flex items-center gap-1 text-[10px] font-bold text-[#477254]"><Check className="h-3 w-3" />Instant book</span>}
+        <div className="flex items-center gap-2">
+          {(companion as any).totalBookings > 0 && (
+            <span className="text-[10px] text-[#9b858e]">{(companion as any).totalBookings} bookings</span>
+          )}
+          {companion.instantBook && <span className="flex items-center gap-1 text-[10px] font-bold text-[#477254]"><Check className="h-3 w-3" />Instant book</span>}
+        </div>
       </div>
     </Link>
   );
@@ -5739,7 +5744,7 @@ function CityPage() {
     },
     'Austin': {
       tagline: 'Music, tacos, and outdoor adventure.',
-      companions: [],
+      companions: ['companion-cass'],
       safespots: ['Blanton Museum Lobby · UT Campus', 'Central Library · Downtown', 'Café No Sé · East Austin'],
       activities: ['Live music evenings', 'Trail walks', 'Food tours', 'Gallery visits'],
       count: 8,
@@ -5774,7 +5779,7 @@ function CityPage() {
     },
     'Atlanta': {
       tagline: 'Soul food, street art, and Southern charm.',
-      companions: [],
+      companions: ['companion-nadia'],
       safespots: ['High Museum of Art Lobby · Midtown', 'Ponce City Market · Old Fourth Ward', 'Chattahoochee Food Works · West Midtown'],
       activities: ['Food & culture tours', 'Street art walks', 'Museum visits', 'Coffee conversations'],
       count: 8,
