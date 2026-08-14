@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { db, bookings, favorRequests, messages } from "@workspace/db";
 import {
+  accountBlocks,
   accountRoles,
   accounts,
   adminAuditLog,
@@ -25,19 +26,28 @@ import {
   reviews as reviewRows,
   safespotApplications,
   safespots,
+  savedCompanions,
+  availabilityWindows,
 } from "@workspace/db/schema";
-import { desc, eq, and, inArray, sql } from "drizzle-orm";
+import { desc, eq, and, inArray, or, sql } from "drizzle-orm";
 import {
   getApprovedCompanion,
   getApprovedCompanions,
+  getPublicCompanion,
   getSafeSpot,
   getSafeSpots,
 } from "../lib/supabase";
-import { calculatePrice } from "../lib/pricing";
+import { priceForBooking } from "../lib/pricing";
 import { getUncachableStripeClient } from "../lib/stripeClient";
-import { getActorId, requireAdmin, writeAudit } from "../lib/auth";
-import { resolveCompanionId, resolveCompanionProfile } from "../lib/companionIdentity";
+import { getActorId, requireAdmin, revokeAllSessions, writeAudit } from "../lib/auth";
+import { assertCanTransact } from "../lib/accountState";
+import { resolveCompanionId, resolveCompanionProfile, isCompanionUser } from "../lib/companionIdentity";
 import { decryptExactLocation, encryptExactLocation, locationEncryptionReady } from "../lib/locationCrypto";
+import { mergeWorkspacePrefs, windowsToPublic } from "../lib/availability";
+import { assertDurationHours, chicagoDateTime, isPilotCity, PILOT_CITY, PILOT_TZ } from "../lib/pilot";
+import { companionHasOverlap, recordBookingEvent } from "../lib/bookingLifecycle";
+import { captureIntentIfHeld, customerCancelPlan, refundOrCancelIntent } from "../lib/stripeMoney";
+import { clientKey, rateLimit } from "../lib/rateLimit";
 
 const router: IRouter = Router();
 
@@ -81,15 +91,15 @@ const devCompanionStripeAccounts = new Map<string, string>(); // companionId →
 
 router.get("/companions", async (req, res) => {
   const query = ListCompanionsQueryParams.parse(req.query);
+  if (query.city && !isPilotCity(query.city)) {
+    res.json([]);
+    return;
+  }
   try {
     const rows = await getApprovedCompanions();
     const companions = rows
       .filter((row) => {
-        if (
-          query.city &&
-          !row.city.toLowerCase().includes(query.city.toLowerCase())
-        )
-          return false;
+        if (!isPilotCity(row.city) && !isPilotCity(row.service_area)) return false;
         if (
           query.activity &&
           !row.activities.some((a) =>
@@ -112,17 +122,10 @@ router.get("/companions", async (req, res) => {
     req.log.info({ count: companions.length }, "Listed approved companions");
     res.json(companions);
   } catch (err) {
-    if (process.env.NODE_ENV === "development") {
-      req.log.warn({ err }, "Supabase unavailable — serving companion dev fixtures");
-      const fixtures = Object.values(DEV_COMPANIONS) as any[];
-      const filtered = fixtures.filter((c) => {
-        if (query.city && !c.serviceArea?.toLowerCase().includes(query.city.toLowerCase()) && !c.city?.toLowerCase().includes(query.city.toLowerCase())) return false;
-        if (query.activity && !c.activities?.some((a: string) => a.toLowerCase().includes(query.activity!.toLowerCase()))) return false;
-        if (query.language && !c.languages?.includes(query.language)) return false;
-        if (query.maxRate !== undefined && c.hourlyRate > query.maxRate) return false;
-        return true;
-      });
-      res.json(filtered.map((c: any) => ({ ...c, availableNow: availableTodaySet.has(c.id) }))); return;
+    if (isMissingTableError(err) || process.env.NODE_ENV === "development") {
+      req.log.warn({ err }, "Companion directory unavailable — returning empty list");
+      res.json([]);
+      return;
     }
     req.log.error({ err }, "Unable to read approved companions");
     res.status(503).json({ error: "Companion directory is temporarily unavailable" });
@@ -173,6 +176,9 @@ router.post("/companion/availability/today", async (req, res) => {
   const profile = await resolveCompanionProfile(req);
   if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
   const available = Boolean(req.body?.available);
+  if (available && !profile.approved) {
+    res.status(403).json({ error: "Only an approved companion can publish availability." }); return;
+  }
   try {
     await db.update(companionProfiles).set({ availableToday: available, updatedAt: new Date() }).where(eq(companionProfiles.id, profile.id));
   } catch (err) {
@@ -185,207 +191,20 @@ router.post("/companion/availability/today", async (req, res) => {
   res.json({ available });
 });
 
-/** Dev companion fixtures — shown when Supabase is unavailable */
-export const DEV_BOOKING_FIXTURES: Record<string, object> = {
-  "dev-booking-1": {
-    id: "dev-booking-1", status: "confirmed", companionId: "companion-maya",
-    customerId: "dev-preview-customer", activity: "Museum visits",
-    date: "2026-08-20", startTime: "10:00", durationHours: 2,
-    safeSpotId: "ss-sf-1",
-    subtotalCents: 13000, customerFeeCents: 650, companionCommissionCents: 1950,
-    companionPayoutCents: 11050, totalCents: 13650, depositCents: 1000,
-    depositPaidAt: "2026-08-13T18:30:00Z", confirmedAt: "2026-08-13T19:05:00Z", authorizedAt: null,
-    cancelledAt: null, cancellationReason: null,
-  },
-  "dev-booking-2": {
-    id: "dev-booking-2", status: "requested", companionId: "companion-jordan",
-    customerId: "dev-preview-customer", activity: "Gallery tours",
-    date: "2026-08-22", startTime: "14:00", durationHours: 3,
-    safeSpotId: "ss-ny-1",
-    subtotalCents: 22500, customerFeeCents: 1125, companionCommissionCents: 3375,
-    companionPayoutCents: 19125, totalCents: 23625, depositCents: 1000,
-    depositPaidAt: null, confirmedAt: null, authorizedAt: null,
-    cancelledAt: null, cancellationReason: null,
-  },
-  "dev-booking-3": {
-    id: "dev-booking-3", status: "completed", companionId: "companion-maya",
-    customerId: "dev-preview-customer", activity: "Coffee conversations",
-    date: "2026-08-10", startTime: "09:00", durationHours: 1,
-    safeSpotId: "ss-sf-2",
-    subtotalCents: 6500, customerFeeCents: 325, companionCommissionCents: 975,
-    companionPayoutCents: 5525, totalCents: 6825, depositCents: 1000,
-    depositPaidAt: "2026-08-09T14:00:00Z", confirmedAt: "2026-08-09T14:30:00Z", authorizedAt: "2026-08-09T14:31:00Z",
-    cancelledAt: null, cancellationReason: null,
-  },
-  // Pending request for Maya — lets the companion accept/decline flow be tested
-  "dev-booking-4": {
-    id: "dev-booking-4", status: "requested", companionId: "companion-maya",
-    customerId: "dev-preview-customer", activity: "Walk and conversation",
-    date: "2026-08-25", startTime: "11:00", durationHours: 2,
-    safeSpotId: "ss-sf-3",
-    subtotalCents: 13000, customerFeeCents: 650, companionCommissionCents: 1950,
-    companionPayoutCents: 11050, totalCents: 13650, depositCents: 1000,
-    depositPaidAt: null, confirmedAt: null, authorizedAt: null,
-    cancelledAt: null, cancellationReason: null,
-  },
-};
-
-const DEV_COMPANIONS: Record<string, object> = {
-  "companion-maya": {
-    id: "companion-maya", displayName: "Maya R.", verified: true,
-    biography: "Retired curator with a love for contemporary art and good conversation. Patient, warm, and genuinely curious about people.",
-    activities: ["Museum visits", "Coffee conversations", "Farmers market walks", "Gallery tours"],
-    languages: ["English", "Spanish"], hourlyRate: 65,
-    serviceArea: "San Francisco", city: "CA",
-    photoUrl: null, rating: 4.9, reviewCount: 3, responseTime: "within 2h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Mon", hours: "10am – 8pm" }, { day: "Tue", hours: "10am – 8pm" },
-      { day: "Wed", hours: "10am – 8pm" }, { day: "Thu", hours: "10am – 8pm" },
-      { day: "Fri", hours: "10am – 6pm" }, { day: "Sat", hours: "12pm – 6pm" },
-    ],
-    memberSince: "Aug 2025", totalBookings: 46, acceptanceRate: 96, lastActiveLabel: "2 hrs ago",
-  },
-  "companion-jordan": {
-    id: "companion-jordan", displayName: "Jordan K.", verified: true,
-    biography: "Former chef turned food writer. Best company for anyone who takes eating seriously.",
-    activities: ["Gallery tours", "Cooking classes", "Evening walks"],
-    languages: ["English", "French"], hourlyRate: 75,
-    serviceArea: "New York", city: "NY",
-    photoUrl: null, rating: 4.8, reviewCount: 12, responseTime: "within 1h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Tue", hours: "11am – 9pm" }, { day: "Wed", hours: "11am – 9pm" },
-      { day: "Thu", hours: "11am – 9pm" }, { day: "Fri", hours: "11am – 9pm" },
-      { day: "Sun", hours: "12pm – 7pm" },
-    ],
-    memberSince: "Mar 2025", totalBookings: 89, acceptanceRate: 98, lastActiveLabel: "today",
-  },
-  "companion-simone": {
-    id: "companion-simone", displayName: "Simone A.", verified: true,
-    biography: "Architect by training, city walker by calling. I know Chicago's neighborhoods, hidden staircases, and the jazz venues locals actually go to. I love long conversations about design, memory, and what cities are for.",
-    activities: ["Architecture tours", "Jazz evenings", "Museum visits", "Evening walks", "Coffee conversations"],
-    languages: ["English", "French"], hourlyRate: 60,
-    serviceArea: "Chicago", city: "IL",
-    photoUrl: null, rating: 4.9, reviewCount: 19, responseTime: "within 3h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Mon", hours: "12pm – 9pm" }, { day: "Wed", hours: "12pm – 9pm" },
-      { day: "Thu", hours: "12pm – 9pm" }, { day: "Fri", hours: "12pm – 10pm" },
-      { day: "Sat", hours: "10am – 8pm" }, { day: "Sun", hours: "12pm – 6pm" },
-    ],
-    memberSince: "May 2025", totalBookings: 62, acceptanceRate: 94, lastActiveLabel: "today",
-  },
-  "companion-alex": {
-    id: "companion-alex", displayName: "Alex T.", verified: true,
-    biography: "I moved to Seattle for the mountains and stayed for the food. Whether it's Pike Place at 8am or a quiet bar in Fremont, I'll make you feel like you've lived here for years.",
-    activities: ["Hiking", "Farmers market walks", "Coffee conversations", "Brewery tours", "Evening walks"],
-    languages: ["English"], hourlyRate: 55,
-    serviceArea: "Seattle", city: "WA",
-    photoUrl: null, rating: 4.7, reviewCount: 8, responseTime: "within 2h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Mon", hours: "9am – 6pm" }, { day: "Tue", hours: "9am – 6pm" },
-      { day: "Thu", hours: "9am – 6pm" }, { day: "Fri", hours: "9am – 8pm" },
-      { day: "Sat", hours: "8am – 4pm" },
-    ],
-    memberSince: "Jun 2025", totalBookings: 31, acceptanceRate: 92, lastActiveLabel: "3 hrs ago",
-  },
-  "companion-priya": {
-    id: "companion-priya", displayName: "Priya M.", verified: true,
-    biography: "Sommelier and weekend trail runner. I make every outing feel intentional — whether we're tasting wines in Napa or hiking Griffith Park at sunrise. LA is a city that rewards curiosity, and I love sharing that.",
-    activities: ["Wine tasting", "Hiking", "Restaurant dining", "Museum visits", "Beach visits"],
-    languages: ["English", "Hindi"], hourlyRate: 80,
-    serviceArea: "Los Angeles", city: "CA",
-    photoUrl: null, rating: 4.9, reviewCount: 27, responseTime: "within 1h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Wed", hours: "11am – 8pm" }, { day: "Thu", hours: "11am – 8pm" },
-      { day: "Fri", hours: "11am – 9pm" }, { day: "Sat", hours: "9am – 7pm" },
-      { day: "Sun", hours: "10am – 5pm" },
-    ],
-    memberSince: "Jan 2025", totalBookings: 114, acceptanceRate: 97, lastActiveLabel: "today",
-  },
-  "companion-devon": {
-    id: "companion-devon", displayName: "Devon H.", verified: true,
-    biography: "Jazz musician, lifelong Bostonian. I know every corner of this city — the ICA on a quiet Thursday, the best bowl of clam chowder, the walk through the Public Garden when the swan boats are out. History, music, or a long lunch: I'm up for any of it.",
-    activities: ["Museum visits", "Jazz evenings", "Walking tours", "Coffee conversations", "Farmers market walks"],
-    languages: ["English"], hourlyRate: 70,
-    serviceArea: "Boston", city: "MA",
-    photoUrl: null, rating: 4.8, reviewCount: 22, responseTime: "within 2h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Mon", hours: "11am – 8pm" }, { day: "Tue", hours: "11am – 8pm" },
-      { day: "Thu", hours: "11am – 9pm" }, { day: "Fri", hours: "12pm – 9pm" },
-      { day: "Sat", hours: "10am – 7pm" },
-    ],
-    memberSince: "Apr 2025", totalBookings: 53, acceptanceRate: 95, lastActiveLabel: "1 hr ago",
-  },
-  "companion-isadora": {
-    id: "companion-isadora", displayName: "Isadora V.", verified: true,
-    biography: "Miami native, multilingual, deeply local. I take people to the places they'd never find on their own — an afternoon in Little Havana, a gallery opening in Wynwood, or a walk along the bay at golden hour. Every visit is personal.",
-    activities: ["Gallery tours", "Evening walks", "Restaurant dining", "Beach visits", "Coffee conversations"],
-    languages: ["English", "Spanish", "Portuguese"], hourlyRate: 65,
-    serviceArea: "Miami", city: "FL",
-    photoUrl: null, rating: 4.9, reviewCount: 41, responseTime: "within 1h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Tue", hours: "10am – 8pm" }, { day: "Wed", hours: "10am – 8pm" },
-      { day: "Fri", hours: "10am – 10pm" }, { day: "Sat", hours: "9am – 8pm" },
-      { day: "Sun", hours: "11am – 6pm" },
-    ],
-    memberSince: "Feb 2025", totalBookings: 78, acceptanceRate: 98, lastActiveLabel: "today",
-  },
-  "companion-theo": {
-    id: "companion-theo", displayName: "Theo L.", verified: true,
-    biography: "Policy analyst who'd rather be at a museum. Washington D.C. is all monuments if you don't know where to look — but I do. The Freer Gallery at closing time, a booth at Ben's Chili Bowl, a walk along the Tidal Basin before the tourists arrive. I make the city feel like yours.",
-    activities: ["Museum visits", "Walking tours", "Coffee conversations", "Evening walks", "Restaurant dining"],
-    languages: ["English", "French"], hourlyRate: 72,
-    serviceArea: "Washington D.C.", city: "DC",
-    photoUrl: null, rating: 4.8, reviewCount: 16, responseTime: "within 3h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Mon", hours: "12pm – 8pm" }, { day: "Wed", hours: "12pm – 8pm" },
-      { day: "Thu", hours: "12pm – 8pm" }, { day: "Sat", hours: "10am – 6pm" },
-      { day: "Sun", hours: "11am – 5pm" },
-    ],
-    memberSince: "Jul 2025", totalBookings: 29, acceptanceRate: 93, lastActiveLabel: "2 hrs ago",
-  },
-  "companion-ruth": {
-    id: "companion-ruth", displayName: "Ruth K.", verified: true,
-    biography: "Botanist turned urban farmer. Denver's altitude, light, and open spaces are unlike anywhere else — and so is the food scene. I love a long walk in Washington Park, a visit to the Denver Botanic Gardens, or a quiet afternoon at a rooftop brewery watching the Rockies turn pink.",
-    activities: ["Hiking", "Farmers market walks", "Brewery tours", "Museum visits", "Evening walks"],
-    languages: ["English"], hourlyRate: 58,
-    serviceArea: "Denver", city: "CO",
-    photoUrl: null, rating: 4.7, reviewCount: 11, responseTime: "within 2h",
-    boundaries: ["Platonic connection only", "Public meeting places only", "Mutual respect at every step"],
-    availability: [
-      { day: "Mon", hours: "9am – 6pm" }, { day: "Tue", hours: "9am – 6pm" },
-      { day: "Thu", hours: "9am – 7pm" }, { day: "Sat", hours: "8am – 5pm" },
-      { day: "Sun", hours: "9am – 4pm" },
-    ],
-    memberSince: "Jun 2025", totalBookings: 37, acceptanceRate: 91, lastActiveLabel: "4 hrs ago",
-  },
-};
+/** In-memory bookings used only when the bookings table is missing. Starts empty. */
+export const DEV_BOOKING_FIXTURES: Record<string, any> = {};
 
 router.get("/companions/:id", async (req, res) => {
   const { id } = GetCompanionParams.parse(req.params);
   try {
-    const [row] = await getApprovedCompanion(id);
+    const [row] = await getPublicCompanion(id);
     if (!row) {
-      // Dev fallback: return a fixture if one exists for this ID
-      if (process.env.NODE_ENV === "development" && DEV_COMPANIONS[id]) {
-        res.json(DEV_COMPANIONS[id]); return;
-      }
       res.status(404).json({ error: "Companion not found" });
       return;
     }
-    res.json(mapCompanionRow(row));
+    const extras = await publicCompanionExtras(id);
+    res.json({ ...mapCompanionRow(row), ...extras });
   } catch (err) {
-    // Dev fallback: Supabase unavailable — serve fixture if available, else 503
-    if (process.env.NODE_ENV === "development" && DEV_COMPANIONS[id]) {
-      res.json(DEV_COMPANIONS[id]); return;
-    }
     req.log.error({ err }, "Unable to read companion profile");
     res.status(503).json({ error: "Companion profile is temporarily unavailable" });
   }
@@ -399,21 +218,17 @@ router.get("/bookings/quote", async (req, res) => {
   const { companionId, durationHours } =
     GetBookingQuoteQueryParams.parse(req.query);
   try {
+    const hours = assertDurationHours(durationHours);
     const [row] = await getApprovedCompanion(companionId);
     if (!row) {
       res.status(404).json({ error: "Companion not found" });
       return;
     }
-    const quote = calculatePrice(row.hourly_rate, durationHours, companionId);
+    const quote = priceForBooking(row.hourly_rate, hours, companionId, row.day_rate);
     res.json(quote);
   } catch (err) {
-    // Dev fallback: Supabase unavailable — compute price from DEV_COMPANIONS fixture
-    if (process.env.NODE_ENV === "development") {
-      const fixture = DEV_COMPANIONS[companionId] as any;
-      if (fixture) {
-        const quote = calculatePrice(fixture.hourlyRate, durationHours, companionId);
-        res.json(quote); return;
-      }
+    if (err instanceof Error && err.message.startsWith("Duration")) {
+      res.status(400).json({ error: err.message }); return;
     }
     req.log.error({ err }, "Unable to calculate price quote");
     res.status(503).json({ error: "Pricing is temporarily unavailable" });
@@ -427,33 +242,63 @@ router.get("/bookings/quote", async (req, res) => {
 router.post("/bookings", async (req, res) => {
   const body = CreateBookingIntentBody.parse(req.body);
 
-  // Auth — falls back to a preview ID in development so the flow can be tested
-  // before Task #1 (auth) lands. Never permitted in production.
-  const customerId =
-    getActorId(req, "customer");
+  const customerId = getActorId(req, "customer");
   if (!customerId) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+  if (!assertCanTransact(req, res)) return;
+  const limited = rateLimit(clientKey(req.ip, `book:${customerId}`), 8, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many booking attempts. Try again shortly." }); return;
+  }
 
   try {
+    let hours: number;
+    try { hours = assertDurationHours(body.durationHours); }
+    catch (err) { res.status(400).json({ error: err instanceof Error ? err.message : "Invalid duration" }); return; }
+
     const [row] = await getApprovedCompanion(body.companionId);
     if (!row) {
       res.status(404).json({ error: "Companion not found" });
       return;
     }
+    if (!isPilotCity(row.city) && !isPilotCity(row.service_area)) {
+      res.status(409).json({ error: "This companion is outside the New Orleans pilot." }); return;
+    }
 
-    const price = calculatePrice(
-      row.hourly_rate,
-      body.durationHours,
-      body.companionId,
-    );
+    const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, body.companionId)).limit(1);
+    if (profile) {
+      const blocked = await db.select().from(accountBlocks).where(or(
+        and(eq(accountBlocks.blockerId, customerId), eq(accountBlocks.blockedId, profile.accountId)),
+        and(eq(accountBlocks.blockerId, profile.accountId), eq(accountBlocks.blockedId, customerId)),
+      )).limit(1);
+      if (blocked[0]) {
+        res.status(403).json({ error: "This booking cannot be created." }); return;
+      }
+    }
 
-    // Zod coerces format:date fields to Date objects — serialize back to ISO strings
     const dateStr =
       body.date instanceof Date
         ? body.date.toISOString().split("T")[0]
         : String(body.date);
+    const startsAt = chicagoDateTime(dateStr, body.startTime);
+    if (startsAt.getTime() < Date.now() - 60_000) {
+      res.status(400).json({ error: "Choose a future date and time in New Orleans time." }); return;
+    }
+
+    const overlap = await companionHasOverlap({
+      companionId: body.companionId,
+      date: dateStr,
+      startTime: body.startTime,
+      durationHours: hours,
+      startsAt,
+    });
+    if (overlap) {
+      res.status(409).json({ error: "That time overlaps another confirmed booking." }); return;
+    }
+
+    const price = priceForBooking(row.hourly_rate, hours, body.companionId, row.day_rate);
 
     const [booking] = await db
       .insert(bookings)
@@ -463,7 +308,9 @@ router.post("/bookings", async (req, res) => {
         activity: body.activity,
         date: dateStr,
         startTime: body.startTime,
-        durationHours: String(body.durationHours),
+        durationHours: String(hours),
+        timezone: PILOT_TZ,
+        startsAt,
         safeSpotId: body.safeSpotId,
         status: "requested",
         subtotalCents: price.subtotalCents,
@@ -475,13 +322,14 @@ router.post("/bookings", async (req, res) => {
       })
       .returning();
 
+    await recordBookingEvent({ bookingId: booking.id, toStatus: "requested", actorId: customerId, note: "created" });
+
     req.log.info(
       { bookingId: booking.id, totalCents: booking.totalCents },
       "Booking intent created",
     );
 
     try {
-      const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, body.companionId)).limit(1);
       await notifyAccount(profile?.accountId, {
         kind: "booking_request",
         title: "New booking request",
@@ -493,29 +341,6 @@ router.post("/bookings", async (req, res) => {
 
     res.status(201).json(formatBooking(booking));
   } catch (err) {
-    // Dev fallback: DB unavailable — create a transient in-memory booking so the UI can proceed
-    if (process.env.NODE_ENV === "development") {
-      const fixture = DEV_COMPANIONS[body.companionId] as any;
-      if (fixture) {
-        const price = calculatePrice(fixture.hourlyRate, body.durationHours, body.companionId);
-        const dateStr = body.date instanceof Date ? body.date.toISOString().split("T")[0] : String(body.date);
-        const devId = `dev-new-${Date.now()}`;
-        const devBooking = {
-          id: devId, customerId, companionId: body.companionId,
-          activity: body.activity, date: dateStr, startTime: body.startTime,
-          durationHours: body.durationHours, safeSpotId: body.safeSpotId,
-          status: "requested",
-          subtotalCents: price.subtotalCents, customerFeeCents: price.customerFeeCents,
-          totalCents: price.totalCents, companionPayoutCents: price.companionPayoutCents,
-          platformRevenueCents: price.platformRevenueCents, depositCents: price.depositCents,
-          depositPaidAt: null, authorizedAt: null, confirmedAt: null,
-          cancelledAt: null, cancellationReason: null,
-        };
-        (DEV_BOOKING_FIXTURES as any)[devId] = devBooking;
-        req.log.info({ bookingId: devId }, "Dev: booking created in-memory");
-        res.status(201).json(devBooking); return;
-      }
-    }
     req.log.error({ err }, "Unable to create booking intent");
     res.status(500).json({ error: "Unable to create booking" });
   }
@@ -533,10 +358,10 @@ router.get("/bookings", async (req, res) => {
       .select()
       .from(bookings)
       .where(eq(bookings.customerId, customerId));
-    res.json(rows.map(formatBookingFull));
+    res.json(await withReviewedFlag(rows.map(formatBookingFull)));
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
-      res.json(Object.values(DEV_BOOKING_FIXTURES).filter((b: any) => b.customerId === "dev-preview-customer")); return;
+      res.json(Object.values(DEV_BOOKING_FIXTURES).filter((b: any) => b.customerId === customerId)); return;
     }
     if (isMissingTableError(err)) { res.json([]); return; }
     req.log.error({ err }, "Unable to list bookings");
@@ -558,7 +383,8 @@ router.get("/bookings/:id", async (req, res) => {
       res.status(404).json({ error: "Booking not found" });
       return;
     }
-    res.json(formatBookingFull(booking));
+    const [payload] = await withReviewedFlag([formatBookingFull(booking)]);
+    res.json(payload);
   } catch (err: unknown) {
     if (process.env.NODE_ENV === "development") {
       const fixture = DEV_BOOKING_FIXTURES[id];
@@ -634,6 +460,7 @@ router.post("/bookings/:id/deposit", async (req, res) => {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+  if (!assertCanTransact(req, res)) return;
 
   try {
     const [booking] = await db
@@ -690,22 +517,8 @@ router.post("/bookings/:id/deposit", async (req, res) => {
       creditedToFinal: true,
     });
   } catch (err) {
-    // Dev fallback: Stripe not connected — simulate deposit instantly
-    if (process.env.NODE_ENV === "development") {
-      try {
-        await db.update(bookings)
-          .set({ status: "deposit_paid", depositPaidAt: new Date().toISOString() })
-          .where(eq(bookings.id, id));
-        req.log.info({ bookingId: id }, "Dev: deposit simulated — booking advanced to deposit_paid");
-        res.json({ bookingId: id, amountCents: 1000, devSimulated: true }); return;
-      } catch (dbErr) {
-        // DB also unavailable — still return simulated success so UI can proceed
-        req.log.warn({ dbErr }, "Dev: deposit simulated without DB update");
-        res.json({ bookingId: id, amountCents: 1000, devSimulated: true }); return;
-      }
-    }
     req.log.error({ err }, "Unable to create deposit payment intent");
-    res.status(500).json({ error: "Unable to initiate deposit" });
+    res.status(503).json({ error: "Payments are not available until Stripe is connected" });
   }
 });
 
@@ -717,6 +530,7 @@ router.post("/bookings/:id/authorize", async (req, res) => {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+  if (!assertCanTransact(req, res)) return;
 
   try {
     const [booking] = await db
@@ -753,7 +567,8 @@ router.post("/bookings/:id/authorize", async (req, res) => {
     const pi = await stripe.paymentIntents.create({
       amount: booking.totalCents,
       currency: "usd",
-      ...(companionAccountId
+      capture_method: "manual",
+      ...(companionAccountId && !profile?.payoutsHeld && !booking.payoutHeld
         ? {
             application_fee_amount: booking.platformRevenueCents,
             transfer_data: { destination: companionAccountId },
@@ -771,7 +586,7 @@ router.post("/bookings/:id/authorize", async (req, res) => {
 
     await db
       .update(bookings)
-      .set({ fullPaymentIntentId: pi.id, status: "authorized" })
+      .set({ fullPaymentIntentId: pi.id })
       .where(eq(bookings.id, id));
 
     req.log.info(
@@ -786,21 +601,8 @@ router.post("/bookings/:id/authorize", async (req, res) => {
       creditedToFinal: false,
     });
   } catch (err) {
-    // Dev fallback: Stripe not connected — simulate full payment instantly
-    if (process.env.NODE_ENV === "development") {
-      try {
-        await db.update(bookings)
-          .set({ status: "authorized", authorizedAt: new Date().toISOString() })
-          .where(eq(bookings.id, id));
-        req.log.info({ bookingId: id }, "Dev: full payment simulated — booking advanced to authorized");
-        res.json({ bookingId: id, amountCents: 0, devSimulated: true }); return;
-      } catch (dbErr) {
-        req.log.warn({ dbErr }, "Dev: full payment simulated without DB update");
-        res.json({ bookingId: id, amountCents: 0, devSimulated: true }); return;
-      }
-    }
     req.log.error({ err }, "Unable to create full payment intent");
-    res.status(500).json({ error: "Unable to initiate payment" });
+    res.status(503).json({ error: "Payments are not available until Stripe is connected" });
   }
 });
 
@@ -817,10 +619,10 @@ router.get("/companion/bookings", async (req, res) => {
       .from(bookings)
       .where(eq(bookings.companionId, companionId))
       .orderBy(desc(bookings.createdAt));
-    res.json(rows.map(formatBookingFull));
+    res.json(await withReviewedFlag(rows.map(formatBookingFull)));
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
-      res.json(Object.values(DEV_BOOKING_FIXTURES).filter((b: any) => b.companionId === "companion-maya")); return;
+      res.json(Object.values(DEV_BOOKING_FIXTURES).filter((b: any) => b.companionId === companionId)); return;
     }
     if (isMissingTableError(err)) { res.json([]); return; }
     req.log.error({ err }, "Unable to list companion bookings");
@@ -837,11 +639,12 @@ router.get("/companion/bookings/:id", async (req, res) => {
     if (!booking || booking.companionId !== companionId) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
-    res.json({ ...formatBookingFull(booking), viewerRole: "companion" });
+    const [payload] = await withReviewedFlag([formatBookingFull(booking)]);
+    res.json({ ...payload, viewerRole: "companion" });
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
       const fixture = DEV_BOOKING_FIXTURES[id] as any;
-      if (fixture && fixture.companionId === "companion-maya") { res.json({ ...fixture, viewerRole: "companion" }); return; }
+      if (fixture && fixture.companionId === companionId) { res.json({ ...fixture, viewerRole: "companion" }); return; }
     }
     if (isMissingTableError(err)) { res.status(404).json({ error: "Booking not found" }); return; }
     req.log.error({ err }, "Unable to load companion booking");
@@ -851,8 +654,13 @@ router.get("/companion/bookings/:id", async (req, res) => {
 
 router.post("/bookings/:id/accept", async (req, res) => {
   const { id } = req.params;
-  const companionId = await resolveCompanionId(req);
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (!assertCanTransact(req, res)) return;
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (!profile.approved) {
+    res.status(403).json({ error: "Only an approved companion can accept bookings." }); return;
+  }
+  const companionId = profile.id;
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     if (!booking || booking.companionId !== companionId) {
@@ -861,11 +669,23 @@ router.post("/bookings/:id/accept", async (req, res) => {
     if (!["deposit_paid", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "Booking cannot be accepted in its current state" }); return;
     }
+    const overlap = await companionHasOverlap({
+      companionId,
+      date: booking.date,
+      startTime: booking.startTime,
+      durationHours: Number(booking.durationHours),
+      excludeBookingId: id,
+      startsAt: booking.startsAt,
+    });
+    if (overlap) {
+      res.status(409).json({ error: "That time overlaps another confirmed booking." }); return;
+    }
     const [updated] = await db
       .update(bookings)
       .set({ status: "confirmed", confirmedAt: new Date(), updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
+    await recordBookingEvent({ bookingId: id, fromStatus: booking.status, toStatus: "confirmed", actorId: req.user?.id, note: "accepted" });
     await notifyAccount(booking.customerId, {
       kind: "booking_accepted",
       title: "Booking confirmed",
@@ -902,14 +722,28 @@ router.post("/bookings/:id/decline", async (req, res) => {
     if (!booking || booking.companionId !== companionId) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
-    if (["confirmed", "completed", "cancelled"].includes(booking.status)) {
+    if (["completed", "cancelled"].includes(booking.status)) {
       res.status(409).json({ error: "Booking cannot be declined in its current state" }); return;
+    }
+    try {
+      await refundOrCancelIntent(booking.depositPaymentIntentId);
+      await refundOrCancelIntent(booking.fullPaymentIntentId);
+    } catch (payErr) {
+      req.log.error({ payErr, bookingId: id }, "Decline refund failed");
+      res.status(503).json({ error: "Could not refund this booking. Try again or email hello@onlyfavors.com." }); return;
     }
     const [updated] = await db
       .update(bookings)
-      .set({ status: "cancelled", updatedAt: new Date() })
+      .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
+    await recordBookingEvent({
+      bookingId: id,
+      fromStatus: booking.status,
+      toStatus: "cancelled",
+      actorId: req.user?.id,
+      note: ["confirmed", "authorized"].includes(booking.status) ? "companion_cancelled" : "companion_declined",
+    });
     await notifyAccount(booking.customerId, {
       kind: "booking_declined",
       title: "Booking not available",
@@ -923,7 +757,7 @@ router.post("/bookings/:id/decline", async (req, res) => {
     if (process.env.NODE_ENV === "development") {
       const fixture = DEV_BOOKING_FIXTURES[id] as any;
       if (fixture) {
-        if (["confirmed", "completed", "cancelled"].includes(fixture.status)) {
+        if (["completed", "cancelled"].includes(fixture.status)) {
           res.status(409).json({ error: "Booking cannot be declined in its current state" }); return;
         }
         fixture.status = "cancelled";
@@ -986,39 +820,51 @@ router.post("/bookings/:id/complete", async (req, res) => {
   const companionId = await resolveCompanionId(req);
   if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  // Dev fallback — mutate fixture
-  if (process.env.NODE_ENV === "development") {
-    const fixture = DEV_BOOKING_FIXTURES[id] as any;
-    if (fixture) {
-      if (!["confirmed", "deposit_paid"].includes(fixture.status)) {
-        res.status(409).json({ error: "Booking is not in a completable state" }); return;
-      }
-      fixture.status = "completed";
-      fixture.completedAt = new Date().toISOString();
-      req.log.info({ bookingId: id }, "Booking completed (dev)");
-      res.json(fixture); return;
-    }
-    // Unknown booking ID in dev — succeed anyway
-    res.json({ id, status: "completed", completedAt: new Date().toISOString() }); return;
-  }
-
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
-    if (!["confirmed", "deposit_paid"].includes(booking.status)) {
+    if (!["confirmed", "authorized"].includes(booking.status)) {
       res.status(409).json({ error: "Booking is not in a completable state" }); return;
+    }
+    const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
+    const held = Boolean(booking.payoutHeld || profile?.payoutsHeld);
+    if (booking.fullPaymentIntentId && !held) {
+      const captured = await captureIntentIfHeld(booking.fullPaymentIntentId);
+      if (!captured.ok && captured.detail !== "already_captured") {
+        req.log.error({ bookingId: id, captured }, "Capture on complete failed");
+        res.status(503).json({ error: "Payment could not be captured. Try again or email hello@onlyfavors.com." }); return;
+      }
     }
     const [updated] = await db
       .update(bookings)
       .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
-    res.json(formatBookingFull(updated));
+    await recordBookingEvent({
+      bookingId: id,
+      fromStatus: booking.status,
+      toStatus: "completed",
+      actorId: req.user?.id,
+      note: held ? "completed_payout_held" : "completed",
+    });
+    res.json({ ...formatBookingFull(updated), payoutHeld: held });
   } catch (err: any) {
+    if (process.env.NODE_ENV === "development") {
+      const fixture = DEV_BOOKING_FIXTURES[id] as any;
+      if (fixture) {
+        if (!["confirmed", "authorized"].includes(fixture.status)) {
+          res.status(409).json({ error: "Booking is not in a completable state" }); return;
+        }
+        fixture.status = "completed";
+        fixture.completedAt = new Date().toISOString();
+        req.log.info({ bookingId: id }, "Booking completed (dev)");
+        res.json(fixture); return;
+      }
+    }
     if (isMissingTableError(err)) {
-      res.json({ id, status: "completed", completedAt: new Date().toISOString() }); return;
+      res.status(503).json({ error: "Could not complete booking" }); return;
     }
     req.log.error({ err }, "Failed to complete booking");
     res.status(503).json({ error: "Could not complete booking" });
@@ -1067,7 +913,14 @@ router.post("/bookings/:id/checkin", async (req, res) => {
       audience: booking.customerId === customerId ? "customer" : "companion",
     });
     req.log.info({ bookingId: id, venue, kind }, "SafeSpot check-in");
-    res.json({ bookingId: id, checkedInAt: row.createdAt, venue: row.venue, kind });
+    res.json({
+      bookingId: id,
+      checkedInAt: row.createdAt,
+      venue: row.venue,
+      kind,
+      smsNotified: false,
+      reason: process.env.TWILIO_AUTH_TOKEN ? "SMS sending is not wired yet" : "SMS is not configured",
+    });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
       checkedInBookings.add(id);
@@ -1102,6 +955,7 @@ router.post("/bookings/:id/exact-location", async (req, res) => {
     }
     const ciphertext = encryptExactLocation({ lat, lng });
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.delete(exactLocations).where(eq(exactLocations.bookingId, id));
     await db.insert(exactLocations).values({ bookingId: id, ciphertext, expiresAt });
     req.log.info({ bookingId: id }, "Exact location stored encrypted");
     res.json({ stored: true, expiresAt: expiresAt.toISOString() });
@@ -1129,6 +983,7 @@ router.get("/bookings/:id/exact-location", async (req, res) => {
     }
     const [row] = await db.select().from(exactLocations).where(eq(exactLocations.bookingId, id)).orderBy(desc(exactLocations.createdAt)).limit(1);
     if (!row || row.expiresAt.getTime() < Date.now()) {
+      if (row) await db.delete(exactLocations).where(eq(exactLocations.bookingId, id));
       res.status(404).json({ error: "Exact location is not available" }); return;
     }
     const coords = decryptExactLocation(row.ciphertext);
@@ -1153,15 +1008,30 @@ router.post("/bookings/:id/cancel", async (req, res) => {
     if (["completed", "cancelled"].includes(booking.status)) {
       res.status(409).json({ error: "Booking cannot be cancelled" }); return;
     }
+    const plan = customerCancelPlan(booking);
+    try {
+      if (plan.refundDeposit) await refundOrCancelIntent(booking.depositPaymentIntentId);
+      if (plan.refundFull) await refundOrCancelIntent(booking.fullPaymentIntentId, plan.refundFullAmountCents);
+    } catch (payErr) {
+      req.log.error({ payErr, bookingId: id }, "Cancel refund failed");
+      res.status(503).json({ error: "Could not refund this booking. Email hello@onlyfavors.com." }); return;
+    }
     const [updated] = await db
       .update(bookings)
-      .set({ status: "cancelled", updatedAt: new Date() })
+      .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
-    req.log.info({ bookingId: id, reason }, "Booking cancelled by customer");
-    res.json(formatBookingFull(updated));
+    await recordBookingEvent({
+      bookingId: id,
+      fromStatus: booking.status,
+      toStatus: "cancelled",
+      actorId: customerId,
+      note: plan.keepFeeCents ? `late_cancel_fee_${plan.keepFeeCents}` : "customer_cancel",
+    });
+    req.log.info({ bookingId: id, reason, keepFeeCents: plan.keepFeeCents }, "Booking cancelled by customer");
+    res.json({ ...formatBookingFull(updated), keepFeeCents: plan.keepFeeCents });
   } catch (err: any) {
-    if (isMissingTableError(err)) { res.json({ id, status: "cancelled" }); return; }
+    if (isMissingTableError(err)) { res.status(503).json({ error: "Could not cancel booking" }); return; }
     req.log.error({ err }, "Unable to cancel booking");
     res.status(503).json({ error: "Could not cancel booking" });
   }
@@ -1179,6 +1049,7 @@ router.post("/favor-requests", async (req, res) => {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
+  if (!assertCanTransact(req, res)) return;
 
   try {
     const [request] = await db
@@ -1239,28 +1110,39 @@ router.get("/dashboard/customer", async (req, res) => {
       .from(bookings)
       .where(eq(bookings.customerId, customerId));
     const upcomingCount = rows.filter((b) =>
-      ["requested", "authorized", "deposit_paid"].includes(b.status),
+      ["requested", "authorized", "deposit_paid", "confirmed"].includes(b.status),
     ).length;
-    const completedCount = rows.filter((b) => b.status === "confirmed").length;
+    const completed = rows.filter((b) => b.status === "completed");
+    const spentCents = completed.reduce((sum, b) => sum + b.totalCents, 0);
+    const hoursTogether = completed.reduce((sum, b) => sum + Number(b.durationHours || 0), 0);
+    let savedCount = 0;
+    try {
+      const saved = await db.select().from(savedCompanions).where(eq(savedCompanions.accountId, customerId));
+      savedCount = saved.length;
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+    }
 
     res.json({
       upcomingBookings: upcomingCount,
-      completedBookings: completedCount,
-      savedCompanions: 0,
+      completedBookings: completed.length,
+      savedCompanions: savedCount,
       safetyPlans: upcomingCount,
+      spentCents,
+      hoursTogether,
     });
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
       const devBookings = Object.values(DEV_BOOKING_FIXTURES) as any[];
-      const mine = devBookings.filter((b) => b.customerId === "dev-preview-customer");
+      const mine = devBookings.filter((b) => b.customerId === customerId);
       const upcomingCount = mine.filter((b) => ["requested", "authorized", "deposit_paid", "confirmed"].includes(b.status)).length;
       const completedCount = mine.filter((b) => b.status === "completed").length;
-      res.json({ upcomingBookings: upcomingCount, completedBookings: completedCount, savedCompanions: 0, safetyPlans: upcomingCount }); return;
+      res.json({ upcomingBookings: upcomingCount, completedBookings: completedCount, savedCompanions: 0, safetyPlans: upcomingCount, spentCents: 0, hoursTogether: 0 }); return;
     }
     // Tables don't exist yet (schema created in Task #1) — check full error chain
     if (isMissingTableError(err)) {
       req.log.warn("Dashboard tables not yet created — returning empty stats");
-      res.json({ upcomingBookings: 0, completedBookings: 0, savedCompanions: 0, safetyPlans: 0 });
+      res.json({ upcomingBookings: 0, completedBookings: 0, savedCompanions: 0, safetyPlans: 0, spentCents: 0, hoursTogether: 0 });
       return;
     }
     req.log.error({ err }, "Unable to load customer dashboard");
@@ -1269,9 +1151,17 @@ router.get("/dashboard/customer", async (req, res) => {
 });
 
 router.get("/dashboard/companion", async (req, res) => {
+  if (!req.user?.id || req.user.suspended) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (!isCompanionUser(req)) {
+    res.status(403).json({ error: "Companion role required" });
+    return;
+  }
   const companionId = await resolveCompanionId(req);
   if (!companionId) {
-    res.status(401).json({ error: "Authentication required" });
+    res.json({ pendingRequests: 0, upcomingBookings: 0, earningsCents: 0, profileViews: 0, avgRating: null, reviewCount: 0 });
     return;
   }
 
@@ -1280,28 +1170,40 @@ router.get("/dashboard/companion", async (req, res) => {
       db.select().from(bookings).where(eq(bookings.companionId, companionId)),
       db.select().from(favorRequests).where(eq(favorRequests.companionId, companionId)),
     ]);
-    const pendingReqs = companionRequests.filter((r) => r.status === "pending").length;
+    const pendingReqs = companionRequests.filter((r) => r.status === "pending").length
+      + companionBookings.filter((b) => b.status === "requested").length;
     const upcomingCount = companionBookings.filter((b) =>
-      ["authorized", "deposit_paid"].includes(b.status),
+      ["authorized", "deposit_paid", "confirmed"].includes(b.status),
     ).length;
     const earningsCents = companionBookings
-      .filter((b) => b.status === "confirmed")
+      .filter((b) => b.status === "completed")
       .reduce((sum, b) => sum + b.companionPayoutCents, 0);
+    let avgRating: number | null = null;
+    let reviewCount = 0;
+    try {
+      const ratingRows = await db.select({ rating: reviewRows.rating }).from(reviewRows).where(eq(reviewRows.companionId, companionId));
+      reviewCount = ratingRows.length;
+      if (reviewCount) {
+        avgRating = Math.round((ratingRows.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10;
+      }
+    } catch (err) {
+      if (!isMissingTableError(err)) throw err;
+    }
 
-    res.json({ pendingRequests: pendingReqs, upcomingBookings: upcomingCount, earningsCents, profileViews: 0 });
+    res.json({ pendingRequests: pendingReqs, upcomingBookings: upcomingCount, earningsCents, profileViews: 0, avgRating, reviewCount });
   } catch (err: any) {
     if (process.env.NODE_ENV === "development") {
       const devBookings = Object.values(DEV_BOOKING_FIXTURES) as any[];
-      const mine = devBookings.filter((b) => b.companionId === "companion-maya");
+      const mine = devBookings.filter((b) => b.companionId === companionId);
       const pendingReqs = mine.filter((b) => b.status === "requested").length;
       const upcomingCount = mine.filter((b) => ["authorized", "deposit_paid", "confirmed"].includes(b.status)).length;
       const earningsCents = mine.filter((b) => b.status === "completed").reduce((s: number, b: any) => s + b.companionPayoutCents, 0);
-      res.json({ pendingRequests: pendingReqs, upcomingBookings: upcomingCount, earningsCents, profileViews: 14 }); return;
+      res.json({ pendingRequests: pendingReqs, upcomingBookings: upcomingCount, earningsCents, profileViews: 0, avgRating: null, reviewCount: 0 }); return;
     }
     // Tables don't exist yet (schema created in Task #1) — check full error chain
     if (isMissingTableError(err)) {
       req.log.warn("Dashboard tables not yet created — returning empty stats");
-      res.json({ pendingRequests: 0, upcomingBookings: 0, earningsCents: 0, profileViews: 0 });
+      res.json({ pendingRequests: 0, upcomingBookings: 0, earningsCents: 0, profileViews: 0, avgRating: null, reviewCount: 0 });
       return;
     }
     req.log.error({ err }, "Unable to load companion dashboard");
@@ -1392,7 +1294,7 @@ router.post("/bookings/:id/messages", async (req, res) => {
     }
   } catch (err: any) {
     if (isMissingTableError(err)) {
-      const msg: DevMessage = { id: crypto.randomUUID(), bookingId: id, senderId: "dev-preview-customer", senderRole: "customer", body, createdAt: new Date().toISOString() };
+      const msg: DevMessage = { id: crypto.randomUUID(), bookingId: id, senderId: req.user?.id ?? customerId ?? companionId ?? "unknown", senderRole: companionId && !customerId ? "companion" : "customer", body, createdAt: new Date().toISOString() };
       if (!devMessages.has(id)) devMessages.set(id, []);
       devMessages.get(id)!.push(msg);
       res.status(201).json(msg); return;
@@ -1416,43 +1318,19 @@ type DevReview = {
   createdAt: string;
 };
 
-const devReviews: DevReview[] = [
-  {
-    id: "rev-demo-1",
-    bookingId: "bk-demo-1",
-    companionId: "companion-maya",
-    customerId: "cust-demo-1",
-    rating: 5,
-    comment: "Maya was thoughtful, punctual, and made the afternoon feel easy. The gallery she chose was perfect. Already planning the next one.",
-    createdAt: new Date(Date.now() - 8 * 86400_000).toISOString(),
-  },
-  {
-    id: "rev-demo-2",
-    bookingId: "bk-demo-2",
-    companionId: "companion-maya",
-    customerId: "cust-demo-2",
-    rating: 5,
-    comment: "Genuinely warm and attentive. She remembered details from my messages and the conversation never ran dry.",
-    createdAt: new Date(Date.now() - 22 * 86400_000).toISOString(),
-  },
-  {
-    id: "rev-demo-3",
-    bookingId: "bk-demo-3",
-    companionId: "companion-maya",
-    customerId: "cust-demo-3",
-    rating: 4,
-    comment: "Great time at the farmers market. Very present and easy to be around.",
-    createdAt: new Date(Date.now() - 45 * 86400_000).toISOString(),
-  },
-];
+const devReviews: DevReview[] = [];
 
 /** bookingIds that have already been reviewed, to enforce one-review-per-booking */
-const reviewedBookings = new Set<string>(["bk-demo-1", "bk-demo-2", "bk-demo-3"]);
+const reviewedBookings = new Set<string>();
 
 router.post("/companions/:id/report", async (req, res) => {
   const { id } = req.params;
   const { reason, note } = req.body ?? {};
   if (!reason) { res.status(400).json({ error: "A reason is required" }); return; }
+  const limited = rateLimit(clientKey(req.ip, `report:${req.user?.id ?? req.ip}`), 6, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many reports. Try again shortly." }); return;
+  }
   try {
     const [row] = await db.insert(incidentReports).values({
       reporterId: req.user?.id ?? null,
@@ -1462,10 +1340,10 @@ router.post("/companions/:id/report", async (req, res) => {
       urgent: false,
     }).returning();
     req.log.warn({ companionId: id, reportId: row.id }, "Companion report submitted");
-    res.json({ received: true, id: row.id, message: "Report received. Our trust team will review within 24 hours." });
+    res.json({ received: true, id: row.id, message: "Report received. It is stored for the trust team. There is no published review SLA." });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
-      res.json({ received: true, message: "Report received. Our trust team will review within 24 hours." });
+      res.json({ received: true, message: "Report received. It is stored for the trust team. There is no published review SLA." });
       return;
     }
     req.log.error({ err }, "Companion report failed");
@@ -1477,6 +1355,10 @@ router.post("/reports", async (req, res) => {
   const { reportType, detail, bookingRef, urgent, companionId } = req.body ?? {};
   if (!reportType || !String(detail ?? "").trim()) {
     res.status(400).json({ error: "Incident type and details are required" }); return;
+  }
+  const limited = rateLimit(clientKey(req.ip, `report:${req.user?.id ?? req.ip}`), 6, 15 * 60_000);
+  if (!limited.ok) {
+    res.status(429).json({ error: "Too many reports. Try again shortly." }); return;
   }
   try {
     const [row] = await db.insert(incidentReports).values({
@@ -1499,23 +1381,77 @@ router.post("/reports", async (req, res) => {
   }
 });
 
+function publicCompanionReview(row: { id: string; rating: number; comment: string | null; createdAt: Date | string }) {
+  return {
+    id: row.id,
+    rating: row.rating,
+    comment: row.comment ?? "",
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+  };
+}
+
 router.get("/companions/:id/reviews", async (req, res) => {
   const { id } = req.params;
   try {
     const rows = await db
-      .select()
+      .select({
+        id: reviewRows.id,
+        rating: reviewRows.rating,
+        comment: reviewRows.comment,
+        createdAt: reviewRows.createdAt,
+      })
       .from(reviewRows)
       .where(eq(reviewRows.companionId, id))
       .orderBy(desc(reviewRows.createdAt));
-    res.json(rows);
+    res.json(rows.map(publicCompanionReview));
   } catch (err: unknown) {
-    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
-      res.json(devReviews.filter((r) => r.companionId === id));
+    if (isMissingTableError(err)) {
+      res.json(devReviews.filter((r) => r.companionId === id).map(publicCompanionReview));
       return;
     }
-    if (isMissingTableError(err)) { res.json([]); return; }
     req.log.error({ err }, "Reviews lookup failed");
     res.status(503).json({ error: "Reviews temporarily unavailable" });
+  }
+});
+
+router.get("/reviews/recent", async (_req, res) => {
+  try {
+    const rows = await db
+      .select({
+        id: reviewRows.id,
+        rating: reviewRows.rating,
+        comment: reviewRows.comment,
+        createdAt: reviewRows.createdAt,
+        companionId: reviewRows.companionId,
+        companionName: companionProfiles.displayName,
+        city: companionProfiles.city,
+      })
+      .from(reviewRows)
+      .innerJoin(companionProfiles, eq(reviewRows.companionId, companionProfiles.id))
+      .where(and(eq(companionProfiles.approved, true), eq(companionProfiles.paused, false)))
+      .orderBy(desc(reviewRows.createdAt))
+      .limit(24);
+    res.json(
+      rows
+        .filter((row) => Boolean(row.comment?.trim()))
+        .slice(0, 12)
+        .map((row) => ({
+          id: row.id,
+          rating: row.rating,
+          comment: row.comment,
+          createdAt: row.createdAt.toISOString(),
+          companionId: row.companionId,
+          companionName: row.companionName,
+          city: row.city,
+        })),
+    );
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      res.json([]);
+      return;
+    }
+    req.log.error({ err }, "Recent reviews failed");
+    res.json([]);
   }
 });
 
@@ -1603,12 +1539,14 @@ router.post("/bookings/:id/review", async (req, res) => {
     res.status(201).json(review);
   } catch (err: unknown) {
     if (isMissingTableError(err)) {
-      // Dev: booking table missing — accept review against fixture's companion
       const fixtureBooking = DEV_BOOKING_FIXTURES[id] as any;
+      if (!fixtureBooking) {
+        res.status(404).json({ error: "Booking not found" }); return;
+      }
       const review: DevReview = {
         id: crypto.randomUUID(),
         bookingId: id,
-        companionId: fixtureBooking?.companionId ?? "companion-maya",
+        companionId: fixtureBooking.companionId,
         customerId,
         rating,
         comment: comment ? String(comment).trim() : "",
@@ -1723,13 +1661,13 @@ type DevCompanionProfile = {
 };
 
 const DEFAULT_DEV_PROFILE: DevCompanionProfile = {
-  displayName: "Alex M.",
-  bio: "Patient, curious, and good at showing up. I enjoy gallery afternoons, farmers markets, and long walks with good conversation.",
-  hourlyRateCents: 7000,
-  activities: ["Museum visits", "Coffee conversations", "Farmers market walks", "Gallery tours"],
-  languages: ["English"],
-  serviceArea: "San Francisco, CA",
-  availableDays: ["Fri", "Sat", "Sun"],
+  displayName: "Companion",
+  bio: "",
+  hourlyRateCents: 0,
+  activities: [],
+  languages: [],
+  serviceArea: "",
+  availableDays: [],
   availableHoursStart: "10:00",
   availableHoursEnd: "20:00",
   photoUrl: null,
@@ -1738,52 +1676,7 @@ const DEFAULT_DEV_PROFILE: DevCompanionProfile = {
 /** In-memory store — replaced by Supabase companion_profiles once Task #1 lands */
 const devCompanionProfiles = new Map<string, DevCompanionProfile>();
 
-router.get("/companion/profile", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-
-  // Production: query Supabase companion_profiles table
-  // Dev: return from in-memory store (or default if first visit)
-  const profile = devCompanionProfiles.get(companionId) ?? DEFAULT_DEV_PROFILE;
-  res.json(profile);
-});
-
-router.put("/companion/profile", async (req, res) => {
-  const companionId =
-    getActorId(req, "companion");
-  if (!companionId) { res.status(401).json({ error: "Authentication required" }); return; }
-
-  const { displayName, bio, hourlyRateCents, activities, languages, serviceArea, availableDays, availableHoursStart, availableHoursEnd } = req.body ?? {};
-
-  // Validation
-  if (!displayName?.trim()) { res.status(400).json({ error: "Display name is required" }); return; }
-  if (!bio?.trim()) { res.status(400).json({ error: "Bio is required" }); return; }
-  if (typeof hourlyRateCents !== "number" || hourlyRateCents < 2000 || hourlyRateCents > 50000) {
-    res.status(400).json({ error: "Hourly rate must be between $20 and $500" }); return;
-  }
-  if (!Array.isArray(activities) || activities.length === 0) { res.status(400).json({ error: "At least one activity is required" }); return; }
-  if (!Array.isArray(languages) || languages.length === 0) { res.status(400).json({ error: "At least one language is required" }); return; }
-
-  const existing = devCompanionProfiles.get(companionId) ?? DEFAULT_DEV_PROFILE;
-  const updated: DevCompanionProfile = {
-    displayName: String(displayName).slice(0, 80),
-    bio: String(bio).slice(0, 600),
-    hourlyRateCents: Math.round(hourlyRateCents),
-    activities: activities.slice(0, 12).map((a: unknown) => String(a).slice(0, 50)),
-    languages: languages.slice(0, 8).map((l: unknown) => String(l).slice(0, 40)),
-    serviceArea: String(serviceArea ?? "").slice(0, 100),
-    availableDays: Array.isArray(availableDays) ? availableDays.slice(0, 7).map(String) : [],
-    availableHoursStart: String(availableHoursStart ?? "09:00"),
-    availableHoursEnd: String(availableHoursEnd ?? "21:00"),
-    // Preserve photo from previous save — photo is updated separately via POST /companion/profile/photo
-    photoUrl: existing.photoUrl ?? null,
-  };
-
-  devCompanionProfiles.set(companionId, updated);
-  req.log.info({ companionId }, "Companion profile updated");
-  res.json(updated);
-});
+// GET/PUT /companion/profile live in workspace.ts so they persist to companion_profiles.
 
 // ---------------------------------------------------------------------------
 // Companion profile photo upload (dev: stores base64 data URL in memory)
@@ -1822,13 +1715,13 @@ router.post("/companion/profile/photo", async (req, res) => {
   }
 });
 
-const DEV_COMPANION_APPLICATIONS = [
-  { id: "app-001", displayName: "Maya R.", city: "San Francisco", activities: ["Museum visits", "Coffee conversations", "Farmers market walks"], languages: ["English", "Spanish"], hourlyRate: 65, applicationDate: "2026-08-10", bio: "Retired curator with a love for contemporary art and good conversation. Patient, warm, and genuinely curious about people.", status: "pending" },
-  { id: "app-002", displayName: "Jordan K.", city: "New York", activities: ["Gallery tours", "Cooking classes", "Evening walks"], languages: ["English", "French"], hourlyRate: 75, applicationDate: "2026-08-11", bio: "Former chef turned food writer. Best company for anyone who takes eating seriously.", status: "pending" },
-  { id: "app-003", displayName: "Sam T.", city: "Chicago", activities: ["Board games", "Book clubs", "City tours"], languages: ["English"], hourlyRate: 55, applicationDate: "2026-08-12", bio: "Professional librarian who knows every good spot in the city. Quiet energy, great listener.", status: "pending" },
-];
+type DevCompanionApplication = {
+  id: string; displayName: string; email?: string; city: string; activities: string[];
+  languages: string[]; hourlyRate: number; applicationDate: string; bio: string; status: string;
+};
+const DEV_COMPANION_APPLICATIONS: DevCompanionApplication[] = [];
 
-function formatApplication(row: typeof companionApplications.$inferSelect) {
+function formatApplicationfunction formatApplication(row: typeof companionApplications.$inferSelect) {
   return {
     id: row.id,
     displayName: row.displayName,
@@ -1877,32 +1770,63 @@ router.get("/admin/overview", requireAdmin, async (req, res) => {
 });
 
 router.post("/companion/applications", async (req, res) => {
-  const { displayName, email, city, bio } = req.body as {
+  const { displayName, email, city, bio, activities, languages, hourlyRate } = req.body as {
     displayName: string; email: string; city: string; bio: string;
+    activities?: unknown; languages?: unknown; hourlyRate?: unknown;
   };
   if (!displayName || !email || !city || !bio) {
     res.status(400).json({ error: "All fields required" }); return;
   }
+  const activityList = Array.isArray(activities)
+    ? activities.map((a) => String(a).trim()).filter(Boolean).slice(0, 12)
+    : [];
+  const languageList = Array.isArray(languages)
+    ? languages.map((a) => String(a).trim()).filter(Boolean).slice(0, 8)
+    : ["English"];
+  const rate = Number.isFinite(Number(hourlyRate))
+    ? Math.min(500, Math.max(20, Math.round(Number(hourlyRate))))
+    : 60;
+  const asDraft = Boolean((req.body as { draft?: boolean })?.draft);
   try {
-    const [row] = await db.insert(companionApplications).values({
+    const values = {
       accountId: req.user?.id ?? null,
       displayName: String(displayName).slice(0, 80),
       email: String(email).trim().toLowerCase().slice(0, 160),
       city: String(city).slice(0, 80),
       bio: String(bio).slice(0, 2000),
-    }).returning();
+      activities: activityList,
+      languages: languageList.length ? languageList : ["English"],
+      hourlyRate: rate,
+      status: asDraft ? "draft" : "pending",
+    };
+    let row;
+    if (req.user?.id && asDraft) {
+      const [existing] = await db.select().from(companionApplications)
+        .where(and(eq(companionApplications.accountId, req.user.id), eq(companionApplications.status, "draft")))
+        .limit(1);
+      row = existing
+        ? (await db.update(companionApplications).set(values).where(eq(companionApplications.id, existing.id)).returning())[0]
+        : (await db.insert(companionApplications).values(values).returning())[0];
+    } else {
+      [row] = await db.insert(companionApplications).values(values).returning();
+    }
     req.log.info({ id: row.id }, "Companion application received");
     res.status(201).json({ id: row.id, status: row.status });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
-      const newApp = {
+      const newApp: DevCompanionApplication = {
         id: `app-${Date.now()}`,
-        displayName, email, city, bio,
-        activities: [], languages: ["English"], hourlyRate: 60,
+        displayName: String(displayName).slice(0, 80),
+        email: String(email).trim().toLowerCase().slice(0, 160),
+        city: String(city).slice(0, 80),
+        bio: String(bio).slice(0, 2000),
+        activities: activityList,
+        languages: languageList.length ? languageList : ["English"],
+        hourlyRate: rate,
         applicationDate: new Date().toISOString().split("T")[0],
         status: "pending",
       };
-      DEV_COMPANION_APPLICATIONS.push(newApp as (typeof DEV_COMPANION_APPLICATIONS)[number]);
+      DEV_COMPANION_APPLICATIONS.push(newApp);
       res.status(201).json({ id: newApp.id, status: "pending" });
       return;
     }
@@ -1960,14 +1884,15 @@ router.post("/admin/companions/:id/approve", requireAdmin, async (req, res) => {
     const [profile] = await db.insert(companionProfiles).values({
       accountId,
       displayName: application.displayName,
-      city: application.city,
-      serviceArea: application.city,
+      city: PILOT_CITY,
+      serviceArea: isPilotCity(application.city) ? application.city : PILOT_CITY,
       activities: application.activities,
       languages: application.languages,
       hourlyRate: application.hourlyRate,
       biography: application.bio,
       approved: true,
-      verified: true,
+      verified: false,
+      identityStatus: "unsubmitted",
     }).returning();
 
     await db.update(companionApplications).set({
@@ -2023,6 +1948,205 @@ router.post("/admin/companions/:id/reject", requireAdmin, async (req, res) => {
     }
     req.log.error({ err }, "Companion reject failed");
     res.status(503).json({ error: "Could not reject application" });
+  }
+});
+
+const IDENTITY_STATUSES = new Set(["unsubmitted", "pending", "verified", "rejected"]);
+
+router.get("/admin/companions/identity", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db.select().from(companionProfiles).orderBy(desc(companionProfiles.updatedAt)).limit(80);
+    res.json(rows.map((row) => ({
+      id: row.id,
+      displayName: row.displayName,
+      city: row.city,
+      approved: row.approved,
+      verified: row.verified,
+      identityStatus: row.identityStatus,
+      payoutsHeld: row.payoutsHeld,
+      accountId: row.accountId,
+    })));
+  } catch (err) {
+    if (isMissingTableError(err)) { res.json([]); return; }
+    req.log.error({ err }, "Identity queue failed");
+    res.status(503).json({ error: "Identity queue temporarily unavailable" });
+  }
+});
+
+router.post("/admin/companions/:id/identity", requireAdmin, async (req, res) => {
+  const status = String(req.body?.status ?? "");
+  if (!IDENTITY_STATUSES.has(status)) {
+    res.status(400).json({ error: "Identity status must be unsubmitted, pending, verified, or rejected" }); return;
+  }
+  try {
+    const [row] = await db.update(companionProfiles).set({
+      identityStatus: status,
+      verified: status === "verified",
+      updatedAt: new Date(),
+    }).where(eq(companionProfiles.id, req.params.id)).returning();
+    if (!row) { res.status(404).json({ error: "Companion not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "companion.identity",
+      subjectType: "companion_profile",
+      subjectId: row.id,
+      note: status,
+    });
+    res.json({ id: row.id, identityStatus: row.identityStatus, verified: row.verified });
+  } catch (err) {
+    req.log.error({ err }, "Identity update failed");
+    res.status(503).json({ error: "Could not update identity status" });
+  }
+});
+
+router.post("/companion/identity/submit", async (req, res) => {
+  const profile = await resolveCompanionProfile(req);
+  if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [row] = await db.update(companionProfiles).set({
+      identityStatus: "pending",
+      updatedAt: new Date(),
+    }).where(eq(companionProfiles.id, profile.id)).returning();
+    res.json({ identityStatus: row?.identityStatus ?? "pending" });
+  } catch (err) {
+    req.log.error({ err }, "Identity submit failed");
+    res.status(503).json({ error: "Could not submit identity for review" });
+  }
+});
+
+router.post("/admin/companions/:id/payouts-hold", requireAdmin, async (req, res) => {
+  const held = req.body?.held !== false;
+  try {
+    const [row] = await db.update(companionProfiles).set({
+      payoutsHeld: held,
+      updatedAt: new Date(),
+    }).where(eq(companionProfiles.id, req.params.id)).returning();
+    if (!row) { res.status(404).json({ error: "Companion not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: held ? "companion.payouts_hold" : "companion.payouts_release",
+      subjectType: "companion_profile",
+      subjectId: row.id,
+    });
+    res.json({ id: row.id, payoutsHeld: row.payoutsHeld });
+  } catch (err) {
+    req.log.error({ err }, "Companion payout hold failed");
+    res.status(503).json({ error: "Could not update payout hold" });
+  }
+});
+
+router.post("/admin/bookings/:id/payout-hold", requireAdmin, async (req, res) => {
+  const held = req.body?.held !== false;
+  try {
+    const [row] = await db.update(bookings).set({
+      payoutHeld: held,
+      updatedAt: new Date(),
+    }).where(eq(bookings.id, req.params.id)).returning();
+    if (!row) { res.status(404).json({ error: "Booking not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: held ? "booking.payout_hold" : "booking.payout_release",
+      subjectType: "booking",
+      subjectId: row.id,
+    });
+    res.json({ id: row.id, payoutHeld: row.payoutHeld });
+  } catch (err) {
+    req.log.error({ err }, "Booking payout hold failed");
+    res.status(503).json({ error: "Could not update payout hold" });
+  }
+});
+
+router.post("/admin/bookings/:id/refund", requireAdmin, async (req, res) => {
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, req.params.id)).limit(1);
+    if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+    await refundOrCancelIntent(booking.depositPaymentIntentId);
+    await refundOrCancelIntent(booking.fullPaymentIntentId);
+    const [updated] = await db.update(bookings).set({
+      status: "cancelled",
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(bookings.id, booking.id)).returning();
+    await recordBookingEvent({
+      bookingId: booking.id,
+      fromStatus: booking.status,
+      toStatus: "cancelled",
+      actorId: req.user!.id,
+      note: "admin_refund",
+    });
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "booking.refund",
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
+    res.json(formatBookingFull(updated));
+  } catch (err) {
+    req.log.error({ err }, "Admin refund failed");
+    res.status(503).json({ error: "Could not refund this booking. Check Stripe and try again." });
+  }
+});
+
+router.post("/admin/bookings/:id/no-show", requireAdmin, async (req, res) => {
+  const party = req.body?.party === "companion" ? "companion" : "customer";
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, req.params.id)).limit(1);
+    if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+    if (party === "companion") {
+      await refundOrCancelIntent(booking.depositPaymentIntentId);
+      await refundOrCancelIntent(booking.fullPaymentIntentId);
+    } else {
+      await refundOrCancelIntent(booking.fullPaymentIntentId, Math.max(0, booking.totalCents - booking.depositCents));
+    }
+    const [updated] = await db.update(bookings).set({
+      status: "cancelled",
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(bookings.id, booking.id)).returning();
+    await recordBookingEvent({
+      bookingId: booking.id,
+      fromStatus: booking.status,
+      toStatus: "cancelled",
+      actorId: req.user!.id,
+      note: `no_show_${party}`,
+    });
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "booking.no_show",
+      subjectType: "booking",
+      subjectId: booking.id,
+      note: party,
+    });
+    res.json(formatBookingFull(updated));
+  } catch (err) {
+    req.log.error({ err }, "No-show handling failed");
+    res.status(503).json({ error: "Could not record no-show" });
+  }
+});
+
+router.post("/admin/bookings/:id/capture", requireAdmin, async (req, res) => {
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, req.params.id)).limit(1);
+    if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+    const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
+    if (booking.payoutHeld || profile?.payoutsHeld) {
+      res.status(409).json({ error: "Payout is held. Release the hold before capturing." }); return;
+    }
+    const captured = await captureIntentIfHeld(booking.fullPaymentIntentId);
+    if (!captured.ok && captured.detail !== "already_captured") {
+      res.status(503).json({ error: "Could not capture payment." }); return;
+    }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "booking.capture",
+      subjectType: "booking",
+      subjectId: booking.id,
+      note: captured.detail,
+    });
+    res.json({ id: booking.id, captured: captured.detail });
+  } catch (err) {
+    req.log.error({ err }, "Admin capture failed");
+    res.status(503).json({ error: "Could not capture payment" });
   }
 });
 
@@ -2093,6 +2217,8 @@ router.post("/admin/accounts/:id/suspend", requireAdmin, async (req, res) => {
       updatedAt: new Date(),
     }).where(eq(accounts.id, id)).returning();
     if (!row) { res.status(404).json({ error: "Account not found" }); return; }
+    await db.update(companionProfiles).set({ paused: true, updatedAt: new Date() }).where(eq(companionProfiles.accountId, id));
+    await revokeAllSessions(id);
     await writeAudit({
       actorId: req.user!.id,
       action: "account.suspend",
@@ -2100,10 +2226,61 @@ router.post("/admin/accounts/:id/suspend", requireAdmin, async (req, res) => {
       subjectId: id,
       note: reason,
     });
-    res.json({ id, suspended: true });
+    res.json({ id, status: "suspended" });
   } catch (err) {
     req.log.error({ err }, "Suspend account failed");
     res.status(503).json({ error: "Could not suspend account" });
+  }
+});
+
+router.post("/admin/accounts/:id/ban", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 500) : "Banned by trust team";
+  try {
+    const [row] = await db.update(accounts).set({
+      bannedAt: new Date(),
+      suspendedAt: new Date(),
+      suspensionReason: reason,
+      updatedAt: new Date(),
+    }).where(eq(accounts.id, id)).returning();
+    if (!row) { res.status(404).json({ error: "Account not found" }); return; }
+    await db.update(companionProfiles).set({ paused: true, approved: false, updatedAt: new Date() }).where(eq(companionProfiles.accountId, id));
+    await revokeAllSessions(id);
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "account.ban",
+      subjectType: "account",
+      subjectId: id,
+      note: reason,
+    });
+    res.json({ id, status: "banned" });
+  } catch (err) {
+    req.log.error({ err }, "Ban account failed");
+    res.status(503).json({ error: "Could not ban account" });
+  }
+});
+
+router.post("/admin/accounts/:id/restore", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [row] = await db.update(accounts).set({
+      suspendedAt: null,
+      bannedAt: null,
+      deactivatedAt: null,
+      suspensionReason: null,
+      updatedAt: new Date(),
+    }).where(eq(accounts.id, id)).returning();
+    if (!row) { res.status(404).json({ error: "Account not found" }); return; }
+    await writeAudit({
+      actorId: req.user!.id,
+      action: "account.restore",
+      subjectType: "account",
+      subjectId: id,
+    });
+    res.json({ id, status: "active" });
+  } catch (err) {
+    req.log.error({ err }, "Restore account failed");
+    res.status(503).json({ error: "Could not restore account" });
   }
 });
 
@@ -2141,44 +2318,14 @@ router.get("/safety", (_req, res) => {
   res.json(data);
 });
 
-const DEV_SAFESPOTS = [
-  { id: "ss-sf-1",  name: "Blue Bottle Coffee Hayes",      category: "Café",          city: "CA", cityLabel: "San Francisco, CA",   addressHint: "Hayes Valley · large communal tables",        openLate: false },
-  { id: "ss-sf-2",  name: "SFMOMA Lobby",                  category: "Museum",        city: "CA", cityLabel: "San Francisco, CA",   addressHint: "Mission District · staffed main entrance",    openLate: false },
-  { id: "ss-sf-3",  name: "Ferry Building Marketplace",    category: "Public Market", city: "CA", cityLabel: "San Francisco, CA",   addressHint: "Embarcadero · open atrium, always busy",      openLate: false },
-  { id: "ss-sf-4",  name: "The Commons Café",              category: "Café",          city: "CA", cityLabel: "San Francisco, CA",   addressHint: "Near Union Square, downtown",                 openLate: false },
-  { id: "ss-ny-1",  name: "Ace Hotel Lobby",               category: "Hotel Lobby",   city: "NY", cityLabel: "New York, NY",        addressHint: "Midtown · open 24h, well-staffed",            openLate: true  },
-  { id: "ss-ny-2",  name: "The High Line Café",            category: "Café",          city: "NY", cityLabel: "New York, NY",        addressHint: "Chelsea · outdoor, public seating",           openLate: false },
-  { id: "ss-ny-3",  name: "Brooklyn Museum",               category: "Museum",        city: "NY", cityLabel: "New York, NY",        addressHint: "Crown Heights · lobby open to all",           openLate: false },
-  { id: "ss-ny-4",  name: "Grand Central Lounge",          category: "Bar",           city: "NY", cityLabel: "New York, NY",        addressHint: "Midtown East, ground floor",                  openLate: true  },
-  { id: "ss-chi-1", name: "Chicago Cultural Center",       category: "Museum",        city: "IL", cityLabel: "Chicago, IL",         addressHint: "Loop · grand atrium, free public entry",      openLate: false },
-  { id: "ss-chi-2", name: "Riverside Public Library",      category: "Library",       city: "IL", cityLabel: "Chicago, IL",         addressHint: "River North branch · quiet, staffed desk",    openLate: false },
-  { id: "ss-chi-3", name: "Eataly Chicago Café",           category: "Café",          city: "IL", cityLabel: "Chicago, IL",         addressHint: "River North · lively, visible seating",       openLate: true  },
-  { id: "ss-sea-1", name: "Meridian Museum Café",          category: "Museum",        city: "WA", cityLabel: "Seattle, WA",         addressHint: "Capitol Hill · ground floor café",            openLate: false },
-  { id: "ss-sea-2", name: "Pike Place Market Entrance",   category: "Public Market", city: "WA", cityLabel: "Seattle, WA",         addressHint: "Pike St & 1st Ave · busy, open-air",         openLate: false },
-  { id: "ss-sea-3", name: "Amazon Spheres Lobby",         category: "Hotel Lobby",   city: "WA", cityLabel: "Seattle, WA",         addressHint: "South Lake Union · public lobby, staffed",    openLate: false },
-  { id: "ss-aus-1", name: "Ember & Oak",                  category: "Restaurant",    city: "TX", cityLabel: "Austin, TX",          addressHint: "Downtown, street level, open kitchen",        openLate: true  },
-  { id: "ss-aus-2", name: "Blanton Museum Lobby",         category: "Museum",        city: "TX", cityLabel: "Austin, TX",          addressHint: "UT Campus · airy entrance, easy exit",        openLate: false },
-  { id: "ss-la-1",  name: "The Garden Hotel Lobby",       category: "Hotel Lobby",   city: "CA", cityLabel: "Los Angeles, CA",     addressHint: "West Hollywood · lobby level, concierge",     openLate: true  },
-  { id: "ss-la-2",  name: "LACMA Entry Pavilion",         category: "Museum",        city: "CA", cityLabel: "Los Angeles, CA",     addressHint: "Mid-Wilshire · open courtyard, staffed",      openLate: false },
-  { id: "ss-mia-1", name: "The Setai Hotel Lobby",        category: "Hotel Lobby",   city: "FL", cityLabel: "Miami, FL",           addressHint: "South Beach · concierge desk visible",        openLate: true  },
-  { id: "ss-mia-2", name: "Wynwood Café",                 category: "Café",          city: "FL", cityLabel: "Miami, FL",           addressHint: "Wynwood · street-level, art district",        openLate: false },
-  { id: "ss-bos-1", name: "Boston Public Library Foyer",  category: "Library",       city: "MA", cityLabel: "Boston, MA",          addressHint: "Copley Sq · manned entrance desk",            openLate: false },
-  { id: "ss-bos-2", name: "The Newbury Lobby",            category: "Hotel Lobby",   city: "MA", cityLabel: "Boston, MA",          addressHint: "Back Bay · grand lobby, staffed 24h",         openLate: true  },
-  { id: "ss-den-1", name: "Denver Art Museum Café",       category: "Café",          city: "CO", cityLabel: "Denver, CO",          addressHint: "Golden Triangle · ground floor café",         openLate: false },
-  { id: "ss-dc-1",  name: "National Portrait Gallery",    category: "Museum",        city: "DC", cityLabel: "Washington, D.C.",    addressHint: "Penn Quarter · Penn Ave entrance",            openLate: false },
-  { id: "ss-atl-1", name: "Ponce City Market Atrium",     category: "Public Market", city: "GA", cityLabel: "Atlanta, GA",         addressHint: "Old Fourth Ward · open, visible seating",     openLate: true  },
-  { id: "ss-por-1", name: "Powell's Books Café",          category: "Café",          city: "OR", cityLabel: "Portland, OR",        addressHint: "Pearl District · lively, always open",        openLate: false },
-];
-
+// In-memory SafeSpot applications (pending venue approvals)
 // In-memory SafeSpot applications (pending venue approvals)
 type SafeSpotApplication = {
   id: string; name: string; address: string; city: string; type: string;
   contactEmail: string; contactName: string; description: string;
   submittedAt: string; status: 'pending' | 'approved' | 'rejected';
 };
-const devSafeSpotApplications: SafeSpotApplication[] = [
-  { id: 'ss-app-1', name: 'Catahoula Coffee', address: '375 Bush St', city: 'San Francisco', type: 'cafe', contactEmail: 'hello@catahoula.com', contactName: 'Jordan T.', description: 'Quiet specialty coffee shop with private nooks and excellent lighting.', submittedAt: new Date(Date.now() - 2 * 86400_000).toISOString(), status: 'pending' },
-];
+const devSafeSpotApplications: SafeSpotApplication[] = [];
 
 router.post("/safespots/register", async (req, res) => {
   const { name, address, city, type, contactEmail, contactName, description } = req.body ?? {};
@@ -2311,10 +2458,16 @@ router.post("/admin/safespots/:id/reject", requireAdmin, async (req, res) => {
 
 router.get("/safespots", async (req, res) => {
   const query = ListSafeSpotsQueryParams.parse(req.query);
+  if (query.city && !isPilotCity(query.city)) {
+    res.json([]);
+    return;
+  }
   try {
-    const rows = await getSafeSpots(query.city);
+    const rows = await getSafeSpots(query.city || PILOT_CITY);
     res.json(
-      rows.map((row) => ({
+      rows
+        .filter((row) => isPilotCity(row.city))
+        .map((row) => ({
         id: row.id,
         name: row.name,
         category: row.category,
@@ -2325,11 +2478,10 @@ router.get("/safespots", async (req, res) => {
       })),
     );
   } catch (err) {
-    if (process.env.NODE_ENV === "development") {
-      const filtered = query.city
-        ? DEV_SAFESPOTS.filter((s) => s.city.toLowerCase().includes(query.city!.toLowerCase()))
-        : DEV_SAFESPOTS;
-      res.json(filtered); return;
+    if (isMissingTableError(err) || process.env.NODE_ENV === "development") {
+      req.log.warn({ err }, "SafeSpot directory unavailable — returning empty list");
+      res.json([]);
+      return;
     }
     req.log.error({ err }, "Unable to read SafeSpots");
     res.status(503).json({ error: "SafeSpots are temporarily unavailable" });
@@ -2341,14 +2493,12 @@ router.get("/safespots/:id", async (req, res) => {
   try {
     const rows = await getSafeSpot(id);
     if (!rows.length) {
-      // Dev fallback: serve fixture if available
-      if (process.env.NODE_ENV === "development") {
-        const fixture = DEV_SAFESPOTS.find((s) => s.id === id);
-        if (fixture) { res.json(fixture); return; }
-      }
       res.status(404).json({ error: "SafeSpot not found" }); return;
     }
     const row = rows[0];
+    if (!isPilotCity(row.city)) {
+      res.status(404).json({ error: "SafeSpot not found" }); return;
+    }
     res.json({
       id: row.id,
       name: row.name,
@@ -2358,11 +2508,6 @@ router.get("/safespots/:id", async (req, res) => {
       openLate: row.open_late,
     });
   } catch (err) {
-    // Dev fallback: Supabase unavailable
-    if (process.env.NODE_ENV === "development") {
-      const fixture = DEV_SAFESPOTS.find((s) => s.id === id);
-      if (fixture) { res.json(fixture); return; }
-    }
     req.log.error({ err }, "Unable to read SafeSpot");
     res.status(503).json({ error: "SafeSpot temporarily unavailable" });
   }
@@ -2418,17 +2563,8 @@ router.post("/companion/stripe/onboard", async (req, res) => {
     req.log.info({ companionId, accountId }, "Stripe Connect onboarding link created");
     res.json({ url: link.url });
   } catch (err) {
-    // Dev fallback: Stripe not connected — simulate onboarding by returning a dev URL
-    if (process.env.NODE_ENV === "development") {
-      devCompanionStripeAccounts.set(companionId, `dev-acct-${companionId}`);
-      req.log.info({ companionId }, "Dev: Stripe Connect simulated — account created in-memory");
-      // Return the dashboard back URL — companion returns "onboarded" immediately
-      const origin = (req.headers["x-forwarded-proto"] ?? "https") + "://" + (req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost");
-      const base = `${origin}${process.env.FRONTEND_BASE_PATH ?? "/onlyfavors"}`;
-      res.json({ url: `${base}/dashboard/companion?stripe=return`, devSimulated: true }); return;
-    }
     req.log.error({ err }, "Unable to create Stripe Connect onboarding link");
-    res.status(500).json({ error: "Unable to start payout setup" });
+    res.status(503).json({ error: "Payout setup is not available until Stripe is connected" });
   }
 });
 
@@ -2462,22 +2598,44 @@ router.get("/companion/stripe/status", async (req, res) => {
       payoutsEnabled: account.payouts_enabled ?? false,
     });
   } catch (err) {
-    // Dev fallback: Stripe not connected — infer status from in-memory account map
-    if (process.env.NODE_ENV === "development") {
-      const devAccountId = devCompanionStripeAccounts.get(companionId);
-      if (devAccountId) {
-        res.json({ status: "active", accountId: devAccountId, detailsSubmitted: true, payoutsEnabled: true, devSimulated: true }); return;
-      }
-      res.json({ status: "not_started" }); return;
-    }
     req.log.error({ err }, "Unable to retrieve Stripe Connect account status");
-    res.status(500).json({ error: "Unable to check payout status" });
+    res.status(503).json({ error: "Unable to check payout status" });
   }
 });
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+async function publicCompanionExtras(companionId: string) {
+  let availability: Array<{ day: string; hours: string }> = [];
+  try {
+    const windows = await db.select().from(availabilityWindows).where(eq(availabilityWindows.companionId, companionId));
+    availability = windowsToPublic(windows);
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
+  let paused = false;
+  let away: { enabled: boolean; returnDate: string; note: string } | undefined;
+  let memberSince: string | undefined;
+  let totalBookings = 0;
+  try {
+    const [row] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, companionId)).limit(1);
+    if (row) {
+      paused = row.paused;
+      memberSince = row.createdAt.toLocaleString("en-US", { month: "short", year: "numeric" });
+      const prefs = mergeWorkspacePrefs(row.workspacePrefs);
+      if (prefs.away.enabled) {
+        away = { enabled: true, returnDate: prefs.away.returnDate, note: prefs.away.note };
+      }
+    }
+    const completed = await db.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.companionId, companionId), eq(bookings.status, "completed")));
+    totalBookings = completed.length;
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
+  return { availability, paused, away, memberSince, totalBookings };
+}
 
 function mapCompanionRow(row: {
   id: string;
@@ -2487,6 +2645,7 @@ function mapCompanionRow(row: {
   activities: string[];
   languages: string[];
   hourly_rate: number;
+  day_rate?: number | null;
   response_time: string;
   rating: number;
   review_count: number;
@@ -2496,6 +2655,8 @@ function mapCompanionRow(row: {
   boundaries?: string[];
   interview_answers?: string[];
   photo_url?: string | null;
+  available_today?: boolean;
+  created_at?: string;
 }) {
   return {
     id: row.id,
@@ -2505,6 +2666,7 @@ function mapCompanionRow(row: {
     activities: row.activities,
     languages: row.languages,
     hourlyRate: row.hourly_rate,
+    dayRate: row.day_rate ?? null,
     responseTime: row.response_time,
     rating: row.rating,
     reviewCount: row.review_count,
@@ -2514,7 +2676,23 @@ function mapCompanionRow(row: {
     boundaries: row.boundaries ?? [],
     interviewAnswers: (row.interview_answers ?? []).filter(Boolean).slice(0, 3),
     photoUrl: row.photo_url ?? null,
+    availableNow: Boolean(row.available_today),
+    createdAt: row.created_at ?? undefined,
   };
+}
+
+async function withReviewedFlag<T extends { id: string }>(rows: T[]): Promise<Array<T & { reviewed: boolean }>> {
+  if (rows.length === 0) return [];
+  try {
+    const found = await db
+      .select({ bookingId: reviewRows.bookingId })
+      .from(reviewRows)
+      .where(inArray(reviewRows.bookingId, rows.map((row) => row.id)));
+    const reviewedIds = new Set(found.map((row) => row.bookingId));
+    return rows.map((row) => ({ ...row, reviewed: reviewedIds.has(row.id) }));
+  } catch {
+    return rows.map((row) => ({ ...row, reviewed: false }));
+  }
 }
 
 function formatBookingFull(b: {
@@ -2536,6 +2714,7 @@ function formatBookingFull(b: {
   depositPaidAt: Date | null;
   confirmedAt: Date | null;
   authorizedAt: Date | null;
+  payoutHeld?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -2557,6 +2736,7 @@ function formatBookingFull(b: {
     depositPaidAt: b.depositPaidAt?.toISOString() ?? null,
     confirmedAt: b.confirmedAt?.toISOString() ?? null,
     authorizedAt: b.authorizedAt?.toISOString() ?? null,
+    payoutHeld: Boolean(b.payoutHeld),
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
   };
@@ -2592,6 +2772,38 @@ function formatBooking(b: {
 // ---------------------------------------------------------------------------
 // Platform announcement (admin-set, shown on home page)
 // ---------------------------------------------------------------------------
+router.get("/stats", async (_req, res) => {
+  try {
+    const [companions, completed] = await Promise.all([
+      db.select({
+        id: companionProfiles.id,
+        city: companionProfiles.city,
+        rating: companionProfiles.rating,
+        reviewCount: companionProfiles.reviewCount,
+      }).from(companionProfiles).where(and(eq(companionProfiles.approved, true), eq(companionProfiles.paused, false))),
+      db.select({ id: bookings.id }).from(bookings).where(eq(bookings.status, "completed")),
+    ]);
+    const rated = companions.filter((row) => Number(row.reviewCount) > 0);
+    const averageRating = rated.length
+      ? Math.round((rated.reduce((sum, row) => sum + Number(row.rating), 0) / rated.length) * 100) / 100
+      : 0;
+    const cities = new Set(companions.map((row) => row.city).filter(Boolean));
+    res.json({
+      companionCount: companions.length,
+      completedBookings: completed.length,
+      averageRating,
+      cityCount: cities.size,
+    });
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      res.json({ companionCount: 0, completedBookings: 0, averageRating: 0, cityCount: 0 });
+      return;
+    }
+    req.log.error({ err }, "Public stats failed");
+    res.json({ companionCount: 0, completedBookings: 0, averageRating: 0, cityCount: 0 });
+  }
+});
+
 router.get("/announcement", async (_req, res) => {
   try {
     const [row] = await db.select().from(platformSettings).where(eq(platformSettings.id, "default")).limit(1);

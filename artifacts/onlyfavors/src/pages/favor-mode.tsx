@@ -121,7 +121,7 @@ export default function FavorMode() {
   const progress = Math.min(elapsed / (totalMinutes * 60), 1);
   const remainingMin = Math.max(0, totalMinutes - Math.floor(elapsed / 60));
 
-  const postCheckIn = async (kind: 'arrival' | 'ok') => {
+  const postCheckIn = async (kind: 'arrival' | 'ok' | 'checkout') => {
     if (!id || !live) return;
     await fetch(`/api/bookings/${id}/checkin`, {
       method: 'POST',
@@ -384,7 +384,7 @@ export default function FavorMode() {
             </button>
           </div>
           <p className="mt-3 text-[10px] leading-5 text-[#9d7e8e]">
-            Precise location is never stored. Sharing stops automatically after checkout and is deleted within 24 hours.
+            Precise location is encrypted for this favor. It stops being readable after 24 hours. Sharing does not send a live pin to the public directory.
           </p>
         </div>
 
@@ -537,7 +537,7 @@ export default function FavorMode() {
             </div>
 
             <p className="mt-4 text-center text-[11px] leading-5 text-[#9d7e8e]">
-              Venue staff scan this to log your arrival. Your Trust Circle gets a quiet "arrived safely" — no details shared.
+              This QR opens the check-in page for this booking. Venue staff are not in a scan network. Trust Circle is not texted.
             </p>
 
             <div className="mt-6 space-y-3">
@@ -566,12 +566,13 @@ export default function FavorMode() {
           <div className="w-full max-w-md rounded-t-[28px] bg-[#1f0c1b] p-8" onClick={(e) => e.stopPropagation()}>
             <CheckCircle2 className="h-8 w-8 text-[#3dbd8c]" />
             <h2 className="mt-4 font-serif text-3xl text-[#f9efe5]">End this booking?</h2>
-            <p className="mt-3 text-sm text-[#d9c4cf]">Both parties confirm. Payment releases, location sharing stops, and a private memory card is offered.</p>
+            <p className="mt-3 text-sm text-[#d9c4cf]">Checkout is recorded, then payment is captured unless a payout is held. Location sharing stops.</p>
             <button
               disabled={completing}
               onClick={async () => {
                 setCompleting(true);
                 try {
+                  try { await postCheckIn('checkout'); } catch {}
                   await fetch(`/api/bookings/${id}/complete`, {
                     method: 'POST',
                     credentials: 'include',

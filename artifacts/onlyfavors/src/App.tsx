@@ -64,6 +64,12 @@ function Header() {
         <SavedNavIcon />
         {user ? (
           <>
+            {user.roles.includes('customer') && user.roles.includes('companion') && (
+              <div className="flex overflow-hidden rounded-full border border-[#dfd2c9]">
+                <Link href="/dashboard/customer" className="px-3 py-2 text-[11px] font-bold text-[#654c5f] hover:bg-[#eee2d9]" data-testid="link-switch-customer">Customer</Link>
+                <Link href="/dashboard/companion" className="px-3 py-2 text-[11px] font-bold text-[#654c5f] hover:bg-[#eee2d9]" data-testid="link-switch-companion">Companion</Link>
+              </div>
+            )}
             <Link href={dashboard} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-account">{user.displayName || user.email.split('@')[0]}</Link>
             <button type="button" onClick={() => void logout()} className="inline-flex h-10 items-center rounded-full px-3 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="button-logout">Sign out</button>
           </>
@@ -551,35 +557,94 @@ function EmptyState({ icon: Icon = Search, title, body, action }: { icon?: typeo
   return <div className="rounded-2xl border border-dashed border-[#cbbab5] bg-[#fbf6f0] px-6 py-14 text-center" data-testid="state-empty"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#ead0dd] text-[#7f2e62]"><Icon className="h-5 w-5" /></div><h3 className="mt-5 font-serif text-2xl text-[#48213d]">{title}</h3><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#725e69]">{body}</p>{action && <div className="mt-5">{action}</div>}</div>;
 }
 
-function HomeFeaturedCard({ id, initials, name, city, state, rating, reviewCount, rate, activities, tag }: {
-  id: string; initials: string; name: string; city: string; state: string;
-  rating: number; reviewCount: number; rate: number; activities: string[]; tag?: string;
-}) {
+function HomeFeaturedCard({ companion, tag }: { companion: Companion; tag?: string }) {
+  const initials = companionInitials(companion.displayName);
   return (
-    <Link href={`/companions/${id}`} className="group block rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-1 hover:border-[#bc83a6] hover:shadow-[0_18px_34px_rgba(88,37,70,.09)]" data-testid={`home-companion-${id}`}>
+    <Link href={`/companions/${companion.id}`} className="group block rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-1 hover:border-[#bc83a6] hover:shadow-[0_18px_34px_rgba(88,37,70,.09)]" data-testid={`home-companion-${companion.id}`}>
       <div className="flex items-start justify-between">
         <div className="grid h-12 w-12 place-items-center rounded-full bg-[#ead0dd] font-serif text-xl text-[#7f2e62]">{initials}</div>
         {tag && <span className="rounded-full bg-[#e8f0e8] px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#477254]">{tag}</span>}
       </div>
       <div className="mt-4 flex items-center gap-2">
-        <h3 className="font-serif text-[26px] leading-none text-[#48213d]">{name}</h3>
-        <BadgeCheck className="h-4 w-4 text-[#7f2e62]" />
+        <h3 className="font-serif text-[26px] leading-none text-[#48213d]">{companion.displayName}</h3>
+        {companion.verified && <BadgeCheck className="h-4 w-4 text-[#7f2e62]" />}
       </div>
-      <p className="mt-1.5 flex items-center gap-1 text-xs text-[#806c76]"><MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />{city}, {state}</p>
+      <p className="mt-1.5 flex items-center gap-1 text-xs text-[#806c76]"><MapPin className="h-3.5 w-3.5 text-[#9b6b88]" />{companion.city}</p>
       <div className="mt-2 flex items-center gap-1.5">
-        <StarDisplay rating={Math.round(rating)} size="xs" />
-        <span className="font-mono text-[10px] font-bold text-[#48213d]">{rating.toFixed(1)}</span>
-        <span className="text-[10px] text-[#9b858e]">· {reviewCount} reviews</span>
+        {companion.rating > 0 ? (
+          <>
+            <StarDisplay rating={Math.round(companion.rating)} size="xs" />
+            <span className="font-mono text-[10px] font-bold text-[#48213d]">{companion.rating.toFixed(1)}</span>
+            <span className="text-[10px] text-[#9b858e]">· {companion.reviewCount} {companion.reviewCount === 1 ? 'review' : 'reviews'}</span>
+          </>
+        ) : (
+          <span className="text-[10px] text-[#9b858e]">New to OnlyFavors</span>
+        )}
       </div>
       <div className="mt-3.5 flex flex-wrap gap-1.5">
-        {activities.slice(0, 3).map((a) => <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>)}
+        {companion.activities.slice(0, 3).map((a) => <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[10px] font-semibold text-[#72566a]">{a}</span>)}
       </div>
       <div className="mt-5 flex items-center justify-between border-t border-[#ece1d9] pt-4">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${rate}/hr</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${companion.hourlyRate}/hr</span>
         <span className="flex items-center gap-1 text-[10px] font-bold text-[#7f2e62] group-hover:underline">View profile <ChevronRight className="h-3 w-3" /></span>
       </div>
     </Link>
   );
+}
+
+function companionInitials(name: string) {
+  return name.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function relativeJoined(iso: string) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (Number.isNaN(days) || days < 0) return 'Recently approved';
+  if (days === 0) return 'Joined today';
+  if (days === 1) return 'Joined yesterday';
+  if (days < 14) return `Joined ${days} days ago`;
+  return 'Recently approved';
+}
+
+function useDirectoryCompanions() {
+  return useListCompanions(undefined, {
+    query: { queryKey: getListCompanionsQueryKey(), retry: false, staleTime: 60_000 },
+  });
+}
+
+function usePublicStats() {
+  return useQuery<{ companionCount: number; completedBookings: number; averageRating: number; cityCount: number }>({
+    queryKey: ['public-stats'],
+    queryFn: async () => {
+      const res = await fetch('/api/stats', { credentials: 'include' });
+      if (!res.ok) return { companionCount: 0, completedBookings: 0, averageRating: 0, cityCount: 0 };
+      return res.json();
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+type PublicStory = {
+  id: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  companionId: string;
+  companionName: string;
+  city: string;
+};
+
+function useRecentReviews() {
+  return useQuery<PublicStory[]>({
+    queryKey: ['recent-reviews'],
+    queryFn: async () => {
+      const res = await fetch('/api/reviews/recent');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
 }
 
 function HomeTrustPillar({ icon: Icon, title, body, accent }: { icon: typeof ShieldCheck; title: string; body: string; accent: string }) {
@@ -739,7 +804,7 @@ function WelcomePage() {
           {/* Safety note */}
           <div className="mt-16 flex items-center gap-2 text-[10px] text-[#b0929f]">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#477254]" />
-            OnlyFavors is platonic-only, identity-verified, and built with your privacy at the center.
+            OnlyFavors is platonic-only, adults-only, and built with your privacy at the center.
           </div>
         </div>
       </div>
@@ -843,6 +908,14 @@ function HomeUpcomingBookingBanner() {
 
 function Home() {
   const health = useHealthCheck();
+  const directory = useDirectoryCompanions();
+  const stats = usePublicStats();
+  const live = directory.data ?? [];
+  const featured = live.slice(0, 3);
+  const spotlight = [...live].sort((a, b) => (b.reviewCount - a.reviewCount) || (b.rating - a.rating))[0] ?? featured[0];
+  const spotlightAnswers = ((spotlight as { interviewAnswers?: string[] } | undefined)?.interviewAnswers ?? []).filter(Boolean).slice(0, 3);
+  const hero = spotlight;
+  const publicStats = stats.data ?? { companionCount: 0, completedBookings: 0, averageRating: 0, cityCount: 0 };
   return (
     <Shell>
       <main className="page-enter">
@@ -859,7 +932,7 @@ function Home() {
             <div className="relative z-10 max-w-xl">
               <p className="mb-5 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]"><span className="h-2 w-2 rounded-full bg-[#a75c87]" />A more human kind of marketplace</p>
               <h1 className="font-serif text-[62px] leading-[.9] tracking-[-.04em] text-[#48213d] md:text-[88px]">Good company,<br /><em className="text-[#8e416e]">on your terms.</em></h1>
-              <p className="mt-7 max-w-md text-[17px] leading-7 text-[#654c5f]">Book thoughtful, verified companions for the things you would rather not do alone. Dinner, a museum, a long walk — always platonic, always clear.</p>
+              <p className="mt-7 max-w-md text-[17px] leading-7 text-[#654c5f]">Book thoughtful, approved companions for the things you would rather not do alone. Dinner, a museum, a long walk — always platonic, always clear.</p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-[#fff5eb] shadow-[0_10px_24px_rgba(127,46,98,.2)] transition hover:-translate-y-0.5 hover:bg-[#65234e]" data-testid="link-hero-explore">Find your kind of company <ArrowRight className="h-4 w-4" /></Link>
                 <Link href="/safety" className="inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-bold text-[#654c5f] transition hover:bg-[#e6d4d2]" data-testid="link-hero-safety"><ShieldCheck className="h-4 w-4" />See how safety works</Link>
@@ -870,11 +943,21 @@ function Home() {
               <div className="absolute left-5 top-12 h-[310px] w-[275px] rotate-[-7deg] rounded-[28px] bg-[#d2a9bb] shadow-[0_24px_50px_rgba(85,38,71,.13)] md:h-[370px] md:w-[330px]" />
               <div className="absolute bottom-5 right-3 h-[265px] w-[255px] rotate-[8deg] rounded-[28px] bg-[#b7c4b3] shadow-[0_24px_50px_rgba(49,74,57,.13)] md:h-[310px] md:w-[290px]" />
               <div className="float-slow absolute left-14 top-1 z-10 w-[290px] rounded-[25px] border border-[#f4e4dc] bg-[#fbf4ed] p-5 shadow-[0_25px_55px_rgba(66,29,56,.18)] md:left-20 md:w-[330px]">
-                <div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">Verified companion</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div>
-                <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">M</div><div><p className="font-serif text-2xl text-[#48213d]">Maya</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />San Francisco, CA</p></div></div>
-                <div className="mt-3 flex items-center gap-1"><StarDisplay rating={5} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">4.9</span><span className="text-[10px] text-[#9b858e]">· 3 reviews</span></div>
-                <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Museum visits</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Coffee</span><span className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">Gallery tours</span></div>
-                <div className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">$65 / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></div>
+                <div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">{hero?.verified ? 'Verified companion' : 'Platonic company'}</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div>
+                {hero ? (
+                  <>
+                    <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">{companionInitials(hero.displayName)}</div><div><p className="font-serif text-2xl text-[#48213d]">{hero.displayName}</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />{hero.city}</p></div></div>
+                    <div className="mt-3 flex items-center gap-1">{hero.rating > 0 ? <><StarDisplay rating={Math.round(hero.rating)} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">{hero.rating.toFixed(1)}</span><span className="text-[10px] text-[#9b858e]">· {hero.reviewCount} {hero.reviewCount === 1 ? 'review' : 'reviews'}</span></> : <span className="text-[10px] text-[#9b858e]">New to OnlyFavors</span>}</div>
+                    <div className="mt-4 flex flex-wrap gap-2">{hero.activities.slice(0, 3).map((act) => <span key={act} className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">{act}</span>)}</div>
+                    <Link href={`/companions/${hero.id}`} className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${hero.hourlyRate} / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></Link>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">of</div><div><p className="font-serif text-2xl text-[#48213d]">Your companion</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />Approved profiles appear here</p></div></div>
+                    <p className="mt-4 text-xs leading-5 text-[#806c76]">When companions are approved, their public profiles show here — never invented names or ratings.</p>
+                    <Link href="/explore" className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Directory</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">Browse <ChevronRight className="h-3.5 w-3.5" /></span></Link>
+                  </>
+                )}
               </div>
               <div className="absolute bottom-7 left-0 z-20 flex items-center gap-2 rounded-full border border-[#f4e4dc] bg-[#fbf4ed] px-4 py-3 shadow-lg"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#cad8cb] text-[#376448]"><Check className="h-4 w-4" /></span><span className="text-xs font-semibold text-[#543d50]">Safety plan included</span></div>
             </div>
@@ -885,7 +968,7 @@ function Home() {
         <section className="border-b border-[#ddcfc6] bg-[#fdf9f5] px-5 py-8 lg:px-8" data-testid="home-how-it-works-strip">
           <div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-4">
             {([
-              { n: '1', label: 'Browse', desc: 'Explore verified companions by city or activity.' },
+              { n: '1', label: 'Browse', desc: 'Explore approved companions by city or activity.' },
               { n: '2', label: 'Plan',   desc: 'Choose a date, time, and public SafeSpot venue.' },
               { n: '3', label: 'Chat',   desc: 'A $10 deposit unlocks the masked chat thread.' },
               { n: '4', label: 'Enjoy',  desc: 'Meet, connect, and leave a review after.' },
@@ -905,7 +988,7 @@ function Home() {
         <section className="border-b border-[#ddcfc6] bg-[#FFF7ED]">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-6 px-5 py-5 lg:px-8 sm:gap-10">
             {([
-              { label: 'Companions are identity-verified before they appear in Explore', value: '18+' },
+              { label: 'A person approves each companion before they appear in Explore', value: '18+' },
               { label: 'Public SafeSpot meetings, never a published home address', value: 'SafeSpot' },
               { label: 'Trust team reviews every safety report', value: 'Human review' },
               { label: 'Sexual services, minors, and off-platform payments are prohibited', value: 'Zero tolerance' },
@@ -1006,9 +1089,16 @@ function Home() {
           <div className="mx-auto max-w-7xl px-5 lg:px-8">
             <SectionIntro eyebrow="Meet a few" title={"Good company,\ncloser than you think."} />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <HomeFeaturedCard id="companion-maya" initials="MR" name="Maya R." city="San Francisco" state="CA" rating={4.9} reviewCount={3} rate={65} activities={["Museum visits", "Coffee conversations", "Gallery tours"]} tag="Most popular" />
-              <HomeFeaturedCard id="companion-jordan" initials="JK" name="Jordan K." city="New York" state="NY" rating={4.8} reviewCount={12} rate={75} activities={["Gallery tours", "Cooking classes", "Evening walks"]} />
-              <HomeFeaturedCard id="companion-simone" initials="SA" name="Simone A." city="Chicago" state="IL" rating={4.9} reviewCount={19} rate={60} activities={["Architecture tours", "Jazz evenings", "Museum visits"]} tag="New pick" />
+              {directory.isLoading && [0, 1, 2].map((i) => <div key={i} className="skeleton h-56 rounded-[22px]" />)}
+              {!directory.isLoading && featured.map((c, i) => (
+                <HomeFeaturedCard key={c.id} companion={c} tag={i === 0 && c.reviewCount > 0 ? 'Most reviewed' : undefined} />
+              ))}
+              {!directory.isLoading && featured.length === 0 && (
+                <div className="rounded-[22px] border border-dashed border-[#c6aeb8] bg-transparent p-8 text-center sm:col-span-2">
+                  <p className="font-serif text-2xl text-[#48213d]">No companions are live yet.</p>
+                  <p className="mt-2 text-xs text-[#806c76]">Approved profiles appear here as they go live. We do not invent names or ratings.</p>
+                </div>
+              )}
               <Link href="/explore" className="group flex flex-col items-center justify-center gap-3 rounded-[22px] border border-dashed border-[#c6aeb8] bg-transparent p-8 text-center transition hover:border-[#9d557e] hover:bg-[#f0e4db]" data-testid="link-home-explore-all">
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-[#ead0dd] text-[#7f2e62]"><Compass className="h-5 w-5" /></div>
                 <p className="font-serif text-2xl text-[#48213d]">Browse all companions</p>
@@ -1019,79 +1109,82 @@ function Home() {
           </div>
         </section>
 
-        {/* ── Companion of the week spotlight ── */}
+        {spotlight && (
         <section className="border-t border-[#ddcfc6] bg-[#fbf7f1] px-5 py-16 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="mb-8 flex items-end justify-between">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Companion spotlight</p>
-                <h2 className="mt-2 font-serif text-4xl text-[#48213d]">This week's pick.</h2>
+                <h2 className="mt-2 font-serif text-4xl text-[#48213d]">From the directory.</h2>
               </div>
               <Link href="/explore" className="hidden items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline sm:flex">
                 Browse all companions <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
             <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.6fr]">
-              {/* Left: companion card */}
               <div className="rounded-[26px] bg-[#3d2038] p-8 text-[#f9efe5]">
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-[#c695ae]/20 px-3 py-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#c695ae]" />
-                  <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Spotlight pick</p>
+                  <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Live profile</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[18px] bg-[#ead0dd] font-serif text-3xl text-[#7f2e62]">M</div>
+                  <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[18px] bg-[#ead0dd] font-serif text-3xl text-[#7f2e62]">{companionInitials(spotlight.displayName)}</div>
                   <div>
-                    <p className="font-serif text-3xl text-[#f9efe5]">Maya R.</p>
-                    <p className="text-sm text-[#c695ae]">San Francisco · $65/hr</p>
+                    <p className="font-serif text-3xl text-[#f9efe5]">{spotlight.displayName}</p>
+                    <p className="text-sm text-[#c695ae]">{spotlight.city} · ${spotlight.hourlyRate}/hr</p>
                   </div>
                 </div>
                 <div className="mt-6 flex gap-3">
-                  <div className="flex items-center gap-1.5 rounded-full bg-[#5a2550] px-3 py-1.5">
-                    <Star className="h-3.5 w-3.5 fill-[#c695ae] text-[#c695ae]" />
-                    <span className="font-mono text-xs font-bold text-[#f9efe5]">4.9</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 rounded-full bg-[#5a2550] px-3 py-1.5">
-                    <BadgeCheck className="h-3.5 w-3.5 text-[#c695ae]" />
-                    <span className="font-mono text-xs text-[#f9efe5]">Identity verified</span>
-                  </div>
+                  {spotlight.rating > 0 && (
+                    <div className="flex items-center gap-1.5 rounded-full bg-[#5a2550] px-3 py-1.5">
+                      <Star className="h-3.5 w-3.5 fill-[#c695ae] text-[#c695ae]" />
+                      <span className="font-mono text-xs font-bold text-[#f9efe5]">{spotlight.rating.toFixed(1)}</span>
+                    </div>
+                  )}
+                  {spotlight.verified && (
+                    <div className="flex items-center gap-1.5 rounded-full bg-[#5a2550] px-3 py-1.5">
+                      <BadgeCheck className="h-3.5 w-3.5 text-[#c695ae]" />
+                      <span className="font-mono text-xs text-[#f9efe5]">Identity verified</span>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-6 flex flex-wrap gap-2">
-                  {['Museum visits', 'Coffee conversations', 'Gallery tours'].map((act) => (
+                  {spotlight.activities.slice(0, 4).map((act) => (
                     <span key={act} className="rounded-full border border-[#6a3858] px-3 py-1 text-[10px] text-[#d9c4cf]">{act}</span>
                   ))}
                 </div>
-                <Link href="/companions/companion-maya"
+                <Link href={`/companions/${spotlight.id}`}
                   className="mt-8 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e]"
                   data-testid="link-spotlight-view-profile">
                   View profile <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
-              {/* Right: Q&A highlight */}
               <div className="space-y-5">
                 <p className="font-serif text-[22px] leading-snug text-[#48213d]">
-                  "I've always loved how a good conversation can make a place feel alive — museums, markets, quiet gardens."
+                  {spotlight.biography || 'This companion has not added a biography yet.'}
                 </p>
-                <div className="space-y-4">
-                  {[
-                    { q: 'What draws you to this work?', a: 'Being present with someone and watching them genuinely enjoy themselves is something I find deeply rewarding.' },
-                    { q: 'What does an ideal favor look like for you?', a: 'An unhurried morning at a photography exhibition, then coffee somewhere with big windows. No agenda, just curiosity.' },
-                    { q: 'How would regulars describe you?', a: 'Warm but not performatively cheerful. I\'ll match your energy — quiet if you need quiet, animated if you\'re excited.' },
-                  ].map(({ q, a }) => (
-                    <div key={q} className="rounded-[18px] border border-[#e8ddd6] bg-white p-5">
-                      <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">{q}</p>
-                      <p className="mt-2 text-sm leading-6 text-[#654c5f]">{a}</p>
-                    </div>
-                  ))}
-                </div>
-                <Link href="/companions/companion-maya"
+                {spotlightAnswers.length > 0 ? (
+                  <div className="space-y-4">
+                    {spotlightAnswers.map((answer, i) => (
+                      <div key={i} className="rounded-[18px] border border-[#e8ddd6] bg-white p-5">
+                        <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">In their words</p>
+                        <p className="mt-2 text-sm leading-6 text-[#654c5f]">{answer}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm leading-6 text-[#725e69]">Their full profile has activities, boundaries, and availability — nothing invented for this page.</p>
+                )}
+                <Link href={`/companions/${spotlight.id}`}
                   className="inline-flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline"
                   data-testid="link-spotlight-full-profile">
-                  Read Maya's full profile <ArrowRight className="h-3.5 w-3.5" />
+                  Read full profile <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             </div>
           </div>
         </section>
+        )}
 
         {/* ── SafeSpot Network ── */}
         <section className="border-y border-[#ddcfc6] bg-[#3d2038]">
@@ -1180,47 +1273,14 @@ function Home() {
           </div>
         </section>
 
-        {/* ── Companion of the week ── */}
-        <section className="mx-auto max-w-7xl px-5 pb-20 lg:px-8">
-          <div className="rounded-[28px] bg-[#ead0dd] p-8 md:flex md:items-center md:gap-10 md:p-12">
-            <div className="flex-1">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#7f2e62]">Companion spotlight</p>
-              <h2 className="mt-3 font-serif text-5xl leading-[.94] text-[#48213d]">Maya R.<br /><em>this week's pick.</em></h2>
-              <p className="mt-4 max-w-md text-sm leading-6 text-[#654c5f]">
-                Maya has been a top-rated companion in San Francisco for over a year. Customers love her for museum visits, gallery walks, and thoughtful conversation over coffee. 4.9 stars across 86 reviews.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {['Museum visits', 'Gallery tours', 'Coffee conversations', 'Art shows'].map((a) => (
-                  <span key={a} className="rounded-full bg-[#d3a8c0] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-wider text-[#48213d]">{a}</span>
-                ))}
-              </div>
-              <div className="mt-6 flex gap-3">
-                <Link href="/companions/companion-maya" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white hover:bg-[#9d3a78]" data-testid="link-companion-of-week">
-                  View profile <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link href="/book?companion=companion-maya" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#c08eae] px-5 text-sm font-bold text-[#48213d] hover:bg-[#d3a8c0]" data-testid="link-book-spotlight">
-                  Book now
-                </Link>
-              </div>
-            </div>
-            <div className="mt-8 grid h-48 w-48 shrink-0 place-items-center self-center rounded-full bg-[#c08eae] md:mt-0">
-              <div className="text-center">
-                <p className="font-serif text-6xl text-[#fbf7f1]">MR</p>
-                <StarDisplay rating={4.9} size="sm" />
-                <p className="mt-1 font-mono text-[9px] font-bold text-[#d4b8ca]">$65/hr · SF</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Customer testimonials ── */}
+        {/* ── Why book ── */}
         <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
-          <SectionIntro eyebrow="From the community" title={"Time well spent,\nin their own words."} />
+          <SectionIntro eyebrow="Why people book" title={"Company without the performance."} />
           <div className="grid gap-4 md:grid-cols-3">
             {([
-              { quote: "I was dreading the museum alone after a hard week. Maya turned it into the best afternoon I'd had in months. No pressure, just good conversation in front of art I actually cared about.", name: "Priya S.", city: "San Francisco" },
-              { quote: "I was skeptical — it felt strange to 'book a friend.' Then I had coffee with Jordan and it was just... easy. We talked for two hours. I left feeling like myself again.", name: "Thomas A.", city: "New York" },
-              { quote: "The boundary receipt made my husband comfortable. He knew exactly what the arrangement was. We both felt safe, and I had the gallery walk I'd been putting off for a year.", name: "Claire M.", city: "Chicago" },
+              { quote: "A museum, a meal, a long walk — with someone who agreed to show up. No dating script, no private addresses.", name: "Always platonic", city: "Written into every booking" },
+              { quote: "You choose a public SafeSpot before anything is confirmed. Exact meeting details stay between you, your companion, and trust staff.", name: "Public places only", city: "SafeSpot Network" },
+              { quote: "A companion can decline. You can cancel. Nothing moves forward until both people say yes.", name: "Mutual yes", city: "No auto-confirms" },
             ] as const).map(({ quote, name, city }) => (
               <div key={name} className="flex flex-col gap-5 rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-7">
                 <p className="flex-1 text-[15px] leading-7 text-[#654c5f]">&ldquo;{quote}&rdquo;</p>
@@ -1230,10 +1290,7 @@ function Home() {
                   </div>
                   <div>
                     <p className="text-sm font-bold text-[#48213d]">{name}</p>
-                    <p className="text-[10px] text-[#9b858e]">{city} · verified booking</p>
-                  </div>
-                  <div className="ml-auto flex">
-                    <StarDisplay rating={5} size="xs" />
+                    <p className="text-[10px] text-[#9b858e]">{city}</p>
                   </div>
                 </div>
               </div>
@@ -1257,44 +1314,52 @@ function Home() {
           <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
             <div>
               <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Featured companions</p>
-              <h2 className="mt-1 font-serif text-3xl text-[#48213d]">Highly rated this week.</h2>
+              <h2 className="mt-1 font-serif text-3xl text-[#48213d]">In the directory.</h2>
             </div>
             <Link href="/explore" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#7f2e62] hover:underline">
               Browse all <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {([
-              { initials: 'M', name: 'Maya', city: 'San Francisco', rate: '$65', rating: 4.9, reviews: 31, acts: ['Museum visits', 'Coffee', 'Gallery tours'], id: 'companion-maya' },
-              { initials: 'J', name: 'Jordan', city: 'New York', rate: '$75', rating: 4.8, reviews: 27, acts: ['Gallery tours', 'Cooking classes', 'Evening walks'], id: 'companion-jordan' },
-              { initials: 'S', name: 'Simone', city: 'Chicago', rate: '$60', rating: 4.9, reviews: 19, acts: ['Architecture tours', 'Jazz evenings', 'Museum visits'], id: 'companion-simone' },
-            ] as const).map((c) => (
+            {featured.map((c) => (
               <Link key={c.id} href={`/companions/${c.id}`}
                 className="group flex flex-col rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 transition hover:-translate-y-0.5 hover:border-[#9d557e] hover:shadow-md"
                 data-testid={`home-spotlight-${c.id}`}>
                 <div className="flex items-center gap-3">
-                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-xl text-[#7f2e62]">{c.initials}</div>
+                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-xl text-[#7f2e62]">{companionInitials(c.displayName)}</div>
                   <div>
-                    <p className="font-serif text-lg text-[#48213d]">{c.name}</p>
+                    <p className="font-serif text-lg text-[#48213d]">{c.displayName}</p>
                     <p className="flex items-center gap-1 text-[10px] text-[#806c76]"><MapPin className="h-3 w-3" />{c.city}</p>
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-1">
-                  <StarDisplay rating={5} size="xs" />
-                  <span className="ml-1 font-mono text-[9px] font-bold text-[#48213d]">{c.rating}</span>
-                  <span className="text-[9px] text-[#9b858e]">· {c.reviews} reviews</span>
+                  {c.rating > 0 ? (
+                    <>
+                      <StarDisplay rating={Math.round(c.rating)} size="xs" />
+                      <span className="ml-1 font-mono text-[9px] font-bold text-[#48213d]">{c.rating.toFixed(1)}</span>
+                      <span className="text-[9px] text-[#9b858e]">· {c.reviewCount} {c.reviewCount === 1 ? 'review' : 'reviews'}</span>
+                    </>
+                  ) : (
+                    <span className="text-[9px] text-[#9b858e]">New to OnlyFavors</span>
+                  )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {c.acts.map((a) => (
+                  {c.activities.slice(0, 3).map((a) => (
                     <span key={a} className="rounded-full bg-[#f0e4db] px-2.5 py-1 text-[9px] text-[#654c5f]">{a}</span>
                   ))}
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-[#ece1d9] pt-3">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">{c.rate} / hour</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${c.hourlyRate} / hour</span>
                   <span className="text-[9px] font-bold text-[#7f2e62] opacity-0 transition group-hover:opacity-100">Book →</span>
                 </div>
               </Link>
             ))}
+            {!directory.isLoading && featured.length === 0 && (
+              <div className="rounded-[22px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-8 text-center sm:col-span-2 lg:col-span-3">
+                <p className="font-serif text-xl text-[#48213d]">The directory is empty.</p>
+                <p className="mt-2 text-sm text-[#806c76]">Approved companions will show here.</p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1307,7 +1372,7 @@ function Home() {
               </div>
               <div>
                 <p className="text-sm font-bold text-[#48213d]">Give the gift of good company</p>
-                <p className="text-xs text-[#806c76]">Send a gift card for any amount. Recipient picks their companion and activity.</p>
+                <p className="text-xs text-[#806c76]">Gift cards are not live yet. You can still leave a note for someone who should know about OnlyFavors.</p>
               </div>
             </div>
             <Link href="/gift"
@@ -1335,10 +1400,10 @@ function Home() {
           <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
             <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
               {([
-                { value: '1,200+', label: 'Verified companions', icon: Users },
-                { value: '8,400+', label: 'Favors completed', icon: HeartHandshake },
-                { value: '4.93', label: 'Average rating', icon: Star },
-                { value: '47', label: 'Cities covered', icon: MapPin },
+                { value: String(publicStats.companionCount), label: 'Live companions', icon: Users },
+                { value: String(publicStats.completedBookings), label: 'Favors completed', icon: HeartHandshake },
+                { value: publicStats.averageRating > 0 ? publicStats.averageRating.toFixed(2) : '—', label: 'Average rating', icon: Star },
+                { value: String(publicStats.cityCount), label: 'Cities with companions', icon: MapPin },
               ] as const).map(({ value, label, icon: Icon }) => (
                 <div key={label} className="flex flex-col items-center gap-2 text-center">
                   <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#ead0dd] text-[#7f2e62]">
@@ -1482,10 +1547,8 @@ function CompanionCard({ companion, saved = false, onSave, onActivityFilter }: {
 // ---------------------------------------------------------------------------
 
 function CompareCompanions() {
-  const DEV_COMPANIONS_LOCAL = [
-    { id: 'companion-maya', displayName: 'Maya R.', city: 'San Francisco', serviceArea: 'SF Bay Area', hourlyRate: 65, rating: 4.9, reviewCount: 47, activities: ['Museum visits', 'Coffee conversations', 'Gallery tours', 'Evening walks'], biography: 'I believe good company starts with genuine curiosity. Let\'s find something worth exploring together.', responseTime: 'within 2h', instantBook: true, verified: true, languages: ['English', 'Spanish'], acceptanceRate: 92, memberSince: 'Jan 2024' },
-    { id: 'companion-jordan', displayName: 'Jordan K.', city: 'New York', serviceArea: 'Manhattan & Brooklyn', hourlyRate: 75, rating: 4.8, reviewCount: 31, activities: ['Architecture walks', 'Restaurant dining', 'Bookstore visits', 'Conversation partner'], biography: 'NYC guide and constant reader. I\'ll show you the city through its buildings and its best bites.', responseTime: 'within 1h', instantBook: false, verified: true, languages: ['English', 'French'], acceptanceRate: 88, memberSince: 'Mar 2024' },
-  ];
+  const list = useListCompanions(undefined, { query: { queryKey: getListCompanionsQueryKey(), retry: false } });
+  const companions = list.data ?? [];
 
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -1498,34 +1561,33 @@ function CompareCompanions() {
     });
   };
 
-  const companionA = DEV_COMPANIONS_LOCAL.find((c) => c.id === selected[0]);
-  const companionB = DEV_COMPANIONS_LOCAL.find((c) => c.id === selected[1]);
+  const companionA = companions.find((c) => c.id === selected[0]);
+  const companionB = companions.find((c) => c.id === selected[1]);
 
-  const ROWS: Array<{ label: string; key: keyof typeof DEV_COMPANIONS_LOCAL[0]; fmt?: (v: any) => string }> = [
-    { label: 'Hourly rate', key: 'hourlyRate', fmt: (v) => `$${v}/hr` },
-    { label: 'Rating', key: 'rating', fmt: (v) => `${v.toFixed(1)} ★` },
-    { label: 'Reviews', key: 'reviewCount', fmt: (v) => `${v} reviews` },
+  type CompareKey = 'hourlyRate' | 'rating' | 'reviewCount' | 'responseTime' | 'instantBook' | 'languages';
+  const ROWS: Array<{ label: string; key: CompareKey; fmt?: (v: unknown) => string }> = [
+    { label: 'Hourly rate', key: 'hourlyRate', fmt: (v) => `$${Number(v)}/hr` },
+    { label: 'Rating', key: 'rating', fmt: (v) => Number(v) > 0 ? `${Number(v).toFixed(1)} ★` : 'No ratings yet' },
+    { label: 'Reviews', key: 'reviewCount', fmt: (v) => `${Number(v)} ${Number(v) === 1 ? 'review' : 'reviews'}` },
     { label: 'Response time', key: 'responseTime' },
-    { label: 'Acceptance rate', key: 'acceptanceRate', fmt: (v) => `${v}%` },
     { label: 'Instant book', key: 'instantBook', fmt: (v) => v ? '✓ Yes' : '✗ No' },
-    { label: 'Languages', key: 'languages', fmt: (v: string[]) => v.join(', ') },
-    { label: 'Member since', key: 'memberSince' },
+    { label: 'Languages', key: 'languages', fmt: (v) => Array.isArray(v) && v.length ? v.join(', ') : '—' },
   ];
 
-  const getBetter = (key: keyof typeof DEV_COMPANIONS_LOCAL[0]) => {
+  const getBetter = (key: CompareKey) => {
     if (!companionA || !companionB) return null;
     const a = companionA[key], b = companionB[key];
     if (key === 'hourlyRate') return Number(a) <= Number(b) ? 'A' : 'B';
-    if (key === 'rating' || key === 'reviewCount' || key === 'acceptanceRate') return Number(a) >= Number(b) ? 'A' : 'B';
+    if (key === 'rating' || key === 'reviewCount') return Number(a) >= Number(b) ? 'A' : 'B';
     if (key === 'responseTime') {
-      const toMin = (s: string) => { const m = s.match(/(\d+)h/); return m ? Number(m[1]) * 60 : 999; };
+      const toMin = (s: string) => { const m = s.match(/(\d+)\s*h/); return m ? Number(m[1]) * 60 : 999; };
       return toMin(String(a)) <= toMin(String(b)) ? 'A' : 'B';
     }
     if (key === 'instantBook') return a ? 'A' : b ? 'B' : null;
     return null;
   };
 
-  const shown = DEV_COMPANIONS_LOCAL.filter((c) =>
+  const shown = companions.filter((c) =>
     !search || c.displayName.toLowerCase().includes(search.toLowerCase()) || c.city.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -1555,6 +1617,13 @@ function CompareCompanions() {
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
+            {list.isLoading && [0, 1].map((i) => <div key={i} className="skeleton h-20 rounded-[18px]" />)}
+            {!list.isLoading && shown.length === 0 && (
+              <div className="col-span-full rounded-[18px] border border-dashed border-[#dfd2c9] bg-[#fbf7f1] p-8 text-center">
+                <p className="font-serif text-xl text-[#48213d]">{search ? 'No companions match that search.' : 'No companions to compare yet.'}</p>
+                <p className="mt-2 text-sm text-[#806c76]">Approved companions appear here as they go live.</p>
+              </div>
+            )}
             {shown.map((c) => {
               const isSelected = selected.includes(c.id);
               const slot = selected.indexOf(c.id) + 1;
@@ -1567,7 +1636,7 @@ function CompareCompanions() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[#48213d]">{c.displayName}</p>
-                    <p className="text-[10px] text-[#9b858e]">{c.city} · ${c.hourlyRate}/hr · {c.rating.toFixed(1)}★</p>
+                    <p className="text-[10px] text-[#9b858e]">{c.city} · ${c.hourlyRate}/hr{c.rating > 0 ? ` · ${c.rating.toFixed(1)}★` : ''}</p>
                   </div>
                   {isSelected && <Check className="h-4 w-4 shrink-0 text-[#7f2e62]" />}
                 </button>
@@ -1646,7 +1715,7 @@ function CompareCompanions() {
 
 function Explore() {
   // Filters
-  const [city, setCity] = useState('');
+  const [city, setCity] = useState('New Orleans');
   const [activity, setActivity] = useState(() => { try { return new URLSearchParams(window.location.search).get('activity') ?? ''; } catch { return ''; } });
   const [language, setLanguage] = useState('');
   const [maxRate, setMaxRate] = useState('');
@@ -1800,7 +1869,7 @@ function Explore() {
             <label className="flex items-center gap-2 rounded-xl bg-[#f0e4db] px-4">
               <MapPin className="h-4 w-4 text-[#9b6b88]" />
               <input value={city} onChange={(e) => setCity(e.target.value)}
-                placeholder={nearMe ? `Near ${detectedCity ?? 'you'}` : 'City or region'}
+                placeholder={nearMe ? `Near ${detectedCity ?? 'you'}` : 'New Orleans neighborhood'}
                 className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-[#a38c95]"
                 data-testid="input-city" />
             </label>
@@ -1898,39 +1967,43 @@ function Explore() {
         )}
 
         {/* New companions spotlight */}
-        {!city && !activity && !nearMe && (
+        {!city && !activity && !nearMe && (() => {
+          const newest = [...companions]
+            .sort((a, b) => String((b as { createdAt?: string }).createdAt ?? '').localeCompare(String((a as { createdAt?: string }).createdAt ?? '')))
+            .slice(0, 5);
+          if (!newest.length) return null;
+          return (
           <div className="mt-8" data-testid="new-companions-strip">
             <p className="mb-3 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">
-              <Sparkles className="h-3.5 w-3.5" />New companions
+              <Sparkles className="h-3.5 w-3.5" />Recently approved
             </p>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {[
-                { id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', joined: '3 days ago', rate: 65 },
-                { id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', joined: '1 week ago', rate: 75 },
-                { id: 'companion-priya', initials: 'PS', name: 'Priya S.', city: 'Chicago', joined: 'today', rate: 60 },
-                { id: 'companion-alex', initials: 'AW', name: 'Alex W.', city: 'Austin', joined: '2 days ago', rate: 70 },
-                { id: 'companion-ren', initials: 'RT', name: 'Ren T.', city: 'Seattle', joined: '5 days ago', rate: 55 },
-              ].map((c) => (
+              {newest.map((c) => {
+                const createdAt = (c as { createdAt?: string }).createdAt;
+                const joined = createdAt ? relativeJoined(createdAt) : 'In the directory';
+                return (
                 <Link key={c.id} href={`/companions/${c.id}`}
                   className="group flex shrink-0 w-[160px] flex-col rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-4 transition hover:border-[#9d557e] hover:shadow-md"
                   data-testid={`new-companion-${c.id}`}>
                   <div className="flex items-center gap-2.5">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-bold text-[10px] text-[#7f2e62]">{c.initials}</div>
+                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-bold text-[10px] text-[#7f2e62]">{companionInitials(c.displayName)}</div>
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-[#48213d]">{c.name}</p>
+                      <p className="truncate text-xs font-bold text-[#48213d]">{c.displayName}</p>
                       <p className="truncate text-[9px] text-[#9b858e]">{c.city}</p>
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
-                    <span className="rounded-full bg-[#e8f0e8] px-2 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-[#477254]">New</span>
-                    <span className="font-mono text-[10px] font-bold text-[#48213d]">${c.rate}/hr</span>
+                    <span className="rounded-full bg-[#e8f0e8] px-2 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-[#477254]">Live</span>
+                    <span className="font-mono text-[10px] font-bold text-[#48213d]">${c.hourlyRate}/hr</span>
                   </div>
-                  <p className="mt-1.5 text-[9px] text-[#b0929f]">Joined {c.joined}</p>
+                  <p className="mt-1.5 text-[9px] text-[#b0929f]">{joined}</p>
                 </Link>
-              ))}
+                );
+              })}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Trending activities this week */}
         {!city && !activity && !vibe && !nearMe && (
@@ -1979,7 +2052,7 @@ function Explore() {
           </Link>
           {(city || activity || language || maxRate || instant || nearMe || availNow || timeWindow || customDate) && (
             <button type="button"
-              onClick={() => { setCity(''); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); setNearMe(false); setAvailNow(false); setUserCoords(null); setTimeWindow(null); setCustomDate(''); }}
+              onClick={() => { setCity('New Orleans'); setActivity(''); setLanguage(''); setMaxRate(''); setInstant(false); setNearMe(false); setAvailNow(false); setUserCoords(null); setTimeWindow(null); setCustomDate(''); }}
               className="text-xs font-bold text-[#7f2e62]" data-testid="button-clear-filters">
               Clear all
             </button>
@@ -2096,7 +2169,7 @@ function Explore() {
                   body={availNow
                     ? 'No one has flagged availability tonight yet. Try removing the "Available now" filter.'
                     : 'We do not fill this space with invented profiles. Try another area or check back as new companions are approved.'}
-                  action={<Button variant="outline" onClick={() => { setCity(''); setActivity(''); setAvailNow(false); }} testId="button-browse-all">Browse all areas</Button>} />
+                  action={<Button variant="outline" onClick={() => { setCity('New Orleans'); setActivity(''); setAvailNow(false); }} testId="button-browse-all">Browse New Orleans</Button>} />
               : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {shownCompanions.map((companion) => (
                     <CompanionCard key={companion.id} companion={companion} saved={savedIds.has(companion.id)} onSave={handleSave} onActivityFilter={(a) => setActivity(a)} />
@@ -2134,16 +2207,27 @@ function ReportButton({ companionId, companionName }: { companionId: string; com
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
+  const [error, setError] = useState('');
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!reason) return;
     setLoading(true);
+    setError('');
     try {
-      await fetch(`/api/companions/${companionId}/report`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/companions/${companionId}/report`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason, note }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? 'Could not submit report');
+      }
       setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not submit report');
     } finally { setLoading(false); }
   }
 
@@ -2163,7 +2247,7 @@ function ReportButton({ companionId, companionName }: { companionId: string; com
               <div className="py-4 text-center">
                 <ShieldCheck className="mx-auto h-10 w-10 text-[#477254]" />
                 <h3 className="mt-4 font-serif text-2xl text-[#48213d]">Thank you for letting us know.</h3>
-                <p className="mt-3 text-sm leading-6 text-[#725e69]">Our trust team will review this within 24 hours. Your identity is kept private.</p>
+                <p className="mt-3 text-sm leading-6 text-[#725e69]">The report was saved. We do not promise a 24-hour review. For an emergency, call local services.</p>
                 <button type="button" onClick={() => setOpen(false)}
                   className="mt-6 inline-flex h-10 items-center rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white">Close</button>
               </div>
@@ -2171,7 +2255,7 @@ function ReportButton({ companionId, companionName }: { companionId: string; com
               <form onSubmit={submit}>
                 <p className="font-mono text-[10px] uppercase tracking-[.15em] text-[#9d557e]">Safety concern</p>
                 <h3 className="mt-2 font-serif text-2xl text-[#48213d]">Report a concern</h3>
-                <p className="mt-1 text-xs text-[#725e69]">About {companionName}. Reviewed by our trust team within 24 hours.</p>
+                <p className="mt-1 text-xs text-[#725e69]">About {companionName}. This is stored for the trust team — there is no published review SLA.</p>
                 <div className="mt-5 space-y-2">
                   {REPORT_REASONS.map((r) => (
                     <label key={r} className={`flex cursor-pointer items-center gap-3 rounded-[12px] border p-3 transition ${reason === r ? 'border-[#7f2e62] bg-[#fbf0f7]' : 'border-[#dfd2c9] hover:border-[#c695ae]'}`}>
@@ -2184,6 +2268,7 @@ function ReportButton({ companionId, companionName }: { companionId: string; com
                 <textarea value={note} onChange={(e) => setNote(e.target.value)}
                   placeholder="Optional: additional context for our team"
                   rows={3} className="mt-4 w-full resize-none rounded-[12px] border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-3 text-sm outline-none placeholder:text-[#b09aa8] focus:border-[#9d557e]" />
+                {error && <p className="mt-3 text-xs text-[#a64742]">{error}</p>}
                 <button type="submit" disabled={!reason || loading}
                   className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#7f2e62] text-sm font-bold text-white disabled:opacity-40"
                   data-testid="button-submit-report">
@@ -2195,6 +2280,38 @@ function ReportButton({ companionId, companionName }: { companionId: string; com
         </div>
       )}
     </>
+  );
+}
+
+function BlockButton({ companionId }: { companionId: string }) {
+  const { user } = useAuth();
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+  if (!user) return null;
+  if (done) return <p className="text-[10px] font-semibold text-[#477254]">Blocked</p>;
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        setError('');
+        const res = await fetch('/api/blocks', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companionId }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          setError(body.error ?? 'Could not block');
+          return;
+        }
+        setDone(true);
+      }}
+      className="text-[10px] font-semibold text-[#b09aa8] underline-offset-2 hover:text-[#7f2e62] hover:underline"
+      data-testid="button-block-companion"
+    >
+      {error || 'Block this companion'}
+    </button>
   );
 }
 
@@ -2486,8 +2603,8 @@ function CompanionQA({ companionId, name }: { companionId: string; name: string 
   );
 }
 
-function CompanionBadges({ rating, reviewCount, totalBookings, responseTime }: {
-  rating: number; reviewCount: number; totalBookings: number; responseTime: string;
+function CompanionBadges({ rating, reviewCount, totalBookings, responseTime, verified }: {
+  rating: number; reviewCount: number; totalBookings: number; responseTime: string; verified?: boolean;
 }) {
   const badges: Array<{ icon: typeof Star; label: string; desc: string; color: string; bg: string }> = [];
 
@@ -2502,7 +2619,9 @@ function CompanionBadges({ rating, reviewCount, totalBookings, responseTime }: {
   if (responseTime && (responseTime.includes('1h') || responseTime.includes('2h') || responseTime.includes('30m') || responseTime.includes('1 h') || responseTime.includes('2 h'))) {
     badges.push({ icon: Clock3, label: 'Fast responder', desc: `Replies within ${responseTime}`, color: 'text-[#2a5280]', bg: 'bg-[#dce8f5]' });
   }
-  badges.push({ icon: ShieldCheck, label: 'Verified', desc: 'Identity confirmed', color: 'text-[#477254]', bg: 'bg-[#e8f0e8]' });
+  if (verified) {
+    badges.push({ icon: ShieldCheck, label: 'Verified', desc: 'Identity confirmed', color: 'text-[#477254]', bg: 'bg-[#e8f0e8]' });
+  }
 
   if (!badges.length) return null;
 
@@ -2622,7 +2741,14 @@ function Profile() {
   if (query.isLoading) return <Shell><main className="mx-auto max-w-6xl px-5 py-16"><LoadingState /></main></Shell>;
   if (query.isError || !query.data) return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => query.refetch()} /></main></Shell>;
   const c = query.data;
-  return <Shell><><main className="page-enter mx-auto max-w-6xl px-5 py-10 pb-28 lg:px-8 lg:py-16 lg:pb-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <Link key={x} href={`/explore?activity=${encodeURIComponent(x)}`} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62] transition-colors hover:bg-[#c695ae] hover:text-white">{x}</Link>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionBadges rating={c.rating} reviewCount={c.reviewCount} totalBookings={(c as any).totalBookings ?? 0} responseTime={c.responseTime} /><CompanionQA companionId={c.id} name={c.displayName} /><CompanionReviews companionId={c.id} /><CompanionAvailability availability={(c as any).availability ?? []} /><SimilarCompanions currentId={c.id} city={c.city} activities={c.activities} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />Identity verified by OnlyFavors</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div><Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link><p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p><div className="mt-5 flex items-center justify-center gap-4 border-t border-[#ece1d9] pt-4"><ShareButton /><GiftSessionButton companionName={c.displayName} companionId={c.id} /></div>{(c as any).acceptanceRate && (
+  return <Shell><><main className="page-enter mx-auto max-w-6xl px-5 py-10 pb-28 lg:px-8 lg:py-16 lg:pb-16"><Link href="/explore" className="mb-10 inline-flex items-center gap-2 text-xs font-bold text-[#806076] hover:text-[#7f2e62]" data-testid="link-back-explore"><ArrowLeft className="h-4 w-4" />Back to explore</Link><div className="grid gap-10 lg:grid-cols-[1fr_340px]"><div><div className="flex flex-wrap items-center gap-5"><Avatar companion={c} large /><div><div className="flex items-center gap-2"><h1 className="font-serif text-5xl leading-none text-[#48213d]">{c.displayName}</h1>{c.verified && <BadgeCheck className="h-5 w-5 text-[#7f2e62]" />}</div><p className="mt-2 flex items-center gap-1.5 text-sm text-[#806c76]"><MapPin className="h-4 w-4 text-[#9b6b88]" />{c.serviceArea}, {c.city}</p><p className="mt-2 flex items-center gap-2 text-xs text-[#806c76]"><Star className="h-3.5 w-3.5 fill-[#bf8750] text-[#bf8750]" />{c.rating > 0 ? `${c.rating.toFixed(1)} from ${c.reviewCount} reviews` : 'New to OnlyFavors'}<span className="text-[#c6aeb8]">·</span><Clock3 className="h-3.5 w-3.5" />Replies {c.responseTime}</p></div></div><div className="mt-12 border-t border-[#dfd2c9] pt-8"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">A little about {c.displayName}</p><p className="mt-4 max-w-2xl whitespace-pre-line text-[16px] leading-8 text-[#654c5f]">{c.biography || 'This companion has not added a biography yet.'}</p></div><div className="mt-10 grid gap-8 border-t border-[#dfd2c9] pt-8 sm:grid-cols-2"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">They enjoy</p><div className="mt-4 flex flex-wrap gap-2">{c.activities.length ? c.activities.map((x) => <Link key={x} href={`/explore?activity=${encodeURIComponent(x)}`} className="rounded-full bg-[#ead0dd] px-3 py-2 text-xs font-semibold text-[#7f2e62] transition-colors hover:bg-[#c695ae] hover:text-white">{x}</Link>) : <p className="text-sm text-[#806c76]">No activities listed yet.</p>}</div><p className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Languages</p><p className="mt-3 text-sm text-[#654c5f]">{c.languages.length ? c.languages.join(' · ') : 'Not listed'}</p></div><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Clear boundaries</p><ul className="mt-4 space-y-3">{(c.boundaries?.length ? c.boundaries : ['Platonic connection only', 'Public meeting places only', 'Mutual respect at every step']).map((x) => <li key={x} className="flex items-start gap-2 text-sm leading-5 text-[#654c5f]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{x}</li>)}</ul></div></div><CompanionBadges rating={c.rating} reviewCount={c.reviewCount} totalBookings={(c as any).totalBookings ?? 0} responseTime={c.responseTime} verified={c.verified} /><CompanionQA companionId={c.id} name={c.displayName} /><CompanionReviews companionId={c.id} /><CompanionAvailability availability={(c as any).availability ?? []} /><SimilarCompanions currentId={c.id} city={c.city} activities={c.activities} /></div><aside className="h-fit rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 shadow-[0_15px_35px_rgba(88,37,70,.07)] lg:sticky lg:top-28"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Starting at</span><span className="font-serif text-3xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></span></div><div className="my-6 space-y-3 border-y border-[#e9ddd6] py-5 text-sm text-[#654c5f]"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#477254]" />{c.verified ? 'Identity verified by OnlyFavors' : 'Public SafeSpot meetings'}</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#477254]" />SafeSpot meeting options</p><p className="flex items-center gap-2"><EyeOff className="h-4 w-4 text-[#477254]" />Approximate area only</p></div>{(c as any).away?.enabled && (
+  <p className="mb-3 rounded-xl bg-[#ead0dd] px-3 py-2 text-center text-xs font-semibold text-[#7f2e62]">{(c as any).away.note || `Currently away${(c as any).away.returnDate ? ` · back ${(c as any).away.returnDate}` : ''}`}</p>
+)}
+{(c as any).paused ? (
+  <p className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[#dfd2c9] text-sm font-bold text-[#654c5f]" data-testid="companion-paused-notice">Not accepting bookings right now</p>
+) : (
+  <Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link>
+)}<p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p><div className="mt-5 flex items-center justify-center gap-4 border-t border-[#ece1d9] pt-4"><ShareButton /><GiftSessionButton companionName={c.displayName} companionId={c.id} /></div>{(c as any).acceptanceRate && (
   <div className="mt-3 flex items-center justify-center gap-3 text-[10px] text-[#9b858e]">
     <span className="flex items-center gap-1">
       <Check className="h-3 w-3 text-[#477254]" />
@@ -2632,16 +2758,20 @@ function Profile() {
     <span>{(c as any).totalBookings ?? 0} bookings</span>
   </div>
 )}
-{(c as any).memberSince && <p className="text-center text-[10px] text-[#9b858e]">Member since {(c as any).memberSince}</p>}<div className="mt-4 flex justify-center"><ReportButton companionId={c.id} companionName={c.displayName} /></div></aside></div>
+{(c as any).memberSince && <p className="text-center text-[10px] text-[#9b858e]">Member since {(c as any).memberSince}</p>}<div className="mt-4 flex justify-center gap-4"><ReportButton companionId={c.id} companionName={c.displayName} /><BlockButton companionId={c.id} /></div></aside></div>
 </main>
 <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between gap-4 border-t border-[#dfd2c9] bg-[#fbf7f1]/96 px-5 py-3 backdrop-blur-sm lg:hidden" data-testid="mobile-booking-bar">
   <div>
     <p className="font-mono text-[9px] uppercase tracking-wider text-[#9b858e]">Starting at</p>
     <p className="font-serif text-xl text-[#48213d]">{money(c.hourlyRate * 100)}<small className="font-sans text-xs text-[#806c76]"> / hr</small></p>
   </div>
-  <Link href={`/book?companion=${c.id}`} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-mobile-book-companion">
-    Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" />
-  </Link>
+  {(c as any).paused ? (
+    <p className="flex-1 text-right text-xs font-bold text-[#654c5f]">Not accepting bookings</p>
+  ) : (
+    <Link href={`/book?companion=${c.id}`} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-mobile-book-companion">
+      Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" />
+    </Link>
+  )}
 </div>
 </></Shell>;
 }
@@ -2764,15 +2894,16 @@ const INBOX_STATUS: Record<string, { label: string; tone: string; canAccept: boo
   cancelled:    { label: 'Cancelled',            tone: 'gray',   canAccept: false, canDecline: false },
 };
 
-function useCompanionBookings() {
+function useCompanionBookings(enabled = true) {
   return useQuery<BookingDetail[]>({
     queryKey: ['companion-bookings'],
     queryFn: async () => {
-      const res = await fetch('/api/companion/bookings');
+      const res = await fetch('/api/companion/bookings', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load bookings');
       return res.json() as Promise<BookingDetail[]>;
     },
     refetchInterval: 30_000,
+    enabled,
   });
 }
 
@@ -2780,7 +2911,7 @@ function useAcceptBooking() {
   const qc = useQueryClient();
   return useMutation<BookingDetail, Error, { id: string; welcomeMessage?: string }>({
     mutationFn: async ({ id, welcomeMessage }) => {
-      const res = await fetch(`/api/bookings/${id}/accept`, { method: 'POST' });
+      const res = await fetch(`/api/bookings/${id}/accept`, { method: 'POST', credentials: 'include' });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to accept');
       const booking = await res.json();
       // Optionally post a welcome message into the chat
@@ -2801,7 +2932,7 @@ function useDeclineBooking() {
   const qc = useQueryClient();
   return useMutation<BookingDetail, Error, string>({
     mutationFn: async (id) => {
-      const res = await fetch(`/api/bookings/${id}/decline`, { method: 'POST' });
+      const res = await fetch(`/api/bookings/${id}/decline`, { method: 'POST', credentials: 'include' });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to decline');
       return res.json();
     },
@@ -3025,11 +3156,7 @@ function useTrustCircle() {
     queryKey: ['trust-circle'],
     queryFn: async () => {
       const res = await fetch('/api/trust-circle', { credentials: 'include' });
-      if (res.status === 401) {
-        try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
-        catch { return []; }
-      }
-      if (!res.ok) throw new Error('Could not load Trust Circle');
+      if (!res.ok) return [];
       return res.json();
     },
     enabled: Boolean(user),
@@ -3378,14 +3505,10 @@ function Book() {
     if (!created) return;
     depositMutation.mutate({ id: created.id }, {
       onSuccess: (r: any) => {
-        if (r.devSimulated) {
-          // Stripe not connected in dev — booking already advanced server-side
-          navigate(`/booking/${created.id}`);
-        } else {
-          setCheckoutLabel('$10 refundable deposit');
-          setCheckoutAmount(1000);
-          setCheckoutSecret(r.clientSecret);
-        }
+        if (!r.clientSecret) return;
+        setCheckoutLabel('$10 refundable deposit');
+        setCheckoutAmount(1000);
+        setCheckoutSecret(r.clientSecret);
       },
     });
   };
@@ -3393,13 +3516,10 @@ function Book() {
     if (!created) return;
     authorizeMutation.mutate({ id: created.id }, {
       onSuccess: (r: any) => {
-        if (r.devSimulated) {
-          navigate(`/booking/${created.id}`);
-        } else {
-          setCheckoutLabel('Full payment');
-          setCheckoutAmount(created.totalCents);
-          setCheckoutSecret(r.clientSecret);
-        }
+        if (!r.clientSecret) return;
+        setCheckoutLabel('Full payment');
+        setCheckoutAmount(created.totalCents);
+        setCheckoutSecret(r.clientSecret);
       },
     });
   };
@@ -3513,7 +3633,7 @@ function Book() {
         </div>
       ))}
     </div>
-    <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_340px]"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A thoughtful plan</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Book time with<br /><em>{companion.displayName}.</em></h1><p className="mt-4 max-w-lg text-sm leading-6 text-[#725e69]">Tell us the shape of your time together. We will confirm the price and keep the details clear for everyone.</p><form onSubmit={submit} className="mt-10 space-y-5" data-testid="form-booking"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">What would you like to do?</span><select required value={activity} onChange={(e) => setActivity(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-activity"><option value="">Choose an activity</option>{companion.activities.map((x) => <option key={x} value={x}>{x}</option>)}</select></label><div className="grid gap-5 sm:grid-cols-2"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Date</span><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-date" /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Start time</span><input required type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-time" /></label></div><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">How long?</span><select required value={duration} onChange={(e) => setDuration(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-duration"><option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Choose a SafeSpot in {companion.city}</span>{spotsQuery.isLoading ? <div className="skeleton h-12 rounded-xl" /> : spotsQuery.isError ? <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">SafeSpots are unavailable. Try again in a moment.</p> : spots.length === 0 ? <p className="rounded-xl border border-dashed border-[#cbbab5] p-3 text-xs text-[#806c76]">No public SafeSpots are listed for this area yet.</p> : <select required value={spot} onChange={(e) => setSpot(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-safe-spot"><option value="">Choose a public place</option>{spots.map((s: SafeSpot) => <option key={s.id} value={s.id}>{s.name} · {s.addressHint}{s.openLate ? ' · Open late' : ''}</option>)}</select>}</label><div className="flex items-start gap-2 rounded-xl bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />Your booking is only a request until your companion accepts. Exact details stay private.</div><Button type="submit" disabled={mutation.isPending || spots.length === 0} className="w-full sm:w-auto" testId="button-submit-booking">{mutation.isPending ? 'Pricing your request…' : 'Review server-priced request'} <ArrowRight className="h-4 w-4" /></Button>{mutation.isError && <p className="text-sm text-[#a64742]" data-testid="status-booking-error">We could not create this request. Please check the details and try again.</p>}</form></div><aside className="h-fit rounded-[24px] bg-[#3d2038] p-7 text-[#f9efe5] lg:sticky lg:top-28"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your companion</p><div className="mt-5 flex items-center gap-3"><Avatar companion={companion} /><div><p className="font-serif text-2xl">{companion.displayName}</p><p className="text-xs text-[#d3b6c4]">{companion.serviceArea}, {companion.city}</p></div></div><div className="mt-7 rounded-[16px] border border-[#65445d] bg-[#4a2842] p-5">{quoteQuery.isLoading ? <><div className="skeleton h-3 w-24 rounded-full opacity-30" /><div className="skeleton mt-3 h-8 w-32 rounded-full opacity-30" /><div className="skeleton mt-2 h-3 w-full rounded-full opacity-20" /></> : quote ? <><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[#c695ae]">Price estimate</p><div className="mt-4 space-y-2 text-xs text-[#d8c1cc]"><div className="flex items-center justify-between"><span>{duration} hr × {money(companion.hourlyRate * 100)}/hr</span><span>{money(quote.subtotalCents)}</span></div><div className="flex items-center justify-between text-[#b39dad]"><span>Safety &amp; service fee (5%)</span><span>+{money(quote.customerFeeCents)}</span></div></div><div className="my-3 border-t border-[#65445d]" /><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">You pay</span><span className="font-serif text-3xl text-[#f9efe5]" data-testid="value-quote-total">{money(quote.totalCents)}</span></div><p className="mt-1 text-right text-[10px] text-[#b39dad]">Companion receives {money(quote.companionPayoutCents)}</p><div className="mt-4 rounded-[10px] border border-[#8a4070] bg-[#5a2550] p-3"><div className="flex items-start gap-2"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#df9cbd]" /><p className="text-[10px] leading-4 text-[#dbc3cf]">Or pay a <strong className="text-[#f0c8dc]">$10 deposit</strong> to unlock chat first — credited toward your booking total.</p></div></div></> : <p className="text-xs text-[#b39dad]">Select a duration to see your price.</p>}</div><div className="mt-5 border-t border-[#65445d] pt-5"><p className="flex items-center gap-2 text-xs leading-5 text-[#d8c1cc]"><LockKeyhole className="h-4 w-4 text-[#df9cbd]" />All prices are calculated server-side. Your browser never sets amounts.</p></div></aside></div></main></Shell>;
+    <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_340px]"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A thoughtful plan</p><h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">Book time with<br /><em>{companion.displayName}.</em></h1><p className="mt-4 max-w-lg text-sm leading-6 text-[#725e69]">Tell us the shape of your time together. Times are in New Orleans (Central Time). Minimum 1 hour, in 30-minute steps.</p><form onSubmit={submit} className="mt-10 space-y-5" data-testid="form-booking"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">What would you like to do?</span><select required value={activity} onChange={(e) => setActivity(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-activity"><option value="">Choose an activity</option>{companion.activities.map((x) => <option key={x} value={x}>{x}</option>)}</select></label><div className="grid gap-5 sm:grid-cols-2"><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Date</span><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-date" /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Start time</span><input required type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-booking-time" /></label></div><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">How long?</span><select required value={duration} onChange={(e) => setDuration(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-booking-duration">{[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8].map((h) => <option key={h} value={String(h)}>{h === 7 ? 'Full day (7 hours)' : h === 1 ? '1 hour' : `${h} hours`}</option>)}</select></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Choose a SafeSpot in {companion.city}</span>{spotsQuery.isLoading ? <div className="skeleton h-12 rounded-xl" /> : spotsQuery.isError ? <p className="rounded-xl bg-[#fbebe7] p-3 text-xs text-[#86555a]">SafeSpots are unavailable. Try again in a moment.</p> : spots.length === 0 ? <p className="rounded-xl border border-dashed border-[#cbbab5] p-3 text-xs text-[#806c76]">No public SafeSpots are listed for this area yet.</p> : <select required value={spot} onChange={(e) => setSpot(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-safe-spot"><option value="">Choose a public place</option>{spots.map((s: SafeSpot) => <option key={s.id} value={s.id}>{s.name} · {s.addressHint}{s.openLate ? ' · Open late' : ''}</option>)}</select>}</label><div className="flex items-start gap-2 rounded-xl bg-[#f0e4db] p-4 text-xs leading-5 text-[#725e69]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />Your booking is only a request until your companion accepts. Exact details stay private.</div><Button type="submit" disabled={mutation.isPending || spots.length === 0} className="w-full sm:w-auto" testId="button-submit-booking">{mutation.isPending ? 'Pricing your request…' : 'Review server-priced request'} <ArrowRight className="h-4 w-4" /></Button>{mutation.isError && <p className="text-sm text-[#a64742]" data-testid="status-booking-error">We could not create this request. Please check the details and try again.</p>}</form></div><aside className="h-fit rounded-[24px] bg-[#3d2038] p-7 text-[#f9efe5] lg:sticky lg:top-28"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your companion</p><div className="mt-5 flex items-center gap-3"><Avatar companion={companion} /><div><p className="font-serif text-2xl">{companion.displayName}</p><p className="text-xs text-[#d3b6c4]">{companion.serviceArea}, {companion.city}</p></div></div><div className="mt-7 rounded-[16px] border border-[#65445d] bg-[#4a2842] p-5">{quoteQuery.isLoading ? <><div className="skeleton h-3 w-24 rounded-full opacity-30" /><div className="skeleton mt-3 h-8 w-32 rounded-full opacity-30" /><div className="skeleton mt-2 h-3 w-full rounded-full opacity-20" /></> : quote ? <><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[#c695ae]">Price estimate</p><div className="mt-4 space-y-2 text-xs text-[#d8c1cc]"><div className="flex items-center justify-between"><span>{Number(duration) === 7 && (companion as { dayRate?: number | null }).dayRate ? `Full day rate` : `${duration} hr × ${money(companion.hourlyRate * 100)}/hr`}</span><span>{money(quote.subtotalCents)}</span></div><div className="flex items-center justify-between text-[#b39dad]"><span>Safety &amp; service fee (5%)</span><span>+{money(quote.customerFeeCents)}</span></div></div><div className="my-3 border-t border-[#65445d]" /><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-wider text-[#c695ae]">You pay</span><span className="font-serif text-3xl text-[#f9efe5]" data-testid="value-quote-total">{money(quote.totalCents)}</span></div><p className="mt-1 text-right text-[10px] text-[#b39dad]">Companion receives {money(quote.companionPayoutCents)}</p><div className="mt-4 rounded-[10px] border border-[#8a4070] bg-[#5a2550] p-3"><div className="flex items-start gap-2"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#df9cbd]" /><p className="text-[10px] leading-4 text-[#dbc3cf]">Or pay a <strong className="text-[#f0c8dc]">$10 deposit</strong> to unlock chat first — credited toward your booking total.</p></div></div></> : <p className="text-xs text-[#b39dad]">Select a duration to see your price.</p>}</div><div className="mt-5 border-t border-[#65445d] pt-5"><p className="flex items-center gap-2 text-xs leading-5 text-[#d8c1cc]"><LockKeyhole className="h-4 w-4 text-[#df9cbd]" />All prices are calculated server-side. Your browser never sets amounts.</p></div></aside></div></main></Shell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -3527,6 +3647,8 @@ type BookingDetail = {
   companionPayoutCents: number; depositCents: number;
   depositPaidAt: string | null; confirmedAt: string | null; authorizedAt: string | null;
   createdAt: string;
+  reviewed?: boolean;
+  companionName?: string;
 };
 
 const STATUS_LABEL: Record<string, { label: string; tone: 'green' | 'amber' | 'plum' | 'gray' }> = {
@@ -3542,7 +3664,7 @@ function useBooking(id: string) {
   return useQuery<BookingDetail>({
     queryKey: ['booking', id],
     queryFn: async () => {
-      const res = await fetch(`/api/bookings/${id}`);
+      const res = await fetch(`/api/bookings/${id}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Booking not found');
       return res.json() as Promise<BookingDetail>;
     },
@@ -3688,16 +3810,17 @@ function BookingChat({ bookingId, status, viewerRole = 'customer' }: { bookingId
 // Customer booking list
 // ---------------------------------------------------------------------------
 
-function useCustomerBookings() {
+function useCustomerBookings(enabled = true) {
   return useQuery<BookingDetail[]>({
     queryKey: ['customer-bookings'],
     queryFn: async () => {
-      const res = await fetch('/api/bookings');
+      const res = await fetch('/api/bookings', { credentials: 'include' });
       if (!res.ok) return [];
       return res.json();
     },
     retry: false,
     refetchInterval: 30_000,
+    enabled,
   });
 }
 
@@ -3741,7 +3864,7 @@ function CustomerBookingList() {
             <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Getting started</p>
             <div className="mt-4 space-y-4">
               {[
-                { step: '1', text: 'Browse verified companions by city or activity', href: '/explore', cta: 'Explore', done: false },
+                { step: '1', text: 'Browse approved companions by city or activity', href: '/explore', cta: 'Explore', done: false },
                 { step: '2', text: 'Review their profile, activities, and clear boundaries', href: '/explore', cta: 'View profiles', done: false },
                 { step: '3', text: 'Request a time — no charge until your companion accepts', href: '/explore', cta: 'Book now', done: false },
                 { step: '4', text: 'Set up a Safety Plan with your Trust Circle contacts', href: '/safety', cta: 'Safety plan', done: false },
@@ -3810,7 +3933,7 @@ function CustomerBookingList() {
                   </span>
                 </Link>
                 {b.status === 'completed' && (
-                  <Link href={`/book?companion=${b.companionId ?? 'companion-maya'}`}
+                  <Link href={`/book?companion=${b.companionId}`}
                     onClick={(e) => e.stopPropagation()}
                     className="shrink-0 inline-flex h-7 items-center gap-1 rounded-full bg-[#ead0dd] px-2.5 font-mono text-[8px] font-bold uppercase tracking-wider text-[#7f2e62] hover:bg-[#7f2e62] hover:text-white transition"
                     data-testid={`button-book-again-${b.id}`}>
@@ -3870,7 +3993,8 @@ function useSubmitReview(bookingId: string) {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['companion-reviews', data.companionId] });
-      localStorage.setItem(`of_reviewed_${bookingId}`, '1');
+      qc.invalidateQueries({ queryKey: ['booking-review', bookingId] });
+      qc.invalidateQueries({ queryKey: ['customer-bookings'] });
     },
   });
 }
@@ -3914,146 +4038,48 @@ function StarDisplay({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'x
 
 const REVIEW_LABELS: Record<number, string> = { 1: 'Not what I hoped', 2: 'Okay', 3: 'Good', 4: 'Really enjoyed it', 5: 'Exceptional' };
 
-function KudosCard({ companionName, bookingId }: { companionName: string; bookingId: string }) {
-  const KEY = `of_kudos_${bookingId}`;
-  const [saved, setSaved] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; } });
-  const [done, setDone] = useState(() => Boolean(localStorage.getItem(`${KEY}_done`)));
-
-  const KUDOS = [
-    'Punctual', 'Great listener', 'Warm personality', 'Safe & comfortable',
-    'Knowledgeable', 'Thoughtful', 'Easy conversation', 'Respectful of boundaries',
-  ];
-
-  const toggle = (k: string) => setSaved((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]);
-
-  const submit = () => {
-    try { localStorage.setItem(KEY, JSON.stringify(saved)); localStorage.setItem(`${KEY}_done`, '1'); } catch {}
-    setDone(true);
-  };
-
-  if (done) return (
-    <div className="mt-4 flex items-center gap-3 rounded-[20px] bg-[#ead0dd] px-5 py-4" data-testid="kudos-done">
-      <HeartHandshake className="h-5 w-5 shrink-0 text-[#7f2e62]" />
-      <p className="text-sm font-semibold text-[#48213d]">Kudos sent to {companionName.split(' ')[0]} — thank you!</p>
-    </div>
-  );
-
+function KudosCard({ companionName }: { companionName: string; bookingId: string }) {
   return (
-    <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5" data-testid="kudos-card">
-      <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Give kudos · optional compliments</p>
-      <p className="mt-1 text-xs text-[#806c76]">Tap the words that match your experience with {companionName.split(' ')[0]}.</p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {KUDOS.map((k) => (
-          <button key={k} type="button" onClick={() => toggle(k)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${saved.includes(k) ? 'border-[#7f2e62] bg-[#7f2e62] text-white' : 'border-[#dfd2c9] text-[#654c5f] hover:border-[#9d557e]'}`}
-            data-testid={`kudos-${k.toLowerCase().replace(/ /g, '-')}`}>
-            {k}
-          </button>
-        ))}
-      </div>
-      <button type="button" disabled={saved.length === 0} onClick={submit}
-        className="mt-4 inline-flex h-9 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white disabled:opacity-40"
-        data-testid="button-send-kudos">
-        <Send className="h-3.5 w-3.5" />Send kudos
-      </button>
+    <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-4" data-testid="kudos-card">
+      <p className="text-sm font-semibold text-[#48213d]">Kudos for {companionName.split(' ')[0]}</p>
+      <p className="mt-1 text-[10px] leading-5 text-[#806c76]">Kudos are not delivered to companions yet. A review on their profile is the way to share feedback today.</p>
     </div>
   );
 }
 
-function TipCompanionCard({ companionName, bookingId }: { companionName: string; bookingId: string }) {
-  const KEY = `of_tip_${bookingId}`;
-  const [tipped, setTipped] = useState(() => Boolean(localStorage.getItem(KEY)));
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [custom, setCustom] = useState('');
-  const [confirming, setConfirming] = useState(false);
-
-  const TIP_OPTIONS = [5, 10, 15, 20];
-
-  const confirm = () => {
-    const amount = selected ?? parseFloat(custom || '0');
-    if (!amount || amount <= 0) return;
-    setConfirming(true);
-    setTimeout(() => {
-      try { localStorage.setItem(KEY, String(amount)); } catch {}
-      setTipped(true);
-      setConfirming(false);
-      setOpen(false);
-    }, 900);
-  };
-
-  if (tipped) return (
-    <div className="mt-4 flex items-center gap-3 rounded-[20px] bg-[#e8f0e8] px-5 py-4" data-testid="tip-card-done">
-      <Check className="h-5 w-5 shrink-0 text-[#477254]" />
-      <div>
-        <p className="text-sm font-semibold text-[#31533f]">Tip sent — thank you!</p>
-        <p className="text-[10px] text-[#53725d]">Your generosity goes directly to {companionName}.</p>
-      </div>
-    </div>
-  );
-
+function TipCompanionCard({ companionName }: { companionName: string; bookingId: string }) {
   return (
-    <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1]" data-testid="tip-card">
-      {!open ? (
-        <div className="flex items-center justify-between gap-4 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <HeartHandshake className="h-5 w-5 shrink-0 text-[#9d557e]" />
-            <div>
-              <p className="text-sm font-semibold text-[#48213d]">Tip your companion</p>
-              <p className="text-[10px] text-[#806c76]">100% goes directly to {companionName}.</p>
-            </div>
-          </div>
-          <button type="button" onClick={() => setOpen(true)}
-            className="shrink-0 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white"
-            data-testid="button-open-tip">
-            Send a tip
-          </button>
+    <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-4" data-testid="tip-card">
+      <div className="flex items-center gap-3">
+        <HeartHandshake className="h-5 w-5 shrink-0 text-[#9d557e]" />
+        <div>
+          <p className="text-sm font-semibold text-[#48213d]">Tip {companionName.split(' ')[0]}</p>
+          <p className="mt-0.5 text-[10px] leading-5 text-[#806c76]">Tips are not live yet. When they are, 100% will go to the companion through Stripe. Email hello@onlyfavors.com if you want to thank them another way.</p>
         </div>
-      ) : (
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[.15em] text-[#9d557e]">Send a tip to {companionName.split(' ')[0]}</p>
-            <button type="button" onClick={() => setOpen(false)} className="text-[#b0929f] hover:text-[#7f2e62]" aria-label="Close">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {TIP_OPTIONS.map((amt) => (
-              <button key={amt} type="button"
-                onClick={() => { setSelected(amt); setCustom(''); }}
-                className={`rounded-full border px-4 py-2 font-mono text-sm font-bold transition ${selected === amt && !custom ? 'border-[#7f2e62] bg-[#7f2e62] text-white' : 'border-[#dfd2c9] text-[#48213d] hover:border-[#9d557e]'}`}
-                data-testid={`button-tip-${amt}`}>
-                ${amt}
-              </button>
-            ))}
-            <div className="flex items-center gap-1 rounded-full border border-[#dfd2c9] px-3 py-2">
-              <span className="font-mono text-sm text-[#9b858e]">$</span>
-              <input type="number" min="1" max="500" placeholder="Other" value={custom}
-                onChange={(e) => { setCustom(e.target.value); setSelected(null); }}
-                className="w-16 bg-transparent font-mono text-sm text-[#48213d] outline-none placeholder:text-[#c6aeb8]"
-                data-testid="input-tip-custom" />
-            </div>
-          </div>
-          <button type="button" disabled={confirming || (!selected && !parseFloat(custom || '0'))} onClick={confirm}
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white disabled:opacity-40"
-            data-testid="button-confirm-tip">
-            {confirming ? 'Processing…' : `Confirm tip`}
-          </button>
-          <p className="mt-2 text-[9px] text-[#9b858e]">Tips are processed separately and go directly to the companion. Not refundable.</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
 function ReviewForm({ bookingId }: { bookingId: string }) {
-  const alreadyReviewed = Boolean(localStorage.getItem(`of_reviewed_${bookingId}`));
+  const existingReview = useQuery({
+    queryKey: ['booking-review', bookingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/review`, { credentials: 'include' });
+      if (res.status === 404) return null;
+      if (!res.ok) return null;
+      return res.json() as Promise<{ rating: number; comment: string | null }>;
+    },
+    enabled: Boolean(bookingId),
+    retry: false,
+  });
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
-  const [done, setDone] = useState(alreadyReviewed);
+  const [done, setDone] = useState(false);
   const submit = useSubmitReview(bookingId);
+  const alreadyReviewed = Boolean(existingReview.data) || done;
 
-  if (done) {
+  if (alreadyReviewed) {
     return (
       <div className="mt-6 flex items-center gap-3 rounded-[20px] bg-[#e8f0e8] px-5 py-4">
         <Check className="h-5 w-5 shrink-0 text-[#477254]" />
@@ -4314,7 +4340,7 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
   name: string; category: string; color: string; textColor: string; icon: typeof Landmark;
   tagline: string; intro: string;
   whatToExpect: string[]; tips: string[]; goodFor: string[];
-  avgDuration: string; avgRate: string; companions: { id: string; initials: string; name: string; city: string; rate: number; rating: number }[];
+  avgDuration: string; avgRate: string;
 }> = {
   'museum-visits': {
     name: 'Museum visits', category: 'Arts & Culture', color: '#ead0dd', textColor: '#7f2e62', icon: Landmark,
@@ -4329,10 +4355,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Arrive a few minutes early', 'Let your companion know what interests you most before you go', 'Comfortable shoes make a big difference'],
     goodFor: ['First-time OnlyFavors bookings', 'People new to a city', 'Anyone who finds solo museum visits lonely'],
     avgDuration: '2–3 hours', avgRate: '$65–$85 / hour',
-    companions: [
-      { id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 },
-      { id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', rate: 75, rating: 4.8 },
-    ],
   },
   'coffee-conversations': {
     name: 'Coffee conversations', category: 'Food & Drink', color: '#f3ead7', textColor: '#9a6d25', icon: Coffee,
@@ -4347,9 +4369,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['This is a great first booking — no special planning needed', 'Mornings and afternoons both work well', 'It\'s okay to sit in comfortable silence too'],
     goodFor: ['People working through a big decision', 'Those who want to practice a language', 'Anyone craving real conversation with no agenda'],
     avgDuration: '1–2 hours', avgRate: '$55–$75 / hour',
-    companions: [
-      { id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 },
-    ],
   },
   'gallery-tours': {
     name: 'Gallery tours', category: 'Arts & Culture', color: '#ead0dd', textColor: '#7f2e62', icon: Landmark,
@@ -4364,9 +4383,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Ask your companion to suggest a gallery they personally love', 'Openings can be fun — let your companion know if you want a livelier crowd', 'Wear layers; galleries are often cold'],
     goodFor: ['Art-curious beginners', 'People moving through a creative block', 'Those visiting a new city\'s art scene'],
     avgDuration: '1.5–2.5 hours', avgRate: '$60–$80 / hour',
-    companions: [
-      { id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', rate: 75, rating: 4.8 },
-    ],
   },
   'evening-walks': {
     name: 'Evening walks', category: 'Outdoor & Active', color: '#d3e1d8', textColor: '#31533f', icon: Navigation2,
@@ -4381,9 +4397,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Let your companion know if you prefer to talk or to walk in comfortable quiet', 'Bring a light layer — evenings can cool off', 'Suggest a neighborhood you\'ve always been curious about'],
     goodFor: ['People processing something quietly', 'Those who want to explore a new area', 'Anyone who finds sitting still hard'],
     avgDuration: '1–2 hours', avgRate: '$55–$70 / hour',
-    companions: [
-      { id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', rate: 75, rating: 4.8 },
-    ],
   },
   'restaurant-dining': {
     name: 'Restaurant dining', category: 'Food & Drink', color: '#f3ead7', textColor: '#9a6d25', icon: UtensilsCrossed,
@@ -4398,9 +4411,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Make a reservation in advance for popular spots', 'Let your companion know any dietary restrictions', 'Lunch bookings are a lower-pressure option if dinner feels like a big first step'],
     goodFor: ['Business travelers eating alone', 'People celebrating a milestone without someone to go with', 'Anyone who wants to try a special restaurant without waiting for the "right occasion"'],
     avgDuration: '1.5–2.5 hours', avgRate: '$65–$85 / hour',
-    companions: [
-      { id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 },
-    ],
   },
   'cooking-classes': {
     name: 'Cooking classes', category: 'Food & Drink', color: '#f3ead7', textColor: '#9a6d25', icon: UtensilsCrossed,
@@ -4415,9 +4425,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Book the cooking class first, then bring the companion', 'Beginner classes are often more fun than advanced ones', 'Check if the class provides aprons'],
     goodFor: ['People wanting to learn a new skill', 'Anyone who finds direct conversation easier when doing something with their hands', 'Food enthusiasts who want a companion for the experience'],
     avgDuration: '2–3 hours', avgRate: '$65–$80 / hour',
-    companions: [
-      { id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', rate: 75, rating: 4.8 },
-    ],
   },
   'architecture-walks': {
     name: 'Architecture walks', category: 'Arts & Culture', color: '#ead0dd', textColor: '#7f2e62', icon: Building2,
@@ -4432,7 +4439,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Wear comfortable walking shoes', 'Ask your companion to focus on a particular era or style if you have a preference', 'Late afternoon light is best for photos'],
     goodFor: ['Design and history enthusiasts', 'People exploring a new city', 'Anyone who wants to understand how a place was built'],
     avgDuration: '2–3 hours', avgRate: '$60–$80 / hour',
-    companions: [{ id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 }],
   },
   'bookstore-visits': {
     name: 'Bookstore visits', category: 'Relaxed & Low-key', color: '#fbf7f1', textColor: '#5a3520', icon: Landmark,
@@ -4447,7 +4453,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Tell your companion what genres or authors you enjoy', 'Bring a small note about books you\'ve been meaning to find', 'Saturday mornings have the best atmosphere in most cities'],
     goodFor: ['Readers who want company without pressure', 'People looking for their next great book', 'Anyone new to a city who wants to find the good independent bookstores'],
     avgDuration: '1–2 hours', avgRate: '$50–$65 / hour',
-    companions: [{ id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 }],
   },
   'hiking': {
     name: 'Hiking', category: 'Outdoor & Active', color: '#d3e1d8', textColor: '#31533f', icon: Navigation2,
@@ -4462,7 +4467,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['Let your companion know your fitness level honestly — no judgment', 'Wear layers; trails can be significantly colder than the city', 'Bring your own water (at least 1 liter per 2 hours)'],
     goodFor: ['People who want to explore nature near the city', 'Anyone who finds hiking alone unappealing', 'Those looking for a more active, outdoors-oriented favor'],
     avgDuration: '2.5–4 hours', avgRate: '$60–$80 / hour',
-    companions: [{ id: 'companion-jordan', initials: 'JK', name: 'Jordan K.', city: 'New York', rate: 75, rating: 4.8 }],
   },
   'conversation-partner': {
     name: 'Conversation partner', category: 'Relaxed & Low-key', color: '#fbf7f1', textColor: '#5a3520', icon: MessageSquare,
@@ -4477,7 +4481,6 @@ const ACTIVITY_DETAIL_DATA: Record<string, {
     tips: ['It\'s okay to not know what you want to talk about — just start', 'Sessions work well for processing big decisions or transitions', 'This is a good activity if it\'s your first OnlyFavors booking'],
     goodFor: ['People going through a life transition', 'Anyone who wants to think out loud with a thoughtful listener', 'Those who want to practice articulating ideas or plans'],
     avgDuration: '1–2 hours', avgRate: '$55–$70 / hour',
-    companions: [{ id: 'companion-maya', initials: 'MR', name: 'Maya R.', city: 'San Francisco', rate: 65, rating: 4.9 }],
   },
 };
 
@@ -4488,6 +4491,10 @@ function slugToKey(slug: string) {
 function ActivityDetail() {
   const { slug = '' } = useParams<{ slug: string }>();
   const data = ACTIVITY_DETAIL_DATA[slug];
+  const directory = useDirectoryCompanions();
+  const matching = (directory.data ?? []).filter((c) =>
+    c.activities.some((a) => a.toLowerCase() === (data?.name ?? slugToKey(slug)).toLowerCase()),
+  ).slice(0, 4);
 
   if (!data) {
     // Generic fallback for activities without a dedicated page
@@ -4593,22 +4600,24 @@ function ActivityDetail() {
                 </ul>
               </section>
 
-              {data.companions.length > 0 && (
+              {matching.length > 0 && (
                 <section>
                   <h2 className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Companions who offer this</h2>
                   <div className="mt-4 space-y-3">
-                    {data.companions.map((c) => (
+                    {matching.map((c) => (
                       <Link key={c.id} href={`/companions/${c.id}`}
                         className="group flex items-center gap-4 rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-4 transition hover:border-[#9d557e] hover:shadow-md"
                         data-testid={`activity-companion-${c.id}`}>
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-lg text-[#7f2e62]">{c.initials}</div>
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-lg text-[#7f2e62]">{companionInitials(c.displayName)}</div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-[#48213d] group-hover:text-[#7f2e62]">{c.name}</p>
-                          <p className="text-xs text-[#9b858e]">{c.city} · ${c.rate}/hr</p>
+                          <p className="font-semibold text-[#48213d] group-hover:text-[#7f2e62]">{c.displayName}</p>
+                          <p className="text-xs text-[#9b858e]">{c.city} · ${c.hourlyRate}/hr</p>
                         </div>
-                        <div className="flex items-center gap-1 text-xs font-bold text-[#9a6d25]">
-                          <Star className="h-3.5 w-3.5 fill-[#9a6d25]" />{c.rating}
-                        </div>
+                        {c.rating > 0 && (
+                          <div className="flex items-center gap-1 text-xs font-bold text-[#9a6d25]">
+                            <Star className="h-3.5 w-3.5 fill-[#9a6d25]" />{c.rating.toFixed(1)}
+                          </div>
+                        )}
                       </Link>
                     ))}
                     <Link href={`/explore?activity=${encodeURIComponent(data.name)}`}
@@ -4658,7 +4667,7 @@ const STORIES = [
       { kind: 'h2', text: 'The waiting period' },
       { kind: 'p', text: 'Companions typically respond within a few hours, sometimes faster. If they accept, a private masked chat thread opens between you. No phone numbers are ever exchanged through the platform — everything goes through OnlyFavors.' },
       { kind: 'h2', text: 'The favor itself' },
-      { kind: 'p', text: 'Meet at the SafeSpot at the agreed time. Your companion will check in via QR code so the trust team knows the booking has started. From there, it\'s just two people spending time together — at whatever pace feels right.' },
+      { kind: 'p', text: 'Meet at the SafeSpot at the agreed time. Record check-in in Favor Mode so the booking has a start record. From there, it\'s just two people spending time together — at whatever pace feels right.' },
       { kind: 'h2', text: 'After' },
       { kind: 'p', text: 'You\'ll receive a receipt and a prompt to leave a review if you\'d like. Reviews are optional, but companions genuinely value them — a thoughtful sentence goes a long way.' },
     ],
@@ -4676,26 +4685,9 @@ const STORIES = [
       { kind: 'h2', text: 'What makes a SafeSpot verified?' },
       { kind: 'p', text: 'We visit each location, verify it\'s well-lit and staffed, confirm it\'s accessible by public transit, and check it against our safety criteria. Venues can also apply — several hotel lobbies and café groups have actively sought SafeSpot status.' },
       { kind: 'h2', text: 'The QR check-in' },
-      { kind: 'p', text: 'When a booking starts, the companion scans a QR code at the venue. This records that the booking began on-time and on-location. If a check-in doesn\'t happen within 15 minutes of the scheduled start, the trust team is automatically notified.' },
+      { kind: 'p', text: 'When a booking starts, Favor Mode can record a check-in. That stores a timestamp. It does not notify a 24/7 trust desk or send SMS to your Trust Circle yet.' },
       { kind: 'h2', text: 'After the check-in' },
       { kind: 'p', text: 'Once the booking is underway, customers and companions are free to move to other public spaces if the activity calls for it — a walk, a different café, a gallery. The SafeSpot is the mandatory starting point, not the entire booking location.' },
-    ],
-  },
-  {
-    id: 'companion-spotlight-maya',
-    category: 'Companion spotlight',
-    title: 'Maya on why she joined OnlyFavors',
-    excerpt: '"I wanted work that felt meaningful — not just filling time, but actually being present with someone who needed company."',
-    readTime: '5 min read',
-    color: '#f3ead7',
-    textColor: '#9a6d25',
-    body: [
-      { kind: 'p', text: '"I\'d been freelancing for a while — writing, a bit of photography. And I loved the flexibility, but I missed the human part of working with people. A friend mentioned OnlyFavors and I was skeptical at first, honestly. It sounded like it could easily go sideways."' },
-      { kind: 'p', text: '"But the more I read about the boundary receipts and the SafeSpot system, the more I understood this was something different. The entire structure is built around me having control. I set my rate, I choose which requests I accept, I define my activities. Nobody is asking me to do anything I haven\'t already agreed to."' },
-      { kind: 'h2', text: 'On what customers are actually looking for' },
-      { kind: 'p', text: '"People think it\'s lonely people who book companions. And sometimes it is — someone new to the city, someone going through a divorce, someone whose friends are all too busy. But honestly, a lot of my regulars are just interesting people who have this thing they want to do and want someone to go with them. Last month I went to a Japanese ceramics exhibition with someone who spent the whole time teaching me things about the craft. I learned more in two hours than I would have in a week of reading."' },
-      { kind: 'h2', text: 'On the Boundary Receipt' },
-      { kind: 'p', text: '"I was nervous about the Boundary Receipt at first — would it feel awkward? Like some kind of legal document being passed between two strangers? But it\'s actually the opposite. It\'s a way of saying \'here\'s what I\'m comfortable with\' before we\'ve even met. By the time we\'re face to face, the groundwork is already done. We can just be people."' },
     ],
   },
   {
@@ -4709,13 +4701,13 @@ const STORIES = [
     body: [
       { kind: 'p', text: 'Most new companions underprice themselves, and the reasons are understandable — uncertainty about demand, not wanting to seem arrogant, a general discomfort with putting a number on personal time. But underpricing carries real costs.' },
       { kind: 'h2', text: 'Why low rates backfire' },
-      { kind: 'p', text: 'Counterintuitively, a rate that is too low can signal inexperience or low confidence — which affects how seriously customers take the booking. Companions who price in the established range ($65–$95/hour) consistently receive more thoughtful booking requests and fewer cancellations.' },
+      { kind: 'p', text: 'A rate that is too low can signal inexperience or low confidence — which affects how seriously customers take the booking. Price in a range that feels honest for the time and care you give.' },
       { kind: 'h2', text: 'The 5-booking review point' },
       { kind: 'p', text: 'After your first five completed bookings, review your rate. By that point you have real data: how long bookings actually take, how much preparation you put in, what your reviews say. Many companions raise their rate by $10–15 after this review without any drop in bookings.' },
       { kind: 'h2', text: 'When to raise it again' },
       { kind: 'p', text: 'When your acceptance rate is high and you\'re turning down bookings because you\'re full, your rate should go up. The goal is to reach a point where you\'re fully booked at a rate that genuinely compensates you well — not fully booked at a rate that just covers your time.' },
       { kind: 'h2', text: 'The platform benchmark' },
-      { kind: 'p', text: 'The OnlyFavors rate advisor (available on your earnings page) shows where you sit relative to companions in your city with a similar experience level. Use it as a data point, not a rule — but don\'t ignore it either.' },
+      { kind: 'p', text: 'There is no in-app rate advisor yet. Use your own completed bookings: if you are turning people away, raise the rate; if requests are slow, wait before dropping it. Price the time and care you actually give.' },
     ],
   },
 ];
@@ -4723,8 +4715,7 @@ const STORIES = [
 function NewsletterPage() {
   const [email, setEmail] = useState('');
   const [interests, setInterests] = useState<Set<string>>(new Set());
-  const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const TOPICS = [
     { id: 'companion-spotlights', label: '✨ Companion spotlights', desc: 'Deep dives on featured companions and their stories.' },
@@ -4746,31 +4737,8 @@ function NewsletterPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
-    setLoading(true);
-    setTimeout(() => { setDone(true); setLoading(false); }, 900);
+    setError('The dispatch is not live yet. Email hello@onlyfavors.com if you want to be notified when it launches.');
   };
-
-  if (done) return (
-    <Shell>
-      <main className="page-enter mx-auto max-w-lg px-5 py-24 text-center lg:px-8">
-        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#ead0dd]">
-          <Mail className="h-8 w-8 text-[#7f2e62]" />
-        </div>
-        <h1 className="mt-6 font-serif text-5xl text-[#48213d]">You're in.</h1>
-        <p className="mt-4 text-sm leading-6 text-[#725e69]">
-          Welcome to the OnlyFavors inner circle. We'll send thoughtful dispatches to <strong>{email}</strong> — never more than twice a month.
-        </p>
-        <div className="mt-8 flex justify-center gap-3">
-          <Link href="/stories" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white">
-            Read the journal <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link href="/" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dfd2c9] px-6 text-sm font-bold text-[#654c5f] hover:bg-[#eee2d9]">
-            Back home
-          </Link>
-        </div>
-      </main>
-    </Shell>
-  );
 
   return (
     <Shell>
@@ -4784,20 +4752,9 @@ function NewsletterPage() {
               A thoughtful newsletter from OnlyFavors. Companion spotlights, activity ideas, platform news, and community stories — sent mindfully, never more than twice a month.
             </p>
 
-            {/* Proof strip */}
             <div className="mt-8 rounded-[18px] bg-[#3d2038] p-6 text-[#f9efe5]">
-              <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#c695ae]">What readers say</p>
-              <div className="mt-4 space-y-4">
-                {[
-                  { quote: '"The companion spotlight on Maya made me finally book my first session. Worth every word."', attr: 'Reader in New York' },
-                  { quote: '"The safety guides are genuinely useful — clear, non-preachy, practical."', attr: 'Reader in San Francisco' },
-                ].map(({ quote, attr }) => (
-                  <div key={attr} className="rounded-[12px] bg-[#4a2842] p-4">
-                    <p className="text-xs leading-5 italic text-[#e0c8d9]">{quote}</p>
-                    <p className="mt-2 text-[9px] text-[#c695ae]">— {attr}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#c695ae]">When it launches</p>
+              <p className="mt-3 text-sm leading-6 text-[#e0c8d9]">Spotlights will come from real approved companions. Until then we will not invent reader quotes or named interviews.</p>
             </div>
           </div>
 
@@ -4832,10 +4789,12 @@ function NewsletterPage() {
               )}
             </div>
 
-            <button type="submit" disabled={!email.trim() || loading}
+            {error && <p className="mt-4 text-sm text-[#9d3d3d]">{error}</p>}
+
+            <button type="submit" disabled={!email.trim()}
               className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e] disabled:opacity-50"
               data-testid="button-newsletter-subscribe">
-              {loading ? 'Subscribing…' : 'Subscribe'} {!loading && <ArrowRight className="h-4 w-4" />}
+              Subscribe <ArrowRight className="h-4 w-4" />
             </button>
 
             <p className="mt-4 text-center text-[10px] leading-5 text-[#b0929f]">
@@ -4910,25 +4869,25 @@ function StoriesPage() {
 
         <div className="mx-auto max-w-5xl px-5 py-14 lg:px-8">
           {/* Featured */}
-          <button type="button" onClick={() => setActiveStory(STORIES[2].id)}
+          <button type="button" onClick={() => setActiveStory(STORIES[0].id)}
             className="group w-full rounded-[28px] border border-[#dfd2c9] bg-[#fbf7f1] p-8 text-left transition hover:border-[#9d557e] hover:shadow-lg md:p-10"
             data-testid="story-featured">
             <div className="flex flex-wrap items-start justify-between gap-6">
               <div className="flex-1 min-w-0">
                 <div className="inline-flex items-center rounded-full px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.15em]"
-                  style={{ background: STORIES[2].color, color: STORIES[2].textColor }}>
-                  {STORIES[2].category}
+                  style={{ background: STORIES[0].color, color: STORIES[0].textColor }}>
+                  {STORIES[0].category}
                 </div>
                 <h2 className="mt-4 font-serif text-[38px] leading-[1.05] text-[#48213d] group-hover:text-[#7f2e62]">
-                  {STORIES[2].title}
+                  {STORIES[0].title}
                 </h2>
-                <p className="mt-3 max-w-lg text-[15px] leading-7 text-[#654c5f]">{STORIES[2].excerpt}</p>
+                <p className="mt-3 max-w-lg text-[15px] leading-7 text-[#654c5f]">{STORIES[0].excerpt}</p>
                 <p className="mt-4 inline-flex items-center gap-2 text-[11px] font-bold text-[#9d557e] group-hover:gap-3 transition-all">
                   Read story <ArrowRight className="h-3.5 w-3.5" />
                 </p>
               </div>
               <div className="hidden h-32 w-32 shrink-0 items-center justify-center rounded-[22px] text-6xl md:flex"
-                style={{ background: STORIES[2].color }}>
+                style={{ background: STORIES[0].color }}>
                 ✦
               </div>
             </div>
@@ -4936,7 +4895,7 @@ function StoriesPage() {
 
           {/* Grid */}
           <div className="mt-8 grid gap-5 md:grid-cols-3">
-            {STORIES.filter((_, i) => i !== 2).map((s) => (
+            {STORIES.filter((_, i) => i !== 0).map((s) => (
               <button key={s.id} type="button" onClick={() => setActiveStory(s.id)}
                 className="group rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 text-left transition hover:border-[#9d557e] hover:shadow-md"
                 data-testid={`story-${s.id}`}>
@@ -4972,321 +4931,46 @@ function StoriesPage() {
 
 function CareersPage() {
   const ROLES = [
-    { title: 'Trust & Safety Analyst', team: 'Trust & Safety', location: 'San Francisco or Remote', type: 'Full-time', desc: 'Review companion applications, investigate platform concerns, and keep the community safe. Experience in trust ops, community, or policy preferred.' },
-    { title: 'Senior Backend Engineer', team: 'Engineering', location: 'Remote', type: 'Full-time', desc: 'Own and scale our API, Stripe payment flows, and Supabase infrastructure. TypeScript, Node.js, and PostgreSQL are your daily tools.' },
-    { title: 'Product Designer', team: 'Design', location: 'Remote', type: 'Full-time', desc: 'Design for privacy and safety first. You\'ll shape booking flows, companion onboarding, and the trust touchpoints that make users feel secure.' },
-    { title: 'City Growth Lead', team: 'Growth', location: 'New York or Chicago', type: 'Full-time', desc: 'Drive companion supply and customer demand in new cities. Part community builder, part operator — you\'ll launch a metro from scratch.' },
-    { title: 'Customer Experience Specialist', team: 'Support', location: 'Remote (US)', type: 'Part-time', desc: 'Support customers and companions through the booking process and edge-case situations with warmth, clarity, and good judgment.' },
+    { title: 'Trust & Safety', desc: 'Review companion applications and platform concerns.' },
+    { title: 'Engineering', desc: 'API, Stripe, and the booking product.' },
+    { title: 'Design', desc: 'Privacy-first booking and companion onboarding.' },
+    { title: 'City growth', desc: 'Companion supply and customer demand in a metro.' },
   ];
-
-  const VALUES = [
-    { icon: ShieldCheck, label: 'Safety first', body: 'Every decision starts with "is this safer?" — for companions, customers, and the people around them.' },
-    { icon: EyeOff, label: 'Privacy by design', body: 'We build with the minimum data needed and treat every user\'s privacy as a given, not a feature.' },
-    { icon: HeartHandshake, label: 'Humans over metrics', body: 'A good experience for real people beats a vanity KPI every time.' },
-    { icon: Sparkles, label: 'Craft your work', body: 'We move deliberately. Small team, high standards, real ownership at every level.' },
-  ];
-
-  const [activeRole, setActiveRole] = useState<string | null>(null);
-  const [applied, setApplied] = useState<string | null>(null);
-  const [email, setEmail] = useState('');
 
   return (
     <Shell>
       <main className="page-enter">
-        {/* Hero */}
         <section className="bg-[#3d2038] px-5 py-20 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Join the team</p>
             <h1 className="mt-4 max-w-xl font-serif text-[68px] leading-[.9] text-[#f9efe5]">Work that<br /><em>matters.</em></h1>
-            <p className="mt-5 max-w-lg text-[17px] leading-7 text-[#d9c4cf]">We're building a platform where platonic connection is safe, clear, and human. Small team, serious mission.</p>
-            <div className="mt-8 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-[.15em]">
-              {[['Remote-first', '#3dbd8c'], ['20 people', '#c695ae'], ['Series A', '#bf8750']].map(([label, color]) => (
-                <span key={label} className="rounded-full border px-4 py-2" style={{ borderColor: color, color }}>{label}</span>
-              ))}
-            </div>
+            <p className="mt-5 max-w-lg text-[17px] leading-7 text-[#d9c4cf]">
+              OnlyFavors is a small team building a platonic companion marketplace. There is no live job board or in-app application form. Hiring is by email.
+            </p>
           </div>
         </section>
 
-        <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
-
-          {/* Values */}
-          <section>
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">How we work</p>
-            <h2 className="mt-2 font-serif text-4xl text-[#48213d]">What we believe</h2>
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {VALUES.map(({ icon: Icon, label, body }) => (
-                <div key={label} className="rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#ead0dd]">
-                    <Icon className="h-5 w-5 text-[#7f2e62]" />
-                  </div>
-                  <h3 className="mt-5 font-serif text-xl text-[#48213d]">{label}</h3>
-                  <p className="mt-2 text-xs leading-5 text-[#725e69]">{body}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Open roles */}
-          <section className="mt-16">
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Open roles</p>
-            <h2 className="mt-2 font-serif text-4xl text-[#48213d]">{ROLES.length} positions open</h2>
-            <div className="mt-8 space-y-3">
-              {ROLES.map((role) => {
-                const isOpen = activeRole === role.title;
-                const isApplied = applied === role.title;
-                return (
-                  <div key={role.title} className="overflow-hidden rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1]" data-testid={`role-${role.title.toLowerCase().replace(/\W+/g, '-')}`}>
-                    <button type="button" onClick={() => setActiveRole(isOpen ? null : role.title)}
-                      className="flex w-full items-start justify-between gap-4 px-6 py-5 text-left hover:bg-[#f5ede6]">
-                      <div className="flex-1">
-                        <p className="text-base font-bold text-[#48213d]">{role.title}</p>
-                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                          <span className="font-mono text-[9px] uppercase tracking-[.12em] text-[#9d557e]">{role.team}</span>
-                          <span className="text-[10px] text-[#9b858e]">{role.location}</span>
-                          <span className="rounded-full bg-[#ead0dd] px-2 py-0.5 text-[9px] font-bold text-[#7f2e62]">{role.type}</span>
-                        </div>
-                      </div>
-                      <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-[#9b858e] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {isOpen && (
-                      <div className="border-t border-[#dfd2c9] px-6 py-5">
-                        <p className="text-sm leading-6 text-[#654c5f]">{role.desc}</p>
-                        {isApplied ? (
-                          <p className="mt-4 flex items-center gap-2 text-sm font-bold text-[#477254]">
-                            <Check className="h-4 w-4" />Application submitted — we'll be in touch.
-                          </p>
-                        ) : (
-                          <form onSubmit={(e) => { e.preventDefault(); if (email.trim()) setApplied(role.title); }}
-                            className="mt-5 flex flex-wrap gap-3">
-                            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                              placeholder="your@email.com"
-                              className="h-10 flex-1 min-w-[200px] rounded-full border border-[#cbbab5] bg-white px-4 text-sm outline-none focus:border-[#7f2e62]"
-                              data-testid={`input-apply-email-${role.title.toLowerCase().replace(/\W+/g, '-')}`} />
-                            <button type="submit"
-                              className="inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white hover:bg-[#65234e]"
-                              data-testid={`button-apply-${role.title.toLowerCase().replace(/\W+/g, '-')}`}>
-                              Apply <Send className="h-3.5 w-3.5" />
-                            </button>
-                          </form>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* No fit CTA */}
+        <div className="mx-auto max-w-3xl px-5 py-16 lg:px-8">
+          <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Kinds of work</p>
+          <h2 className="mt-2 font-serif text-4xl text-[#48213d]">What we hire for when we hire</h2>
+          <p className="mt-4 text-sm leading-6 text-[#725e69]">These are the areas we care about. They are not open requisitions with a published headcount, round, or start date.</p>
+          <div className="mt-8 space-y-3">
+            {ROLES.map((role) => (
+              <div key={role.title} className="rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6" data-testid={`role-${role.title.toLowerCase().replace(/\W+/g, '-')}`}>
+                <h3 className="font-serif text-2xl text-[#48213d]">{role.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#654c5f]">{role.desc}</p>
+              </div>
+            ))}
+          </div>
           <section className="mt-12 rounded-[24px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-10">
-            <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#c695ae]">Don't see your role?</p>
-            <h2 className="mt-3 font-serif text-4xl">We're always looking for exceptional people.</h2>
-            <p className="mt-4 max-w-lg text-sm leading-6 text-[#d9c4cf]">Send us a brief note about who you are and how you'd contribute. We read every message personally.</p>
-            <a href="mailto:team@onlyfavors.com" className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#f9efe5] px-5 text-sm font-bold text-[#48213d] hover:bg-white">
+            <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#c695ae]">How to apply</p>
+            <h2 className="mt-3 font-serif text-4xl">Email a note. We will reply if there is a fit.</h2>
+            <p className="mt-4 max-w-lg text-sm leading-6 text-[#d9c4cf]">There is no ATS here. Sending this form nowhere would pretend we received your resume. Use email instead.</p>
+            <a href="mailto:team@onlyfavors.com?subject=OnlyFavors%20role" className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#f9efe5] px-5 text-sm font-bold text-[#48213d] hover:bg-white">
               team@onlyfavors.com <ArrowRight className="h-4 w-4" />
             </a>
           </section>
-
         </div>
-      </main>
-    </Shell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Community page  /community
-// ---------------------------------------------------------------------------
-
-const COMMUNITY_STORIES = [
-  {
-    name: 'Mara S.',
-    city: 'Seattle, WA',
-    role: 'customer',
-    story: 'I moved to Seattle for work and didn\'t know anyone. OnlyFavors helped me explore the city with someone local — no awkwardness, just great conversation and a museum I never would\'ve found on my own.',
-    activity: 'Museum visits',
-    rating: 5,
-  },
-  {
-    name: 'James T.',
-    city: 'Austin, TX',
-    role: 'customer',
-    story: 'Going through a quiet stretch after a long relationship. Booking a few coffee chats reminded me I\'m good company. Small thing, but it helped.',
-    activity: 'Coffee conversations',
-    rating: 5,
-  },
-  {
-    name: 'Priya K.',
-    city: 'Chicago, IL',
-    role: 'companion',
-    story: 'I started as a companion while finishing my MBA. The flexibility is real — I set my hours, my rate, my boundaries. The platform handles the rest. I\'ve since referred two friends.',
-    activity: 'Gallery tours · Dining',
-    rating: 5,
-  },
-  {
-    name: 'Leo A.',
-    city: 'New York, NY',
-    role: 'customer',
-    story: 'My therapist suggested structured social time outside of work. OnlyFavors was exactly that — low pressure, interesting people, and I always felt safe.',
-    activity: 'Evening walks',
-    rating: 5,
-  },
-  {
-    name: 'Danielle R.',
-    city: 'Los Angeles, CA',
-    role: 'companion',
-    story: 'What I love is the clarity. Boundaries are set before we ever meet. No grey areas, no weird vibes. Customers are respectful because the platform attracts people who read the room.',
-    activity: 'Cooking classes · Dining',
-    rating: 5,
-  },
-  {
-    name: 'Tom H.',
-    city: 'Denver, CO',
-    role: 'customer',
-    story: 'Travelled solo to Denver for a conference. Had a half-day free. Found a companion who showed me the best breakfast spot in the neighbourhood. Perfect way to spend a Thursday morning.',
-    activity: 'Coffee conversations',
-    rating: 5,
-  },
-  {
-    name: 'Carmen L.',
-    city: 'San Francisco, CA',
-    role: 'customer',
-    story: 'I\'m an introvert who wanted to get better at being social. Having a low-stakes outing with a companion once a week genuinely changed how I move through the world. The Trust Circle feature made my husband feel better about it too.',
-    activity: 'Gallery tours',
-    rating: 5,
-  },
-  {
-    name: 'Marcus W.',
-    city: 'Boston, MA',
-    role: 'companion',
-    story: 'I was skeptical at first — but the vetting process is serious. Everyone I\'ve met has been thoughtful and genuinely just looking for good company. The SafeSpot system makes first meetings feel totally comfortable for both sides.',
-    activity: 'Architecture walks · Coffee',
-    rating: 5,
-  },
-  {
-    name: 'Yuki T.',
-    city: 'Chicago, IL',
-    role: 'customer',
-    story: 'I\'d just moved from Tokyo. My English is good but I didn\'t have a social network yet. I spent my first three months in Chicago going to jazz venues and architecture tours. I know this city better than people who\'ve lived here for years.',
-    activity: 'Jazz evenings · Architecture tours',
-    rating: 5,
-  },
-  {
-    name: 'Francesca B.',
-    city: 'Miami, FL',
-    role: 'companion',
-    story: 'I set my own rates, decline anything that doesn\'t feel right, and earn more per hour than I did in my old hospitality job. The platform genuinely respects companions — I\'ve never felt pressured into anything.',
-    activity: 'Dining · Beach visits',
-    rating: 5,
-  },
-  {
-    name: 'Raj N.',
-    city: 'New York, NY',
-    role: 'customer',
-    story: 'I\'m a widower. Two years in, I finally felt ready to be out in the world again but wasn\'t sure where to start. My first booking was a walk through the Met. My companion was warm, funny, and asked the right questions. I went again the next week.',
-    activity: 'Museum visits',
-    rating: 5,
-  },
-  {
-    name: 'Sasha V.',
-    city: 'Portland, OR',
-    role: 'companion',
-    story: 'The Boundary Receipt feature is what made me comfortable joining. Before every booking both parties confirm the same expectations. It\'s in writing. It\'s mutual. That\'s the kind of safety I needed to see before I trusted the platform.',
-    activity: 'Bookstore visits · Coffee',
-    rating: 5,
-  },
-];
-
-function CommunityPage() {
-  const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'companion'>('all');
-
-  const filtered = COMMUNITY_STORIES.filter((s) => roleFilter === 'all' || s.role === roleFilter);
-
-  return (
-    <Shell>
-      <main className="page-enter">
-        {/* Hero */}
-        <section className="border-b border-[#ddcfc6] bg-[#f8f1e9] px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Real experiences</p>
-            <h1 className="mt-4 font-serif text-[64px] leading-[.92] text-[#48213d]">The community<br /><em>behind the favors.</em></h1>
-            <p className="mt-5 max-w-xl text-[17px] leading-7 text-[#725e69]">Every booking is a real person seeking real connection. Here are some of the stories they shared with us — in their own words.</p>
-          </div>
-        </section>
-
-        {/* Stats strip */}
-        <section className="border-b border-[#ddcfc6] bg-[#fdf9f5]">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-10 px-5 py-6 lg:px-8">
-            {([
-              { value: '1,200+', label: 'Active companions' },
-              { value: '47+',    label: 'Cities covered' },
-              { value: '4.9/5',  label: 'Average companion rating' },
-              { value: '98%',    label: 'Customers feel safe' },
-            ] as const).map(({ value, label }) => (
-              <div key={label} className="flex items-center gap-3">
-                <p className="font-serif text-2xl text-[#48213d]">{value}</p>
-                <p className="max-w-[110px] text-[10px] leading-4 text-[#806c76]">{label}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Stories */}
-        <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
-          {/* Filter */}
-          <div className="mb-8 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e] mr-2">Show</span>
-            {(['all', 'customer', 'companion'] as const).map((f) => (
-              <button key={f} onClick={() => setRoleFilter(f)}
-                className={`rounded-full border px-4 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[.1em] transition ${roleFilter === f ? 'border-[#9d557e] bg-[#9d557e] text-white' : 'border-[#dfd2c9] text-[#806c76] hover:border-[#9d557e]'}`}
-                data-testid={`filter-${f}`}>
-                {f === 'all' ? 'All voices' : f === 'customer' ? 'Customers' : 'Companions'}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((s) => (
-              <div key={s.name}
-                className={`flex flex-col rounded-[26px] p-7 ${s.role === 'companion' ? 'bg-[#e8f0e8]' : 'border border-[#dfd2c9] bg-[#fbf7f1]'}`}
-                data-testid={`story-${s.name.replace(/[^a-z]/gi, '-').toLowerCase()}`}>
-                {/* Stars */}
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: s.rating }).map((_, i) => (
-                    <Star key={i} className={`h-3.5 w-3.5 fill-current ${s.role === 'companion' ? 'text-[#477254]' : 'text-[#bf8750]'}`} />
-                  ))}
-                </div>
-                <p className="mt-4 flex-1 text-[15px] leading-7 text-[#48213d]">"{s.story}"</p>
-                <div className="mt-6 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-[#48213d]">{s.name}</p>
-                    <p className="text-[10px] text-[#9b858e]">{s.city}</p>
-                  </div>
-                  <span className={`rounded-full px-3 py-1 font-mono text-[9px] uppercase tracking-[.12em] ${s.role === 'companion' ? 'bg-[#b5cdb7] text-[#31533f]' : 'bg-[#ead0dd] text-[#7f2e62]'}`}>
-                    {s.role}
-                  </span>
-                </div>
-                <p className="mt-3 text-[11px] text-[#9b858e]">{s.activity}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* CTA strip */}
-        <section className="border-t border-[#ddcfc6] bg-[#3d2038] px-5 py-16 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Your story next</p>
-            <h2 className="mt-3 font-serif text-5xl leading-none text-[#f9efe5]">Ready to connect?</h2>
-            <p className="mt-4 text-sm leading-6 text-[#d9c4cf]">Browse companions near you, or apply to join our growing community of verified companions.</p>
-            <div className="mt-8 flex flex-wrap justify-center gap-4">
-              <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#f9efe5] px-6 text-sm font-bold text-[#48213d] transition hover:bg-white" data-testid="link-community-explore">
-                Explore companions <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link href="/companion/apply" className="inline-flex h-12 items-center gap-2 rounded-full border border-[#5e3458] px-6 text-sm font-bold text-[#d9c4cf] transition hover:border-[#c695ae]" data-testid="link-community-apply">
-                Become a companion
-              </Link>
-            </div>
-          </div>
-        </section>
       </main>
     </Shell>
   );
@@ -5332,7 +5016,7 @@ function PressPage() {
                 {[
                   ['Founded', '2025'],
                   ['Mission', 'Make platonic companionship safe, accessible, and stigma-free.'],
-                  ['Model', 'Two-sided marketplace — verified companions, privacy-first customers.'],
+                  ['Model', 'Two-sided marketplace — human-reviewed companions, privacy-first customers.'],
                   ['Safety', 'Every booking starts at a verified SafeSpot. Boundary receipts required.'],
                   ['Coverage', 'Launching city by city as companions and SafeSpots are approved.'],
                   ['Companions', 'Every live profile is approved. We do not publish invented counts.'],
@@ -5357,23 +5041,23 @@ function PressPage() {
                     { label: 'Screenshot library', desc: 'App screenshots for editorial use.' },
                     { label: 'Founder bios + photos', desc: 'Headshots and approved biographies.' },
                   ].map(({ label, desc }) => (
-                    <button key={label} type="button"
+                    <a key={label} href="mailto:press@onlyfavors.com?subject=Press%20kit%20request"
                       className="flex w-full items-center gap-4 rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-4 text-left transition hover:border-[#9d557e]"
                       data-testid={`press-download-${label.toLowerCase().replace(/\W+/g, '-')}`}>
                       <FileText className="h-4 w-4 shrink-0 text-[#9d557e]" />
                       <div>
                         <p className="text-sm font-semibold text-[#48213d]">{label}</p>
-                        <p className="text-[10px] text-[#9b858e]">{desc}</p>
+                        <p className="text-[10px] text-[#9b858e]">{desc} Email press@onlyfavors.com — files are not hosted here yet.</p>
                       </div>
-                    </button>
+                    </a>
                   ))}
                 </div>
               </div>
 
               <div className="rounded-[20px] bg-[#ead0dd] p-6">
                 <p className="font-mono text-[9px] font-bold uppercase tracking-[.2em] text-[#7f2e62]">Press contact</p>
-                <h3 className="mt-2 font-serif text-2xl text-[#48213d]">We respond within 24 hours.</h3>
-                <p className="mt-2 text-sm text-[#725e69]">For interview requests, fact-checking, or brand assets, reach our communications team directly.</p>
+                <h3 className="mt-2 font-serif text-2xl text-[#48213d]">Email press@onlyfavors.com</h3>
+                <p className="mt-2 text-sm text-[#725e69]">For interview requests, fact-checking, or brand assets. We do not publish a response-time SLA.</p>
                 <a href="mailto:press@onlyfavors.com" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white">
                   press@onlyfavors.com
                 </a>
@@ -5391,32 +5075,15 @@ function CityWaitlistPage() {
   const [email, setEmail] = useState('');
   const [city, setCity] = useState('');
   const [role, setRole] = useState<'customer' | 'companion'>('customer');
-  const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const COMING_SOON = ['Miami', 'Portland', 'Denver', 'Boston', 'Atlanta', 'Washington DC', 'Houston', 'Nashville', 'Toronto', 'London'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !city.trim()) return;
-    setLoading(true);
-    setTimeout(() => { setDone(true); setLoading(false); }, 800);
+    setError(`The city waitlist is not live yet. Email hello@onlyfavors.com with “${city}” and we will keep you posted.`);
   };
-
-  if (done) return (
-    <Shell>
-      <main className="page-enter mx-auto max-w-lg px-5 py-24 text-center lg:px-8">
-        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#d3e1d8]">
-          <Check className="h-8 w-8 text-[#477254]" />
-        </div>
-        <h1 className="mt-6 font-serif text-5xl text-[#48213d]">You're on the list.</h1>
-        <p className="mt-4 text-sm leading-6 text-[#725e69]">We'll email you at <strong>{email}</strong> as soon as OnlyFavors launches in <strong>{city}</strong>. We typically reach new cities within 60–90 days of hitting critical companion density.</p>
-        <Link href="/" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-white">
-          Back home <ArrowRight className="h-4 w-4" />
-        </Link>
-      </main>
-    </Shell>
-  );
 
   return (
     <Shell>
@@ -5470,12 +5137,14 @@ function CityWaitlistPage() {
             ))}
           </div>
 
-          <button type="submit" disabled={!email.trim() || !city.trim() || loading}
+          <button type="submit" disabled={!email.trim() || !city.trim()}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-white transition hover:bg-[#65234e] disabled:opacity-50"
             data-testid="button-submit-waitlist">
-            {loading ? 'Adding you…' : 'Join waitlist'} {!loading && <ArrowRight className="h-4 w-4" />}
+            Join waitlist <ArrowRight className="h-4 w-4" />
           </button>
         </form>
+
+        {error && <p className="mt-4 text-center text-sm text-[#9d3d3d]">{error}</p>}
 
         <p className="mt-6 text-center text-[11px] text-[#9b858e]">
           No spam. We'll only contact you when your city launches.
@@ -5486,19 +5155,21 @@ function CityWaitlistPage() {
 }
 
 function CitiesIndex() {
+  const directory = useDirectoryCompanions();
+  const live = directory.data ?? [];
   const CITIES = [
-    { slug: 'san-francisco', name: 'San Francisco', tagline: 'Art, coffee, and coastline.', companions: 12, icon: Coffee },
-    { slug: 'new-york', name: 'New York', tagline: 'The city that never stops surprising.', companions: 18, icon: Building2 },
-    { slug: 'chicago', name: 'Chicago', tagline: 'Architecture, jazz, and lakeside walks.', companions: 9, icon: Landmark },
-    { slug: 'los-angeles', name: 'Los Angeles', tagline: 'Sunshine, galleries, and rooftop dining.', companions: 15, icon: Star },
-    { slug: 'seattle', name: 'Seattle', tagline: 'Coffee culture and misty bookshops.', companions: 7, icon: Coffee },
-    { slug: 'boston', name: 'Boston', tagline: 'History, academia, and harbor walks.', companions: 6, icon: Landmark },
-    { slug: 'austin', name: 'Austin', tagline: 'Music, tacos, and outdoor adventure.', companions: 8, icon: Sparkles },
-    { slug: 'portland', name: 'Portland', tagline: 'Farmers markets, trails, and craft coffee.', companions: 5, icon: Navigation2 },
-    { slug: 'denver', name: 'Denver', tagline: 'Mountain views and gallery districts.', companions: 6, icon: Navigation2 },
-    { slug: 'miami', name: 'Miami', tagline: 'Art Deco, beaches, and Cuban cuisine.', companions: 10, icon: UtensilsCrossed },
-    { slug: 'washington-dc', name: 'Washington D.C.', tagline: 'Museums, monuments, and diplomatic dining.', companions: 11, icon: Landmark },
-    { slug: 'atlanta', name: 'Atlanta', tagline: 'Soul food, street art, and Southern charm.', companions: 8, icon: UtensilsCrossed },
+    { slug: 'san-francisco', name: 'San Francisco', tagline: 'Art, coffee, and coastline.', icon: Coffee },
+    { slug: 'new-york', name: 'New York', tagline: 'The city that never stops surprising.', icon: Building2 },
+    { slug: 'chicago', name: 'Chicago', tagline: 'Architecture, jazz, and lakeside walks.', icon: Landmark },
+    { slug: 'los-angeles', name: 'Los Angeles', tagline: 'Sunshine, galleries, and rooftop dining.', icon: Star },
+    { slug: 'seattle', name: 'Seattle', tagline: 'Coffee culture and misty bookshops.', icon: Coffee },
+    { slug: 'boston', name: 'Boston', tagline: 'History, academia, and harbor walks.', icon: Landmark },
+    { slug: 'austin', name: 'Austin', tagline: 'Music, tacos, and outdoor adventure.', icon: Sparkles },
+    { slug: 'portland', name: 'Portland', tagline: 'Farmers markets, trails, and craft coffee.', icon: Navigation2 },
+    { slug: 'denver', name: 'Denver', tagline: 'Mountain views and gallery districts.', icon: Navigation2 },
+    { slug: 'miami', name: 'Miami', tagline: 'Art Deco, beaches, and Cuban cuisine.', icon: UtensilsCrossed },
+    { slug: 'washington-dc', name: 'Washington D.C.', tagline: 'Museums, monuments, and diplomatic dining.', icon: Landmark },
+    { slug: 'atlanta', name: 'Atlanta', tagline: 'Soul food, street art, and Southern charm.', icon: UtensilsCrossed },
   ];
 
   return (
@@ -5516,7 +5187,9 @@ function CitiesIndex() {
         {/* Grid */}
         <section className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {CITIES.map(({ slug, name, tagline, companions, icon: Icon }) => (
+            {CITIES.map(({ slug, name, tagline, icon: Icon }) => {
+              const count = live.filter((c) => c.city.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(c.city.toLowerCase())).length;
+              return (
               <Link key={slug} href={`/cities/${slug}`}
                 className="group flex flex-col rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 transition hover:-translate-y-0.5 hover:border-[#9d557e] hover:shadow-lg"
                 data-testid={`city-${slug}`}>
@@ -5526,11 +5199,12 @@ function CitiesIndex() {
                 <h2 className="mt-4 font-serif text-2xl leading-tight text-[#48213d]">{name}</h2>
                 <p className="mt-1 flex-1 text-[12px] leading-5 text-[#806c76]">{tagline}</p>
                 <div className="mt-4 flex items-center justify-between border-t border-[#ece1d9] pt-4">
-                  <span className="font-mono text-[9px] uppercase tracking-[.14em] text-[#9b858e]">{companions} companions</span>
+                  <span className="font-mono text-[9px] uppercase tracking-[.14em] text-[#9b858e]">{count} {count === 1 ? 'companion' : 'companions'}</span>
                   <span className="font-mono text-[9px] font-bold text-[#7f2e62] opacity-0 transition group-hover:opacity-100">Explore →</span>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -5677,99 +5351,60 @@ function CityPage() {
   });
   const spots = spotsQuery.data ?? [];
 
-  const CITY_DATA: Record<string, { tagline: string; companions: string[]; safespots: string[]; activities: string[]; count: number }> = {
+  const CITY_DATA: Record<string, { tagline: string; activities: string[] }> = {
     'San Francisco': {
       tagline: 'Art, coffee, and coastline.',
-      companions: ['companion-maya'],
-      safespots: ['Blue Bottle Coffee · Hayes Valley', 'SFMOMA Lobby · SoMa', 'The Interval at Long Now · Fort Mason'],
       activities: ['Museum visits', 'Gallery tours', 'Coffee conversations', 'Coastal walks'],
-      count: 12,
     },
     'New York': {
       tagline: 'The city that never stops surprising.',
-      companions: ['companion-jordan'],
-      safespots: ['The Ace Hotel Lobby · Midtown', 'NYPL Stephen A. Schwarzman · Midtown', 'Chelsea Market · Meatpacking'],
       activities: ['Gallery tours', 'Cooking classes', 'Evening walks', 'Museum visits'],
-      count: 18,
     },
     'Los Angeles': {
       tagline: 'Sunshine, galleries, and rooftop dining.',
-      companions: ['companion-priya'],
-      safespots: ['The Broad Museum Lobby · DTLA', 'Grand Central Market · DTLA', 'The Hammer Museum · Westwood'],
       activities: ['Gallery tours', 'Rooftop dining', 'Coastal walks', 'Film & culture tours'],
-      count: 15,
     },
     'Chicago': {
       tagline: 'Architecture, jazz, and lakeside walks.',
-      companions: ['companion-simone'],
-      safespots: ['Chicago Cultural Center · Loop', 'The Art Institute Lobby · Grant Park', 'Eataly Chicago · River North'],
       activities: ['Architecture tours', 'Jazz evenings', 'Lakeside walks', 'Museum visits'],
-      count: 9,
     },
     'Seattle': {
       tagline: 'Coffee culture and misty bookshops.',
-      companions: ['companion-alex'],
-      safespots: ['Seattle Art Museum Lobby · Downtown', 'Pike Place Market · Waterfront', 'Caffe Vita · Capitol Hill'],
       activities: ['Coffee conversations', 'Bookshop tours', 'Market walks', 'Museum visits'],
-      count: 7,
     },
     'Austin': {
       tagline: 'Music, tacos, and outdoor adventure.',
-      companions: [],
-      safespots: ['Blanton Museum Lobby · UT Campus', 'Central Library · Downtown', 'Café No Sé · East Austin'],
       activities: ['Live music evenings', 'Trail walks', 'Food tours', 'Gallery visits'],
-      count: 8,
     },
     'Denver': {
       tagline: 'Mountain views and gallery districts.',
-      companions: ['companion-ruth'],
-      safespots: ['Denver Art Museum Lobby · Golden Triangle', 'Tattered Cover · LoDo', 'Denver Central Market · RiNo'],
       activities: ['Gallery tours', 'Hiking & nature walks', 'Coffee conversations', 'Museum visits'],
-      count: 6,
     },
     'Miami': {
       tagline: 'Art Deco, beaches, and Cuban cuisine.',
-      companions: ['companion-isadora'],
-      safespots: ['Pérez Art Museum Miami · Downtown', 'The Setai Lobby · South Beach', 'Wynwood Walls Entry Plaza · Wynwood'],
       activities: ['Art walks', 'Beachside walks', 'Food & culture tours', 'Gallery visits'],
-      count: 10,
     },
     'Boston': {
       tagline: 'History, academia, and harbor walks.',
-      companions: ['companion-devon'],
-      safespots: ['Museum of Fine Arts Lobby · Fenway', 'Boston Public Library · Back Bay', 'Thinking Cup · Downtown'],
       activities: ['History walks', 'Harbor strolls', 'Museum visits', 'Coffee conversations'],
-      count: 6,
     },
     'Washington D.C.': {
       tagline: 'Museums, monuments, and diplomatic dining.',
-      companions: ['companion-theo'],
-      safespots: ['National Portrait Gallery Lobby · Penn Quarter', 'Smithsonian Castle · National Mall', 'Compass Coffee · Shaw'],
       activities: ['Monument tours', 'Museum visits', 'Diplomatic dining', 'Gallery walks'],
-      count: 11,
     },
     'Atlanta': {
       tagline: 'Soul food, street art, and Southern charm.',
-      companions: [],
-      safespots: ['High Museum of Art Lobby · Midtown', 'Ponce City Market · Old Fourth Ward', 'Chattahoochee Food Works · West Midtown'],
       activities: ['Food & culture tours', 'Street art walks', 'Museum visits', 'Coffee conversations'],
-      count: 8,
     },
     'Portland': {
       tagline: 'Farmers markets, trails, and craft coffee.',
-      companions: [],
-      safespots: ['Portland Art Museum Lobby · Downtown', 'Powell\'s City of Books · Pearl District', 'Stumptown Coffee Roasters · Belmont'],
       activities: ['Farmers market visits', 'Trail walks', 'Bookshop tours', 'Coffee conversations'],
-      count: 5,
     },
   };
 
   const data = CITY_DATA[cityName] ?? {
     tagline: 'Great company, wherever you are.',
-    companions: [],
-    safespots: ['Check our SafeSpot directory for venues near you.'],
     activities: ['Coffee conversations', 'Museum visits', 'Evening walks'],
-    count: 0,
   };
 
   return (
@@ -5849,7 +5484,7 @@ function CityPage() {
               <div className="rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-7">
                 <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#9d557e]">Ready to explore?</p>
                 <h3 className="mt-2 font-serif text-3xl text-[#48213d]">Find your companion in {cityName}.</h3>
-                <p className="mt-3 text-sm leading-6 text-[#725e69]">Browse verified companions, filter by activity, and book instantly — no account required.</p>
+                <p className="mt-3 text-sm leading-6 text-[#725e69]">Browse approved companions and filter by activity. You can look without an account. Booking requires sign-in.</p>
                 <Link href={`/explore?city=${encodeURIComponent(cityName)}`}
                   className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white transition hover:bg-[#65234e]"
                   data-testid="link-city-cta">
@@ -6032,18 +5667,26 @@ function CompanionAchievementsCard({ bookings }: { bookings: Array<{ status: str
 }
 
 function CompanionProfileCompletionCard() {
+  const { user } = useAuth();
   const profile = useCompanionProfile();
+  const payout = useCompanionPayoutStatus();
   const p = profile.data;
   const qaDone = (p?.interviewAnswers ?? []).some(Boolean);
-  const payoutDone = (() => { try { return localStorage.getItem('of_payout_status') === 'active'; } catch { return false; } })();
+  const payoutDone = payout.data?.status === 'active';
+  const availabilityDone = Boolean(p?.availableDays?.length);
 
   const steps: { label: string; done: boolean; href?: string }[] = [
+    { label: 'Email verified', done: true },
+    { label: '18+ confirmed', done: Boolean(user?.ageConfirmed) },
     { label: 'Profile photo', done: Boolean(p?.photoUrl), href: '/dashboard/companion/profile' },
     { label: 'Biography written', done: Boolean(p?.bio?.trim()), href: '/dashboard/companion/profile' },
     { label: 'Activities listed', done: Boolean(p?.activities?.length), href: '/dashboard/companion/profile' },
     { label: 'Q&A interview answered', done: qaDone, href: '/dashboard/companion/profile' },
-    { label: 'Stripe payout connected', done: payoutDone, href: '/dashboard/companion/payout' },
-    { label: 'Availability set', done: false, href: '/dashboard/companion/profile' },
+    { label: 'ID submitted for review', done: Boolean(p?.identityStatus && p.identityStatus !== 'unsubmitted'), href: '/dashboard/companion/profile' },
+    { label: 'Identity verified', done: p?.identityStatus === 'verified' },
+    { label: 'Listing approved — required to appear in search and accept bookings', done: Boolean(p?.approved) },
+    { label: 'Stripe payout connected — required to receive transfers', done: payoutDone, href: '/dashboard/companion/payout' },
+    { label: 'Availability set', done: availabilityDone, href: '/dashboard/companion/profile' },
   ];
   const completed = steps.filter((s) => s.done).length;
   const pct = Math.round((completed / steps.length) * 100);
@@ -6099,10 +5742,10 @@ const FAQ_DATA = [
   {
     category: 'Getting started',
     items: [
-      { q: 'What is OnlyFavors?', a: 'OnlyFavors is a privacy-first platonic companion marketplace. It connects people who want thoughtful company — for a museum visit, dinner, a walk, or conversation — with verified companions who set their own schedule and rate.' },
+      { q: 'What is OnlyFavors?', a: 'OnlyFavors is a privacy-first platonic companion marketplace. It connects people who want thoughtful company — for a museum visit, dinner, a walk, or conversation — with approved companions who set their own schedule and rate.' },
       { q: 'Is this a dating or escort service?', a: 'No. OnlyFavors is strictly platonic. Every companion and customer agrees to our boundary standards before booking. Requests for romantic or sexual content result in immediate removal from the platform.' },
       { q: 'How do I get started as a customer?', a: 'Browse the companion directory, choose someone whose activities and vibe match yours, pick a date and SafeSpot, and submit a request. A $10 refundable deposit unlocks the chat thread. You pay the full amount only after the companion accepts.' },
-      { q: 'How do I become a companion?', a: 'Apply at /companion/apply. We review every application manually — identity, background check, and a short interview. Most applications receive a decision within 3–5 business days.' },
+      { q: 'How do I become a companion?', a: 'Apply at /companion/apply. A person reviews each application. There is no in-app ID upload or third-party background check yet, and we do not publish a decision SLA.' },
     ],
   },
   {
@@ -6117,7 +5760,7 @@ const FAQ_DATA = [
   {
     category: 'Safety & privacy',
     items: [
-      { q: 'How are companions verified?', a: 'Every companion undergoes manual ID review and a background check before approval. Profiles are reviewed by a member of our trust team — not a bot.' },
+      { q: 'How are companions verified?', a: 'A person reviews each application before a listing can appear in Explore. That is a human approval, not an automated ID scan or a guaranteed third-party background check.' },
       { q: 'What is a SafeSpot?', a: 'SafeSpots are verified public venues — cafés, hotel lobbies, libraries, museum lobbies — where all bookings must begin. They are staff-aware, well-lit, and easy to leave. No home addresses, ever.' },
       { q: 'What is a Boundary Receipt?', a: 'A Boundary Receipt is a mutual agreement documented before every confirmed booking. Both parties see the agreed-upon boundaries (platonic only, public venue, mutual respect) and these are stored securely.' },
       { q: 'Who can see my booking details?', a: 'Only you and your companion. Our trust & safety team has access for safety and dispute purposes only. Companions see your first name and booking details — never your phone number, email, or address.' },
@@ -6127,10 +5770,10 @@ const FAQ_DATA = [
   {
     category: 'For companions',
     items: [
-      { q: 'How much do companions earn?', a: 'Companions keep 85% of every booking. OnlyFavors takes a 15% commission to cover payment processing, background checks, SafeSpot maintenance, and 24/7 support. Payouts go directly to your bank via Stripe — typically within 2–5 business days.' },
+      { q: 'How much do companions earn?', a: 'Companions keep 85% of every booking. OnlyFavors takes a 15% commission for platform operations, verification, and Stripe processing. Payouts go through Stripe Connect on Stripe\'s schedule — typically 2–5 business days after Stripe sends them, not a promised 24-hour window from us.' },
       { q: 'Can I set my own schedule?', a: 'Yes. You control your availability, rate, activities, and the bookings you accept or decline. There are no minimums or shift requirements.' },
       { q: 'What activities am I allowed to offer?', a: 'Any platonic activity in a public setting — coffee, dining, museum visits, gallery tours, walks, cooking classes, and more. Activities involving private settings or physical contact are not permitted.' },
-      { q: 'Do I need to pay taxes on my earnings?', a: 'Companions receive a 1099-NEC if they earn over $600 in a calendar year. You are responsible for reporting companion income. Our earnings dashboard shows a gross/net breakdown and 1099 eligibility estimate. We recommend consulting a tax professional.' },
+      { q: 'Do I need to pay taxes on my earnings?', a: 'You are responsible for reporting companion income. If Stripe Connect issues a 1099 in your country when thresholds are met, that comes from Stripe — OnlyFavors does not mail a separate 1099 from this dashboard. Consult a tax professional.' },
     ],
   },
 ];
@@ -6239,7 +5882,7 @@ function FAQPage() {
           <div className="mt-4 rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-8">
             <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#9d557e]">Still have questions?</p>
             <h2 className="mt-3 font-serif text-3xl text-[#48213d]">We're here to help.</h2>
-            <p className="mt-3 text-sm leading-6 text-[#725e69]">Our trust & safety team answers every message personally — usually within a few hours.</p>
+            <p className="mt-3 text-sm leading-6 text-[#725e69]">Email hello@onlyfavors.com or use the help centre. We do not publish a response-time SLA.</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/help" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white">
                 Help centre <ArrowRight className="h-4 w-4" />
@@ -6258,7 +5901,7 @@ function FAQPage() {
 function HowItWorks() {
   const STEPS = [
     {
-      num: '01', heading: 'Browse companions', body: 'Search by city, activity, or vibe. Every companion is verified by our trust team — no surprises.',
+      num: '01', heading: 'Browse companions', body: 'Search by city, activity, or vibe. Listings appear after a person approves the application.',
       icon: Search, color: 'bg-[#ead0dd] text-[#7f2e62]',
     },
     {
@@ -6270,21 +5913,21 @@ function HowItWorks() {
       icon: HeartHandshake, color: 'bg-[#f3ead7] text-[#bf8750]',
     },
     {
-      num: '04', heading: 'Meet at a SafeSpot', body: 'Start at a verified public venue. Check in with a QR code. Your safety contact gets an automatic ping.',
+      num: '04', heading: 'Meet at a SafeSpot', body: 'Start at an approved public venue. Record check-in in Favor Mode. Trust Circle SMS is not live yet.',
       icon: MapPin, color: 'bg-[#dce8f5] text-[#2a5280]',
     },
     {
-      num: '05', heading: 'Leave a review', body: 'After your time together, leave a thoughtful review. Kudos, tips, and ratings help companions grow.',
+      num: '05', heading: 'Leave a review', body: 'After your time together, leave a review on their profile. Kudos and tips are not live yet.',
       icon: Star, color: 'bg-[#ead0dd] text-[#7f2e62]',
     },
   ];
 
   const FAQS: [string, string][] = [
     ['Is it really platonic?', 'Yes — always. OnlyFavors does not facilitate romantic, sexual, or quasi-romantic services. Violations result in permanent removal for both parties.'],
-    ['How are companions verified?', 'Every companion goes through a multi-step review: identity check, interview with our trust team, and agreement to our community standards. There is no instant approval.'],
-    ['What is a SafeSpot?', 'A SafeSpot is a verified public venue — a café, gallery, museum, or park — listed by our team. All first meetings happen there. Your safety contact is notified automatically at check-in.'],
+    ['How are companions verified?', 'A person reviews each application before a listing can appear. There is no in-app ID upload or third-party background check yet, and no instant approval.'],
+    ['What is a SafeSpot?', 'A SafeSpot is an approved public venue listed by our team. First meetings should start there. Check-in is recorded in Favor Mode; Trust Circle SMS alerts are not live yet.'],
     ['How does pricing work?', 'Companions set their hourly rate. We add a 5% service fee to the customer total and retain a 15% platform commission from the companion payout. All math is calculated server-side — never by your browser.'],
-    ['What if I need to cancel?', 'Cancel before confirmation for a full refund. After confirmation, our care team will work with you and your companion to find a fair resolution.'],
+    ['What if I need to cancel?', 'You can cancel in the app. That marks the booking cancelled. Stripe refunds are not automatic. Email hello@onlyfavors.com if a deposit needs to be returned.'],
     ['What is the $10 deposit?', 'A refundable $10 deposit unlocks the chat between you and your companion before the full booking is confirmed. If the booking goes ahead, the deposit is credited toward your total. If it does not, it is returned in full.'],
     ['Is my information private?', 'Your last name, phone number, exact location, and billing details are never shared with companions or other users. Companions only see your first name and city until a booking is confirmed. We use Stripe for payments and store no card data ourselves.'],
     ['Can I specify activities in advance?', 'Yes — you choose the activity when you make your request. If you want something not listed, describe it in the booking message and your companion can confirm or suggest an alternative.'],
@@ -6357,7 +6000,7 @@ function HowItWorks() {
         <section className="mx-auto max-w-5xl px-5 pb-20 lg:px-8">
           <div className="rounded-[28px] bg-[#3d2038] px-8 py-12 text-center text-[#f9efe5] md:px-16">
             <h2 className="font-serif text-5xl">Ready to find good company?</h2>
-            <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-[#dbc3cf]">Browse verified companions in your city. No account required to look.</p>
+            <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-[#dbc3cf]">Browse approved companions in your city. No account required to look.</p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#f7e9de] px-6 text-sm font-bold text-[#48213d] transition hover:bg-white" data-testid="link-hiw-explore">
                 Find a companion <ArrowRight className="h-4 w-4" />
@@ -6374,14 +6017,15 @@ function HowItWorks() {
 }
 
 function Refer() {
-  const REF_CODE = 'OF-' + (typeof window !== 'undefined' ? window.btoa('dev-preview-customer').slice(0, 6).toUpperCase() : 'XXXXXX');
+  const { user } = useAuth();
+  const REF_CODE = user ? `OF-${user.id.replace(/-/g, '').slice(0, 6).toUpperCase()}` : '';
   const [copied, setCopied] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
   const [emailInput, setEmailInput] = useState('');
 
-  const referLink = typeof window !== 'undefined' ? `${window.location.origin}/?ref=${REF_CODE}` : '';
+  const referLink = user && REF_CODE && typeof window !== 'undefined' ? `${window.location.origin}/?ref=${REF_CODE}` : '';
 
   const copyLink = () => {
+    if (!referLink) return;
     navigator.clipboard.writeText(referLink).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 2000);
     }).catch(() => {});
@@ -6389,21 +6033,16 @@ function Refer() {
 
   const sendInvite = (e: FormEvent) => {
     e.preventDefault();
-    if (!emailInput.trim()) return;
-    // Simulate a referral: increment the count in localStorage
-    try {
-      const prev = Number(localStorage.getItem('of_referral_count') ?? '0');
-      localStorage.setItem('of_referral_count', String(prev + 1));
-    } catch {}
-    setEmailSent(true);
-    setEmailInput('');
-    setTimeout(() => setEmailSent(false), 3000);
+    if (!emailInput.trim() || !referLink) return;
+    const subject = encodeURIComponent('Join me on OnlyFavors');
+    const body = encodeURIComponent(`Good company, platonic favors. Try OnlyFavors: ${referLink}`);
+    window.location.href = `mailto:${encodeURIComponent(emailInput.trim())}?subject=${subject}&body=${body}`;
   };
 
   const PERKS = [
-    { icon: WalletCards, title: 'You earn $15', body: 'Applied to your next booking when your friend books their first favor.' },
-    { icon: HeartHandshake, title: 'They get $10 off', body: 'A welcome discount automatically applied to their first booking.' },
-    { icon: ShieldCheck, title: 'Always platonic', body: 'Your referral link only works for vetted OnlyFavors bookings.' },
+    { icon: WalletCards, title: 'Credits when we launch', body: 'Referral credits will apply after your friend completes their first favor. We will not invent a balance before then.' },
+    { icon: HeartHandshake, title: 'A welcome for them', body: 'Friends who join through your link will get the same platonic marketplace you use.' },
+    { icon: ShieldCheck, title: 'Always platonic', body: 'Your invite is for vetted OnlyFavors bookings — public places, clear boundaries.' },
   ];
 
   return (
@@ -6429,6 +6068,8 @@ function Refer() {
         {/* Your code */}
         <div className="mt-10 rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-8">
           <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Your referral code</p>
+          {user && REF_CODE ? (
+            <>
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <span className="font-mono text-4xl font-bold tracking-widest text-[#48213d]" data-testid="ref-code">{REF_CODE}</span>
             <button type="button" onClick={copyLink}
@@ -6438,28 +6079,38 @@ function Refer() {
             </button>
           </div>
           <p className="mt-3 break-all font-mono text-[10px] text-[#9b858e]">{referLink}</p>
+            </>
+          ) : (
+            <div className="mt-3">
+              <p className="text-sm text-[#725e69]">Sign in to get a personal invite link.</p>
+              <Link href="/login" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white">
+                Sign in <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Email invite */}
         <div className="mt-6 rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-8">
           <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Invite by email</p>
-          <p className="mt-1 text-xs text-[#806c76]">We'll send a short note on your behalf — no spam, no follow-ups.</p>
+          <p className="mt-1 text-xs text-[#806c76]">Opens your email app with a short note — we don't send mail on your behalf yet.</p>
           <form onSubmit={sendInvite} className="mt-4 flex gap-3">
             <input type="email" required value={emailInput} onChange={(e) => setEmailInput(e.target.value)}
               placeholder="friend@example.com"
-              className="h-11 flex-1 rounded-full border border-[#cbbab5] bg-white px-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#7f2e62] focus:outline-none"
+              disabled={!referLink}
+              className="h-11 flex-1 rounded-full border border-[#cbbab5] bg-white px-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#7f2e62] focus:outline-none disabled:opacity-50"
               data-testid="input-invite-email" />
-            <button type="submit"
-              className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white"
+            <button type="submit" disabled={!referLink}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-[#7f2e62] px-5 text-sm font-bold text-white disabled:opacity-50"
               data-testid="button-send-invite">
-              {emailSent ? <><Check className="h-4 w-4" />Sent!</> : <>Send invite</>}
+              Open email
             </button>
           </form>
         </div>
 
-        {/* Social share */}
+        {referLink && (
         <div className="mt-6 flex flex-wrap gap-3">
-          <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`I use OnlyFavors for thoughtful, platonic company — try it with my link and get $10 off your first favor: ${referLink}`)}`}
+          <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`I use OnlyFavors for thoughtful, platonic company: ${referLink}`)}`}
             target="_blank" rel="noopener noreferrer"
             className="inline-flex h-10 items-center gap-2 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#48213d] hover:border-[#9d557e] hover:text-[#7f2e62]"
             data-testid="link-share-x">
@@ -6471,57 +6122,22 @@ function Refer() {
             data-testid="link-share-linkedin">
             <span className="font-bold text-[#0077b5]">in</span>Share on LinkedIn
           </a>
-          <a href={`https://wa.me/?text=${encodeURIComponent(`Good company, platonic favors. Try OnlyFavors — get $10 off your first booking: ${referLink}`)}`}
+          <a href={`https://wa.me/?text=${encodeURIComponent(`Good company, platonic favors. Try OnlyFavors: ${referLink}`)}`}
             target="_blank" rel="noopener noreferrer"
             className="inline-flex h-10 items-center gap-2 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#48213d] hover:border-[#9d557e] hover:text-[#7f2e62]"
             data-testid="link-share-whatsapp">
             <span className="font-bold text-[#25d366]">w</span>WhatsApp
           </a>
         </div>
+        )}
 
-        {/* Milestone tracker */}
-        {(() => {
-          const refs = (() => { try { return Number(localStorage.getItem('of_referral_count') ?? '0'); } catch { return 0; } })();
-          const MILESTONES = [
-            { at: 1, reward: '$15 credit', label: 'First referral' },
-            { at: 3, reward: '$50 credit', label: '3 friends' },
-            { at: 5, reward: '1 free booking', label: '5 referrals' },
-            { at: 10, reward: 'Founding Friend badge', label: '10 referrals' },
-          ];
-          const next = MILESTONES.find((m) => m.at > refs);
-          return (
-            <div className="mt-6 rounded-[24px] bg-[#3d2038] p-6 text-[#f9efe5]" data-testid="referral-milestone-tracker">
-              <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#c695ae]">Your referral journey</p>
-              <div className="mt-4 flex items-center gap-3">
-                <span className="font-serif text-4xl">{refs}</span>
-                <span className="text-sm text-[#d3b6c4]">referral{refs !== 1 ? 's' : ''} completed</span>
-              </div>
-              {/* Progress bar across milestones */}
-              <div className="mt-5 flex items-center gap-2">
-                {MILESTONES.map((m, i) => (
-                  <div key={m.at} className="flex flex-1 flex-col items-center gap-1">
-                    <div className={`grid h-7 w-7 place-items-center rounded-full text-[9px] font-bold transition ${refs >= m.at ? 'bg-[#7f2e62] text-white' : 'bg-[#5a2550] text-[#c695ae]'}`}>{m.at}</div>
-                    {i < MILESTONES.length - 1 && (
-                      <div className="absolute" />
-                    )}
-                    <p className="text-center font-mono text-[8px] text-[#c695ae]">{m.reward}</p>
-                  </div>
-                ))}
-              </div>
-              {next && (
-                <p className="mt-4 text-[11px] text-[#d3b6c4]">
-                  Refer <strong className="text-white">{next.at - refs} more</strong> {next.at - refs === 1 ? 'friend' : 'friends'} to unlock <strong className="text-[#e8b4d0]">{next.reward}</strong>.
-                </p>
-              )}
-              {refs >= 10 && (
-                <div className="mt-4 flex items-center gap-2">
-                  <BadgeCheck className="h-5 w-5 text-[#e8b4d0]" />
-                  <p className="text-sm font-bold text-[#e8b4d0]">Founding Friend — thank you for growing the community.</p>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        <div className="mt-6 rounded-[24px] bg-[#3d2038] p-6 text-[#f9efe5]" data-testid="referral-milestone-tracker">
+          <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#c695ae]">Referral rewards</p>
+          <p className="mt-4 font-serif text-2xl">Coming with your first credited booking.</p>
+          <p className="mt-2 text-sm leading-6 text-[#d3b6c4]">
+            Share the invite now. Credits and milestone rewards will apply once the referral program is live — we won't show invented counts in the meantime.
+          </p>
+        </div>
 
         {/* Terms note */}
         <p className="mt-6 text-[10px] text-[#9b858e]">
@@ -6627,148 +6243,55 @@ function AccessibilityPage() {
 // ---------------------------------------------------------------------------
 
 function MembershipPage() {
-  const TIERS = [
-    {
-      name: 'Explorer',
-      price: 'Free',
-      priceNote: 'No subscription needed',
-      color: '#f0e4db',
-      textColor: '#654c5f',
-      badgeColor: '#ead0dd',
-      badgeText: '#7f2e62',
-      features: [
-        'Browse all verified companions',
-        '$10 deposit unlocks masked chat',
-        'SafeSpot venue access',
-        'Trust Circle (up to 2 contacts)',
-        'Boundary Receipt on every booking',
-        'Standard support (48 hr response)',
-      ],
-      cta: 'Get started',
-      ctaHref: '/explore',
-      highlighted: false,
-    },
-    {
-      name: 'Insider',
-      price: '$9',
-      priceNote: 'per month',
-      color: '#3d2038',
-      textColor: '#f9efe5',
-      badgeColor: '#7f2e62',
-      badgeText: '#fff5eb',
-      features: [
-        'Everything in Explorer',
-        'No deposit required — book directly',
-        'Priority matching (24 hr companion reply)',
-        'Trust Circle (up to 5 contacts)',
-        'Monthly $10 platform credit',
-        'Early access to new companions',
-        'Priority support (12 hr response)',
-      ],
-      cta: 'Join Insider',
-      ctaHref: '/login',
-      highlighted: true,
-    },
-    {
-      name: 'Founding Friend',
-      price: '$29',
-      priceNote: 'per month',
-      color: '#fbf7f1',
-      textColor: '#48213d',
-      badgeColor: '#bf8750',
-      badgeText: '#ffffff',
-      features: [
-        'Everything in Insider',
-        'Dedicated concierge for planning',
-        '$25 platform credit per month',
-        'Unlimited Trust Circle contacts',
-        'Access to companion waitlists first',
-        'Annual safety audit report',
-        'Direct line to Trust team (4 hr response)',
-      ],
-      cta: 'Apply for Founding Friend',
-      ctaHref: '/login',
-      highlighted: false,
-    },
-  ];
-
-  const FAQS = [
-    { q: 'Can I cancel my membership at any time?', a: 'Yes. Memberships are month-to-month and can be cancelled before your next billing date. Platform credits already issued in the current cycle are yours to keep.' },
-    { q: 'Does membership change how companions are paid?', a: 'No. The 15% companion commission and the 5% service fee structure never changes based on your membership tier. Membership credits reduce what you pay, not what companions receive.' },
-    { q: 'What does "no deposit required" mean for Insiders?', a: 'Explorer members pay a $10 refundable deposit to unlock masked chat and confirm interest. Insider members skip this step — bookings proceed directly to companion review.' },
-    { q: 'Is there a free trial?', a: 'New members can try Insider free for 14 days. No card required to start.' },
-  ];
-
   return (
     <Shell>
       <main className="page-enter">
-        {/* Hero */}
         <section className="border-b border-[#ddcfc6] bg-[#efe1dc] px-5 py-20 text-center lg:px-8">
           <p className="mx-auto font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]">Your membership</p>
-          <h1 className="mx-auto mt-4 max-w-2xl font-serif text-[62px] leading-[.9] text-[#48213d]">The right plan for how you like to connect.</h1>
-          <p className="mx-auto mt-6 max-w-lg text-[16px] leading-7 text-[#654c5f]">All plans include verified companions, SafeSpot venues, and our full safety system. Membership perks sit on top.</p>
+          <h1 className="mx-auto mt-4 max-w-2xl font-serif text-[62px] leading-[.9] text-[#48213d]">Explorer is live. Paid plans are not.</h1>
+          <p className="mx-auto mt-6 max-w-lg text-[16px] leading-7 text-[#654c5f]">
+            Everyone uses the same booking path: $10 deposit, 5% service fee, approved companions when they exist, SafeSpots when they exist, Trust Circle, and a Boundary Receipt. There is no Insider checkout or 14-day trial yet.
+          </p>
         </section>
-
-        {/* Tier cards */}
-        <section className="mx-auto grid max-w-7xl gap-5 px-5 py-14 lg:grid-cols-3 lg:px-8">
-          {TIERS.map((tier) => (
-            <div key={tier.name}
-              className={`relative flex flex-col rounded-[26px] p-8 ${tier.highlighted ? 'shadow-[0_20px_55px_rgba(63,32,56,.22)]' : 'border border-[#dfd2c9]'}`}
-              style={{ backgroundColor: tier.color }}
-              data-testid={`tier-${tier.name.toLowerCase().replace(/ /g, '-')}`}>
-              {tier.highlighted && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-[#bf8750] px-4 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[.15em] text-white">Most popular</span>
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <span className="rounded-full px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em]"
-                  style={{ backgroundColor: tier.badgeColor, color: tier.badgeText }}>
-                  {tier.name}
-                </span>
-              </div>
-              <div className="mt-6">
-                <span className="font-serif text-5xl leading-none" style={{ color: tier.textColor }}>{tier.price}</span>
-                <span className="ml-2 text-xs" style={{ color: tier.textColor, opacity: .6 }}>{tier.priceNote}</span>
-              </div>
-              <ul className="mt-8 flex-1 space-y-3">
-                {tier.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-xs leading-5" style={{ color: tier.textColor, opacity: .85 }}>
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: tier.highlighted ? '#3dbd8c' : '#477254' }} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Link href={tier.ctaHref}
-                className={`mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold transition ${tier.highlighted ? 'bg-[#7f2e62] text-white hover:bg-[#65234e]' : 'border-2 hover:opacity-80'}`}
-                style={!tier.highlighted ? { borderColor: tier.badgeColor, color: tier.textColor } : {}}
-                data-testid={`cta-${tier.name.toLowerCase().replace(/ /g, '-')}`}>
-                {tier.cta} <ArrowRight className="h-4 w-4" />
-              </Link>
+        <section className="mx-auto grid max-w-5xl gap-5 px-5 py-14 lg:grid-cols-2 lg:px-8">
+          <div className="rounded-[26px] border border-[#dfd2c9] bg-[#f0e4db] p-8" data-testid="tier-explorer">
+            <span className="rounded-full bg-[#ead0dd] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#7f2e62]">Explorer</span>
+            <div className="mt-6">
+              <span className="font-serif text-5xl leading-none text-[#654c5f]">Free</span>
+              <span className="ml-2 text-xs text-[#654c5f]/60">No subscription</span>
             </div>
-          ))}
+            <ul className="mt-8 space-y-3 text-xs leading-5 text-[#654c5f]/85">
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Browse approved companions</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> $10 deposit unlocks masked chat</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Trust Circle (up to 3 contacts)</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Boundary Receipt on bookings</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Email support: hello@onlyfavors.com</li>
+            </ul>
+            <Link href="/explore" className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-[#ead0dd] text-sm font-bold text-[#654c5f]" data-testid="cta-explorer">
+              Browse companions <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="rounded-[26px] border border-[#dfd2c9] bg-[#fbf7f1] p-8" data-testid="tier-paid">
+            <span className="rounded-full bg-[#bf8750] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-white">Later</span>
+            <div className="mt-6">
+              <span className="font-serif text-5xl leading-none text-[#48213d]">Not live</span>
+            </div>
+            <p className="mt-8 text-sm leading-6 text-[#725e69]">
+              Insider and Founding Friend were sketched as $9 / $29 monthly perks (no deposit, extra Trust Circle slots, credits). Those subscriptions, credits, concierge, and response-time SLAs are not billed and not enforced. Email hello@onlyfavors.com if you want to be notified.
+            </p>
+            <a href="mailto:hello@onlyfavors.com?subject=Paid%20membership" className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#3d2038] text-sm font-bold text-white" data-testid="cta-membership-waitlist">
+              Ask about paid plans <ArrowRight className="h-4 w-4" />
+            </a>
+          </div>
         </section>
-
-        {/* Free trial banner */}
-        <section className="border-t border-[#ddcfc6] bg-[#e8f0e8] px-5 py-8 text-center lg:px-8">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#477254]">Try before you commit</p>
-          <h3 className="mt-2 font-serif text-3xl text-[#31533f]">Insider free for 14 days.</h3>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#53725d]">No card required. Cancel any time. If you don't love it, you keep Explorer access forever.</p>
-          <Link href="/login" className="mt-6 inline-flex h-12 items-center gap-2 rounded-full bg-[#477254] px-6 text-sm font-bold text-white transition hover:bg-[#35634a]" data-testid="cta-free-trial">
-            Start free trial <ArrowRight className="h-4 w-4" />
-          </Link>
-        </section>
-
-        {/* Comparison note */}
-        <section className="border-t border-[#ddcfc6] bg-[#fbf7f1] px-5 py-10 text-center lg:px-8">
-          <p className="text-sm text-[#725e69]">All plans include: identity-verified companions · SafeSpot venues · Boundary Receipt · Trust Circle · 24/7 safety monitoring</p>
-        </section>
-
-        {/* FAQ */}
-        <section className="mx-auto max-w-3xl px-5 py-14 lg:px-8">
+        <section className="mx-auto max-w-3xl px-5 pb-14 lg:px-8">
           <h2 className="font-serif text-4xl text-[#48213d]">Membership questions</h2>
           <div className="mt-8 space-y-4">
-            {FAQS.map(({ q, a }) => (
+            {[
+              { q: 'Can I buy Insider today?', a: 'No. There is no membership checkout. Explorer is the live plan.' },
+              { q: 'Does a membership change companion pay?', a: 'When paid plans exist, they will not change the 15% companion commission or 5% customer fee. Credits would reduce what you pay, not what companions receive.' },
+              { q: 'Is there a free trial?', a: 'No. A 14-day Insider trial was mock copy. Explorer is already free.' },
+            ].map(({ q, a }) => (
               <details key={q} className="group rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1]">
                 <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 text-sm font-bold text-[#48213d] marker:content-none">
                   {q}
@@ -6808,7 +6331,7 @@ function About() {
           </div>
           <div className="space-y-4">
             {[
-              { icon: ShieldCheck, title: 'Safety by design', body: 'Every companion is identity-verified. Every meeting happens in a public SafeSpot. Boundaries are documented before anyone books.' },
+              { icon: ShieldCheck, title: 'Safety by design', body: 'A person approves each companion listing. Meetings start at a public SafeSpot. Boundaries are documented before anyone books.' },
               { icon: EyeOff, title: 'Privacy first', body: 'Companions appear as service-area circles, never live pins. Phone numbers and emails are stripped from all messages.' },
               { icon: Star, title: 'Genuine quality', body: 'We review every companion application personally. Ratings come from real bookings. No fake profiles, no hidden reviews.' },
             ].map(({ icon: Icon, title, body }) => (
@@ -6895,25 +6418,25 @@ function Help() {
     { title: 'Booking', icon: CalendarDays, items: [
       { q: 'How do I book a companion?', a: "Browse the directory, open a companion's profile, and click \"Plan time with [name].\" Choose an activity, date, duration, and a public SafeSpot. The companion reviews and accepts before anything is charged." },
       { q: 'What is a SafeSpot?', a: "SafeSpots are verified, well-lit public venues — coffee shops, museums, hotel lobbies — that OnlyFavors has vetted for companion meetups. Every booking must start at a SafeSpot." },
-      { q: 'Can I book same-day?', a: "Companions with instant booking enabled can be booked same-day. For others, allow at least 24 hours for the companion to review." },
-      { q: 'What happens if the companion declines?', a: "Your deposit is refunded in full within 5–10 business days. You'll be notified as soon as a decision is made." },
+      { q: 'Can I book same-day?', a: "If a companion is available and accepts, yes. Instant book is a profile flag, not a guaranteed same-day confirmation. There is no published companion reply SLA." },
+      { q: 'What happens if the companion declines?', a: "The booking is declined. A Stripe deposit is not refunded by that action automatically. Email hello@onlyfavors.com if a refund is needed." },
     ]},
     { title: 'Payments', icon: WalletCards, items: [
       { q: 'What does the $10 deposit cover?', a: "The deposit unlocks the private, masked chat thread so you can discuss details. It is credited toward your total when the companion accepts — or fully refunded if they decline." },
       { q: 'When am I charged the full amount?', a: "The full amount is authorised when the companion accepts. The hold is captured at booking completion, not before." },
-      { q: 'What is the 5% service fee?', a: "It covers identity verification, insurance, SafeSpot maintenance, and 24/7 trust team access. Always shown upfront — no surprises." },
-      { q: 'How do refunds work?', a: "Cancellations before companion acceptance receive a full deposit refund. After acceptance, our cancellation policy applies. Refunds appear in 5–10 business days." },
+      { q: 'What is the 5% service fee?', a: "It is a platform fee on the customer total, shown before you pay. It is not a promise of insurance coverage or 24/7 staffing." },
+      { q: 'How do refunds work?', a: "Cancel in the app to mark a booking cancelled. Stripe refunds are not automatic. Email hello@onlyfavors.com for deposit returns." },
     ]},
     { title: 'Safety', icon: ShieldCheck, items: [
-      { q: 'How are companions verified?', a: "Every companion submits a government ID and passes a background check. Their location is shown as a service-area circle — never a home address." },
+      { q: 'How are companions verified?', a: "A person reviews each application before a listing can appear. There is no in-app government-ID upload or third-party background check yet. Location is shown as a service-area circle — never a home address." },
       { q: 'What is a Boundary Receipt?', a: "Before every booking, both parties agree to a documented list of activities, comfort levels, and limits. This is stored securely and referenced if a dispute arises." },
       { q: 'What is the Trust Circle?', a: "Up to 3 contacts who receive automatic check-in alerts during your booking. Configure it from your Safety page or workspace." },
-      { q: 'What if I feel unsafe during a booking?', a: 'Open FavorMode and tap "I need help." This alerts your Trust Circle and our 24/7 safety team simultaneously.' },
+      { q: 'What if I feel unsafe during a booking?', a: 'If you are in danger, call local emergency services first. Favor Mode can alert your Trust Circle. Email hello@onlyfavors.com for platform concerns — we do not staff a 24/7 hotline.' },
     ]},
     { title: 'For companions', icon: UsersRound, items: [
-      { q: 'How do I apply to become a companion?', a: "Visit \"Become a companion\" and complete the application. We review every application personally — typically within 3–5 business days." },
-      { q: 'How much do companions earn?', a: "Companions keep 85% of every booking. You set your own hourly rate; OnlyFavors takes a 15% commission to cover verification, insurance, and payment processing." },
-      { q: 'How do payouts work?', a: "Payouts go directly to your bank via Stripe. Set up from Companion Workspace → Earnings. Funds typically arrive within 2–5 business days of booking completion." },
+      { q: 'How do I apply to become a companion?', a: "Visit \"Become a companion\" and complete the application. A person reviews it. There is no published 3–5 day SLA." },
+      { q: 'How much do companions earn?', a: "Companions keep 85% of every booking. You set your own hourly rate; OnlyFavors takes a 15% commission for verification, payments, and platform operations." },
+      { q: 'How do payouts work?', a: "Payouts go to your bank via Stripe Connect after you finish onboarding. Timing follows Stripe, typically 2–5 business days after Stripe sends the transfer — not a guaranteed 24 hours from booking completion." },
       { q: 'Can I control my availability and activities?', a: "Yes — your profile, rates, activities, languages, and boundaries are all under your control. Update anytime from your Companion Workspace → Edit Profile." },
     ]},
   ];
@@ -7020,7 +6543,7 @@ function Help() {
             <div className="mt-6 rounded-[22px] bg-[#d9e1d7] p-8">
               <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#477254]">Still have questions?</p>
               <h3 className="mt-3 font-serif text-3xl text-[#31533f]">We're here.</h3>
-              <p className="mt-3 text-sm leading-6 text-[#53725d]">Send us a message — our trust team responds within one business day.</p>
+              <p className="mt-3 text-sm leading-6 text-[#53725d]">This opens your email app to hello@onlyfavors.com. We do not publish a response-time SLA.</p>
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const mailto = `mailto:hello@onlyfavors.com?subject=${encodeURIComponent(subject || 'Help request')}&body=${encodeURIComponent(message)}`;
@@ -7063,6 +6586,105 @@ type CustomerPrefs = {
   showSavedCount: boolean;
 };
 
+function VerificationChecklist() {
+  const { user } = useAuth();
+  const query = useQuery({
+    queryKey: ['account-verification'],
+    queryFn: async () => {
+      const res = await fetch('/api/account/verification', { credentials: 'include' });
+      if (!res.ok) throw new Error('Could not load verification');
+      return res.json() as Promise<{
+        emailVerified: boolean;
+        ageConfirmed: boolean;
+        canBook: boolean;
+        companion: null | {
+          applicationStatus: string;
+          identityStatus: string;
+          approved: boolean;
+          payoutReady: boolean;
+          canPublish: boolean;
+          canEarn: boolean;
+        };
+      }>;
+    },
+    enabled: Boolean(user),
+    retry: false,
+  });
+  const data = query.data;
+  const rows = [
+    { label: 'Email verified — save profiles', done: Boolean(data?.emailVerified) },
+    { label: '18+ confirmed — book and pay', done: Boolean(data?.ageConfirmed) },
+    { label: 'Can send Favor Requests', done: Boolean(data?.canBook) },
+  ];
+  if (data?.companion) {
+    rows.push(
+      { label: 'Companion application submitted', done: data.companion.applicationStatus !== 'none' && data.companion.applicationStatus !== 'draft' },
+      { label: 'Identity verified', done: data.companion.identityStatus === 'verified' },
+      { label: 'Listing approved — appear in search and accept bookings', done: data.companion.approved },
+      { label: 'Payout connected — receive transfers', done: data.companion.payoutReady },
+    );
+  }
+  return (
+    <section className="mt-10">
+      <h2 className="font-mono text-[9px] uppercase tracking-[.2em] text-[#9d557e]">Verification</h2>
+      <div className="mt-4 rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+        <p className="text-sm font-bold text-[#48213d]">Pilot checklist</p>
+        <p className="mt-1 text-xs text-[#806c76]">Phone verification, MFA, and staff-only work accounts are not in this pilot.</p>
+        <ul className="mt-4 space-y-2">
+          {rows.map((row) => (
+            <li key={row.label} className="flex items-center gap-2 text-xs text-[#654c5f]">
+              <span className={`grid h-4 w-4 place-items-center rounded-full ${row.done ? 'bg-[#477254] text-white' : 'border border-[#dfd2c9]'}`}>
+                {row.done ? <Check className="h-2.5 w-2.5" /> : null}
+              </span>
+              {row.label}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function BlockedAccountsCard() {
+  const query = useQuery({
+    queryKey: ['account-blocks'],
+    queryFn: async () => {
+      const res = await fetch('/api/blocks', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json() as Promise<{ blockedId: string; displayName: string }[]>;
+    },
+    retry: false,
+  });
+  const qc = useQueryClient();
+  const rows = query.data ?? [];
+  return (
+    <section className="mt-8">
+      <h2 className="font-mono text-[9px] uppercase tracking-[.2em] text-[#9d557e]">Blocked accounts</h2>
+      <div className="mt-4 rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+        {rows.length === 0 ? (
+          <p className="text-xs text-[#806c76]">You have not blocked anyone. Block from a companion profile.</p>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((row) => (
+              <li key={row.blockedId} className="flex items-center justify-between gap-3 text-sm text-[#48213d]">
+                <span>{row.displayName}</span>
+                <button type="button"
+                  onClick={async () => {
+                    await fetch(`/api/blocks/${row.blockedId}`, { method: 'DELETE', credentials: 'include' });
+                    qc.invalidateQueries({ queryKey: ['account-blocks'] });
+                  }}
+                  className="text-xs font-bold text-[#7f2e62]">
+                  Unblock
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ReferralCopyButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -7076,26 +6698,39 @@ function ReferralCopyButton({ code }: { code: string }) {
 }
 
 function CustomerSettings() {
-  const [prefs, setPrefs] = useState<CustomerPrefs>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('of_customer_prefs') ?? '{}');
-      return {
-        displayName: saved.displayName ?? '',
-        emailBookingUpdates: saved.emailBookingUpdates ?? true,
-        emailNewsletter: saved.emailNewsletter ?? false,
-        showSavedCount: saved.showSavedCount ?? true,
-      };
-    } catch {
-      return { displayName: '', emailBookingUpdates: true, emailNewsletter: false, showSavedCount: true };
-    }
-  });
+  const { user, refresh, logout } = useAuth();
+  const [prefs, setPrefs] = useState<CustomerPrefs>({ displayName: '', emailBookingUpdates: true, emailNewsletter: false, showSavedCount: true });
   const [saved, setSaved] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
-  const save = () => {
-    try { localStorage.setItem('of_customer_prefs', JSON.stringify(prefs)); } catch {}
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  useEffect(() => {
+    fetch('/api/account/settings', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (!d) return;
+        setPrefs({
+          displayName: d.displayName ?? user?.displayName ?? '',
+          emailBookingUpdates: d.emailBookingUpdates !== false,
+          emailNewsletter: Boolean(d.emailNewsletter),
+          showSavedCount: d.showSavedCount !== false,
+        });
+      })
+      .catch(() => {});
+  }, [user?.displayName]);
+
+  const save = async () => {
+    const res = await fetch('/api/account/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+    });
+    if (res.ok) {
+      await refresh();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
   };
 
   const toggle = (key: keyof Omit<CustomerPrefs, 'displayName'>) => {
@@ -7179,15 +6814,29 @@ function CustomerSettings() {
             </div>
             <div className="rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
               <p className="text-sm font-bold text-[#48213d]">Export your data</p>
-              <p className="mt-1 text-xs leading-5 text-[#806c76]">Download a summary of your bookings, messages, and account information in JSON format. Processed within 24 hours.</p>
+              <p className="mt-1 text-xs leading-5 text-[#806c76]">
+                Downloads a JSON file now: account preferences, saved companion IDs from this browser, and your bookings if you are signed in. Chat messages and Trust Circle contacts are not included.
+              </p>
               <button type="button" data-testid="button-export-data"
-                onClick={() => {
+                onClick={async () => {
+                  let bookings: unknown[] = [];
+                  try {
+                    const res = await fetch('/api/bookings', { credentials: 'include' });
+                    if (res.ok) {
+                      const body = await res.json();
+                      bookings = Array.isArray(body) ? body : [];
+                    }
+                  } catch { /* file still includes prefs */ }
+                  let savedCompanions: unknown[] = [];
+                  try { savedCompanions = JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]'); } catch { savedCompanions = []; }
                   const exportData = {
                     exportedAt: new Date().toISOString(),
-                    displayName: prefs.displayName || '(not set)',
+                    account: { id: user?.id ?? null, displayName: prefs.displayName || user?.displayName || null },
                     preferences: prefs,
-                    savedCompanions: (() => { try { return JSON.parse(localStorage.getItem('of_saved_companions') ?? '[]'); } catch { return []; } })(),
-                    note: 'Full booking and message history is included in the email you will receive within 24 hours.',
+                    savedCompanions,
+                    bookings,
+                    included: ['preferences', 'saved companion ids from this browser', 'bookings for the signed-in account'],
+                    notIncluded: ['chat messages', 'Trust Circle contacts', 'payment card details'],
                   };
                   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
@@ -7210,7 +6859,7 @@ function CustomerSettings() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-bold text-[#48213d]">Referral credits</p>
-                  <p className="mt-0.5 text-[10px] text-[#806c76]">Applied automatically to your next booking.</p>
+                  <p className="mt-0.5 text-[10px] text-[#806c76]">Referral credits are not live yet. Share the code when the program launches.</p>
                 </div>
                 <div className="text-right">
                   <p className="font-serif text-3xl text-[#48213d]">$0<small className="font-sans text-xs text-[#9b858e]">.00</small></p>
@@ -7218,38 +6867,33 @@ function CustomerSettings() {
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <ReferralCopyButton code="OF-ZGV2LX" />
+                <ReferralCopyButton code={user ? `OF-${user.id.replace(/-/g, '').slice(0, 6).toUpperCase()}` : 'OF-SIGNIN'} />
                 <Link href="/refer" className="inline-flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline" data-testid="link-settings-refer">
-                  Invite friends and earn $15 <ArrowRight className="h-3 w-3" />
+                  Referral program (coming later) <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
             </div>
             {/* Gift balance */}
-            {(() => {
-              const giftBalance = (() => { try { return Number(localStorage.getItem('of_gift_balance') ?? 0); } catch { return 0; } })();
-              return (
-                <div className="rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-[#48213d]">Gift card balance</p>
-                      <p className="mt-0.5 text-[10px] text-[#806c76]">Redeemed gift cards applied at checkout.</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-serif text-3xl text-[#48213d]">{giftBalance > 0 ? `$${giftBalance}` : '$0'}<small className="font-sans text-xs text-[#9b858e]">.00</small></p>
-                      <p className="text-[9px] text-[#9b858e]">available</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <Link href="/redeem" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#ead0dd] px-3 text-xs font-bold text-[#7f2e62] hover:bg-[#d5abc2]" data-testid="link-settings-redeem">
-                      <Gift className="h-3.5 w-3.5" />Redeem a gift card
-                    </Link>
-                    <Link href="/gift" className="inline-flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline" data-testid="link-settings-gift">
-                      Send a gift <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </div>
+            <div className="rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-[#48213d]">Gift card balance</p>
+                  <p className="mt-0.5 text-[10px] text-[#806c76]">Gift cards aren't live yet. Redeemed balances will show here.</p>
                 </div>
-              );
-            })()}
+                <div className="text-right">
+                  <p className="font-serif text-3xl text-[#48213d]">$0<small className="font-sans text-xs text-[#9b858e]">.00</small></p>
+                  <p className="text-[9px] text-[#9b858e]">available</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Link href="/redeem" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#ead0dd] px-3 text-xs font-bold text-[#7f2e62] hover:bg-[#d5abc2]" data-testid="link-settings-redeem">
+                  <Gift className="h-3.5 w-3.5" />Redeem a gift card
+                </Link>
+                <Link href="/gift" className="inline-flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline" data-testid="link-settings-gift">
+                  Send a gift <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -7260,34 +6904,75 @@ function CustomerSettings() {
             data-testid="button-save-settings">
             {saved ? <><Check className="h-4 w-4" />Saved</> : 'Save preferences'}
           </button>
-          {saved && <p className="text-xs text-[#477254]">Your preferences are saved locally.</p>}
+          {saved && <p className="text-xs text-[#477254]">Your preferences are saved to your account.</p>}
         </div>
+
+        <VerificationChecklist />
+        <BlockedAccountsCard />
 
         {/* Danger zone */}
         <section className="mt-14 border-t border-[#dfd2c9] pt-8">
           <h2 className="font-mono text-[9px] uppercase tracking-[.2em] text-[#a64742]">Account</h2>
-          <div className="mt-4 rounded-[18px] border border-[#f0d5d5] bg-[#fdf6f6] p-5">
-            <p className="text-sm font-bold text-[#48213d]">Request account deletion</p>
-            <p className="mt-1 text-xs leading-5 text-[#806c76]">We can remove your account and personal data from our systems. This cannot be undone and you will lose access to all booking history.</p>
-            {deleteConfirm ? (
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <p className="text-xs font-bold text-[#a64742]">Are you sure? This is permanent.</p>
-                <button type="button" onClick={() => setDeleteConfirm(false)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#a64742] px-4 text-xs font-bold text-[#a64742] transition hover:bg-[#a64742] hover:text-white"
-                  data-testid="button-confirm-delete">
-                  Yes, delete my account
+          <div className="mt-4 space-y-3">
+            <div className="rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+              <p className="text-sm font-bold text-[#48213d]">Sessions</p>
+              <p className="mt-1 text-xs leading-5 text-[#806c76]">Sign out this browser, or end every session at once. A trusted-device list is not in the pilot.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => void logout()}
+                  className="inline-flex h-9 items-center rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#654c5f]">
+                  Sign out
                 </button>
-                <button type="button" onClick={() => setDeleteConfirm(false)} className="text-xs text-[#9b858e] hover:text-[#48213d]">
-                  Cancel
+                <button type="button"
+                  onClick={async () => {
+                    await fetch('/api/auth/logout-all', { method: 'POST', credentials: 'include' });
+                    await logout();
+                    window.location.href = '/login';
+                  }}
+                  className="inline-flex h-9 items-center rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#654c5f]"
+                  data-testid="button-logout-all">
+                  Sign out everywhere
                 </button>
               </div>
-            ) : (
-              <button type="button" onClick={() => setDeleteConfirm(true)}
-                className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#725e69] transition hover:border-[#a64742] hover:text-[#a64742]"
-                data-testid="button-request-delete">
-                Request deletion
+            </div>
+            <div className="rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+              <p className="text-sm font-bold text-[#48213d]">Deactivate</p>
+              <p className="mt-1 text-xs leading-5 text-[#806c76]">Hides you from new bookings. You can sign in later to reactivate. This does not delete your data.</p>
+              <button type="button"
+                onClick={async () => {
+                  if (!window.confirm('Deactivate your account? You can reactivate by signing in.')) return;
+                  const res = await fetch('/api/account/deactivate', { method: 'POST', credentials: 'include' });
+                  if (res.ok) await refresh();
+                }}
+                className="mt-4 inline-flex h-9 items-center rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#654c5f]"
+                data-testid="button-deactivate">
+                Deactivate account
               </button>
-            )}
+            </div>
+          <div className="rounded-[18px] border border-[#f0d5d5] bg-[#fdf6f6] p-5">
+            <p className="text-sm font-bold text-[#48213d]">Delete this account</p>
+            <p className="mt-1 text-xs leading-5 text-[#806c76]">Open bookings are refunded and cancelled. Sessions end immediately. This cannot be undone.</p>
+            {deleteError && <p className="mt-2 text-xs text-[#a64742]">{deleteError}</p>}
+            <button type="button" disabled={deleting}
+              onClick={async () => {
+                if (!window.confirm('Delete your OnlyFavors account? Open bookings will be cancelled and refunded.')) return;
+                setDeleting(true);
+                setDeleteError('');
+                try {
+                  const res = await fetch('/api/account/delete', { method: 'POST', credentials: 'include' });
+                  const body = await res.json().catch(() => ({})) as { error?: string };
+                  if (!res.ok) throw new Error(body.error ?? 'Could not delete this account');
+                  await logout();
+                  window.location.href = '/';
+                } catch (err) {
+                  setDeleteError(err instanceof Error ? err.message : 'Could not delete this account');
+                  setDeleting(false);
+                }
+              }}
+              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#725e69] transition hover:border-[#a64742] hover:text-[#a64742] disabled:opacity-50"
+              data-testid="button-request-delete">
+              {deleting ? 'Deleting…' : 'Delete my account'}
+            </button>
+          </div>
           </div>
         </section>
       </main>
@@ -7563,7 +7248,7 @@ function IncomeProjector() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[.15em] text-[#9d557e]">Income projection</p>
-          <p className="mt-1 text-[11px] text-[#9b858e]">Adjust the sliders to see your projected earnings after the 15% platform fee.</p>
+          <p className="mt-1 text-[11px] text-[#9b858e]">A what-if calculator, not a forecast. Defaults are placeholders — they are not your profile rate or city averages.</p>
         </div>
         <div className="flex gap-2">
           {presets.map((p) => (
@@ -7770,41 +7455,25 @@ function CompanionEarnings() {
           <div className="rounded-[20px] border border-[#ece1d9] bg-[#fdf3e3] p-5">
             <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Pending payout</p>
             <p className="mt-4 font-serif text-4xl text-[#bf8750]">{money(data.pendingCents)}</p>
-            <p className="mt-1 text-[10px] text-[#9b858e]">Processing or awaiting booking</p>
-            {data.pendingCents > 0 && (() => {
-              const next = new Date(); next.setDate(next.getDate() + ((5 - next.getDay() + 7) % 7 || 7));
-              return <p className="mt-2 font-mono text-[9px] font-bold text-[#bf8750]">Est. {next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>;
-            })()}
+            <p className="mt-1 text-[10px] text-[#9b858e]">Unpaid or incomplete bookings — not a scheduled Friday deposit</p>
           </div>
         </div>
 
         <EarningsGoalTracker thisMonthCents={data.thisMonthCents} />
 
-        {/* Rate advisor */}
         <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5" data-testid="rate-advisor">
           <div className="flex items-start gap-4">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#ead0dd] text-[#7f2e62]">
               <Lightbulb className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-[#48213d]">Rate advisor</p>
+              <p className="text-sm font-bold text-[#48213d]">Your rate</p>
               <p className="mt-0.5 text-[10px] leading-4 text-[#806c76]">
-                Your hourly rate of <strong className="text-[#48213d]">{money(data.totalBookings > 0 ? 6500 : 5500)}</strong> is
-                {data.totalBookings >= 10 ? ' competitive for your experience level. You could consider a $5–10 increase.' :
-                 data.totalBookings >= 5  ? ' on track. After your 10th booking you may have room to raise it.' :
-                                            ' well-positioned for a new companion. Focus on reviews first.'}
+                There is no market-rate advisor. Set your hourly rate on your profile. The calculator below is a what-if tool — it does not use city averages or invent a recommended price.
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {[
-                  { label: 'New companions', range: '$45–$65/hr', active: data.totalBookings < 5 },
-                  { label: 'Established', range: '$65–$95/hr', active: data.totalBookings >= 5 && data.totalBookings < 20 },
-                  { label: 'Experienced', range: '$95–$150/hr', active: data.totalBookings >= 20 },
-                ].map(({ label, range, active }) => (
-                  <div key={label} className={`rounded-full px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-wider ${active ? 'bg-[#7f2e62] text-white' : 'bg-[#ece1d9] text-[#9b858e]'}`}>
-                    {label} · {range}
-                  </div>
-                ))}
-              </div>
+              <Link href="/dashboard/companion/profile" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline">
+                Edit your rate <ArrowRight className="h-3 w-3" />
+              </Link>
             </div>
           </div>
         </div>
@@ -7857,7 +7526,7 @@ function CompanionEarnings() {
             <div className="flex-1">
               <p className="text-sm font-bold text-[#48213d]">Tax & 1099 information</p>
               <p className="mt-1 text-[11px] leading-5 text-[#806c76]">
-                If you earn more than $600 in a calendar year, OnlyFavors will issue a 1099-NEC via Stripe. Your gross earnings for tax purposes are the full booking amounts before the 15% platform commission.
+                If you earn through Stripe Connect, tax forms (when required in your country) typically come from Stripe, not from this page. Gross here is an estimate from net ÷ 85%. Consult a tax professional.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {[
@@ -7882,7 +7551,7 @@ function CompanionEarnings() {
         {/* Footer note */}
         <p className="mt-6 flex items-center gap-1.5 text-[11px] text-[#9b858e]">
           <LockKeyhole className="h-3.5 w-3.5" />
-          Payouts are initiated within 24 hours of booking completion. Bank transfer times are 2–5 business days via Stripe.
+          Payouts go through Stripe Connect after a booking is completed. Timing follows Stripe (often 2–5 business days), not a promised Friday or 24-hour window from us.
         </p>
       </main>
     </Shell>
@@ -7900,11 +7569,11 @@ const PRICING_FAQS = [
   },
   {
     q: 'Is the $10 deposit refundable?',
-    a: 'Yes. The deposit is fully credited toward your booking total when you complete payment after your companion accepts. If your companion declines, the full $10 is returned to your original payment method within 5–10 business days.',
+    a: 'The deposit is meant to be credited toward your booking total after your companion accepts. If they decline, email hello@onlyfavors.com — Stripe refunds are not automatic from the decline action.',
   },
   {
     q: 'How quickly do companions get paid?',
-    a: 'Companion payouts are initiated within 24 hours of a booking completing. Standard bank transfer times apply (typically 2–5 business days). Companions connect their bank account once via Stripe — no manual invoicing required.',
+    a: 'Companion payouts go through Stripe Connect after a booking is completed. Timing follows Stripe — typically 2–5 business days after Stripe sends the transfer. Companions connect a bank account once via Stripe. We do not promise a 24-hour initiation from OnlyFavors.',
   },
   {
     q: 'Are prices ever negotiated outside the platform?',
@@ -7912,7 +7581,7 @@ const PRICING_FAQS = [
   },
   {
     q: 'What happens if a booking is cancelled?',
-    a: 'Cancellation policy depends on notice given. Cancellations more than 48 hours before the booking are fully refunded including the deposit. Within 48 hours, the deposit is non-refundable. Companions who cancel receive no payout for that booking.',
+    a: 'You can cancel a booking in the app. That marks it cancelled. Stripe refunds are not automatic from this action, and there is no 48-hour cutoff encoded in the product. Email hello@onlyfavors.com if a deposit needs to be returned.',
   },
   {
     q: 'Is the companion\'s hourly rate all-inclusive?',
@@ -7981,7 +7650,7 @@ function Pricing() {
                 <span className="font-mono text-[9px] uppercase tracking-widest text-[#9b858e]">For customers</span>
               </div>
               <h2 className="mt-8 font-serif text-4xl leading-none text-[#48213d]">Pay the rate.<br />Plus a small fee.</h2>
-              <p className="mt-4 text-sm leading-6 text-[#725e69]">You pay the companion's hourly rate plus a 5% safety & service fee that covers identity verification, insurance, and our 24/7 trust team.</p>
+              <p className="mt-4 text-sm leading-6 text-[#725e69]">You pay the companion's hourly rate plus a 5% safety & service fee. That fee is shown before you pay. It is not a promise of insurance coverage or 24/7 staffing.</p>
               <div className="mt-8 space-y-3">
                 {[
                   ['Companion hourly rate', 'Set by the companion, shown on their profile'],
@@ -8011,7 +7680,7 @@ function Pricing() {
                 <span className="font-mono text-[9px] uppercase tracking-widest text-[#63816a]">For companions</span>
               </div>
               <h2 className="mt-8 font-serif text-4xl leading-none text-[#31533f]">Keep 85%<br />of every booking.</h2>
-              <p className="mt-4 text-sm leading-6 text-[#53725d]">OnlyFavors takes a 15% commission to cover payment processing, background checks, SafeSpot maintenance, and ongoing support. The rest goes directly to you.</p>
+              <p className="mt-4 text-sm leading-6 text-[#53725d]">OnlyFavors takes a 15% commission for payments and platform operations. The rest is your payout through Stripe Connect. Background checks are not a live product feature yet.</p>
               <div className="mt-8 space-y-3">
                 {[
                   ['You set your rate', 'Any hourly rate you choose — update anytime'],
@@ -8164,7 +7833,7 @@ function Pricing() {
                     ['Companion commission', '15% — disclosed upfront', 'Up to 30% + hidden fees'],
                     ['Customer service fee', '5% flat, shown before pay', 'Variable, often hidden'],
                     ['$10 refundable deposit', '✓ Chat before committing', '✗ Full charge upfront'],
-                    ['24/7 safety team', '✓ Included', '~ Premium tiers only'],
+                    ['Trust team reports', '✓ In-app + email', '~ Varies'],
                     ['Masked private chat', '✓ No personal info exposed', '✗ Direct contact exposed'],
                   ].map(([feature, us, them]) => (
                     <tr key={feature} className="group hover:bg-[#fbf7f1]">
@@ -8386,6 +8055,7 @@ function Saved() {
 // ---------------------------------------------------------------------------
 
 type CompanionProfileData = {
+  id?: string;
   displayName: string;
   bio: string;
   hourlyRateCents: number;
@@ -8397,9 +8067,13 @@ type CompanionProfileData = {
   availableHoursEnd: string;
   interviewAnswers?: string[];
   photoUrl?: string | null;
+  instantBook?: boolean;
+  dayRateCents?: number | null;
+  identityStatus?: string;
+  approved?: boolean;
 };
 
-function useCompanionProfile() {
+function useCompanionProfile(enabled = true) {
   return useQuery<CompanionProfileData>({
     queryKey: ['companion-profile'],
     queryFn: async () => {
@@ -8408,6 +8082,7 @@ function useCompanionProfile() {
       return res.json();
     },
     retry: 1,
+    enabled,
   });
 }
 
@@ -8515,6 +8190,8 @@ function CompanionProfileEditor() {
   const [hoursEnd, setHoursEnd] = useState('20:00');
   const [seeded, setSeeded] = useState(false);
   const [qaAnswers, setQaAnswers] = useState<string[]>(['', '', '']);
+  const [instantBook, setInstantBook] = useState(false);
+  const [dayRate, setDayRate] = useState('');
 
   useEffect(() => {
     if (profileQuery.data && !seeded) {
@@ -8531,6 +8208,8 @@ function CompanionProfileEditor() {
       if (Array.isArray(p.interviewAnswers) && p.interviewAnswers.some(Boolean)) {
         setQaAnswers([...p.interviewAnswers, '', '', ''].slice(0, 3));
       }
+      setInstantBook(Boolean(p.instantBook));
+      setDayRate(p.dayRateCents ? String(Math.round(p.dayRateCents / 100)) : '');
       setSeeded(true);
     }
   }, [profileQuery.data, seeded]);
@@ -8539,7 +8218,7 @@ function CompanionProfileEditor() {
     const rate = Math.round(parseFloat(hourlyRate) * 100);
     if (!displayName.trim() || !bio.trim() || isNaN(rate)) return;
     updateProfile.mutate(
-      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd, interviewAnswers: qaAnswers },
+      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd, interviewAnswers: qaAnswers, instantBook, dayRateCents: dayRate ? Math.round(parseFloat(dayRate) * 100) : null },
       {
         onSuccess: () => {
           setSaved(true);
@@ -8594,7 +8273,7 @@ function CompanionProfileEditor() {
                   />
                 ) : (
                   <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#ead0dd] font-serif text-2xl font-bold text-[#7f2e62]">
-                    {displayName ? displayName.split(' ').map((w) => w[0]).slice(0, 2).join('') : 'MR'}
+                    {displayName ? displayName.split(' ').map((w) => w[0]).slice(0, 2).join('') : '—'}
                   </div>
                 )}
                 {uploadPhoto.isPending && (
@@ -8812,13 +8491,66 @@ function CompanionProfileEditor() {
                 <input
                   value={serviceArea}
                   onChange={(e) => setServiceArea(e.target.value)}
-                  placeholder="San Francisco, CA"
+                  placeholder="Bywater or Marigny"
                   maxLength={100}
                   className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] px-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
                   data-testid="input-profile-area"
                 />
-                <p className="mt-1 text-[10px] text-[#9b858e]">Shown as an approximate region, never your exact location.</p>
+                <p className="mt-1 text-[10px] text-[#9b858e]">Neighborhood in New Orleans. Public listings never show a live pin.</p>
               </label>
+            </div>
+          </ProfileSection>
+
+          <ProfileSection title="Booking & identity">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-[#654c5f]">Instant Book</p>
+                  <p className="mt-1 text-[10px] leading-4 text-[#9b858e]">Off by default. When on, a paid deposit confirms without you accepting — still no overlapping bookings.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInstantBook((v) => !v)}
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${instantBook ? 'bg-[#7f2e62]' : 'bg-[#c6aeb8]'}`}
+                  data-testid="toggle-instant-book"
+                >
+                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${instantBook ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Optional full-day rate (7 hours)</span>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[#9b858e]">$</span>
+                  <input
+                    type="number"
+                    value={dayRate}
+                    onChange={(e) => setDayRate(e.target.value)}
+                    min={20}
+                    max={4000}
+                    step={5}
+                    placeholder="Leave blank to use hourly × 7"
+                    className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-[#fbf7f1] pl-8 pr-4 text-sm text-[#48213d] placeholder:text-[#b0929f] focus:border-[#9d557e] focus:outline-none"
+                    data-testid="input-profile-day-rate"
+                  />
+                </div>
+              </label>
+              <div className="rounded-xl bg-[#f0e4db] p-4">
+                <p className="text-xs font-bold text-[#654c5f]">Identity review: {profileQuery.data?.identityStatus ?? 'unsubmitted'}</p>
+                <p className="mt-1 text-[10px] leading-4 text-[#9b858e]">Listing approval and ID review are separate. Submit when your ID is ready for the trust team.</p>
+                {(profileQuery.data?.identityStatus === 'unsubmitted' || profileQuery.data?.identityStatus === 'rejected') && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await fetch('/api/companion/identity/submit', { method: 'POST', credentials: 'include' });
+                      profileQuery.refetch();
+                    }}
+                    className="mt-3 inline-flex h-9 items-center rounded-full bg-[#7f2e62] px-4 text-xs font-bold text-white"
+                    data-testid="button-submit-identity"
+                  >
+                    Submit ID for review
+                  </button>
+                )}
+              </div>
             </div>
           </ProfileSection>
 
@@ -9379,6 +9111,7 @@ function CancelBookingButton({ bookingId }: { bookingId: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
   const [reason, setReason] = useState('');
   const qc = useQueryClient();
 
@@ -9393,18 +9126,28 @@ function CancelBookingButton({ bookingId }: { bookingId: string }) {
 
   async function doCancel() {
     setLoading(true);
+    setError('');
     try {
       const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: reason || 'Customer requested cancellation' }),
       });
-      if (res.ok) { await qc.invalidateQueries({ queryKey: ['bookings'] }); setDone(true); }
-    } finally { setLoading(false); setOpen(false); }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? 'Could not cancel');
+      }
+      await qc.invalidateQueries({ queryKey: ['bookings'] });
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not cancel');
+    } finally { setLoading(false); }
   }
 
   if (done) return (
     <div className="mt-4 rounded-[14px] bg-[#f0e4db] p-4 text-xs leading-5 text-[#654c5f]">
-      Booking cancelled. Any deposit will be refunded within 5–10 business days.
+      Booking cancelled. This does not automatically refund a Stripe deposit. Email hello@onlyfavors.com if a refund is needed.
     </div>
   );
   if (!open) return (
@@ -9417,7 +9160,7 @@ function CancelBookingButton({ bookingId }: { bookingId: string }) {
   return (
     <div className="mt-4 rounded-[16px] border border-[#f0d5d5] bg-[#fdf6f6] p-5">
       <p className="text-sm font-semibold text-[#5a2020]">Cancel this booking?</p>
-      <p className="mt-1 text-xs leading-5 text-[#725e69]">Deposits are refunded within 5–10 business days. The companion will be notified.</p>
+      <p className="mt-1 text-xs leading-5 text-[#725e69]">This marks the booking cancelled. It does not refund Stripe automatically, and the companion is not emailed from this action.</p>
       <div className="mt-4">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#9b858e]">Reason (optional)</p>
         <div className="flex flex-wrap gap-2">
@@ -9431,6 +9174,7 @@ function CancelBookingButton({ bookingId }: { bookingId: string }) {
           ))}
         </div>
       </div>
+      {error && <p className="mt-3 text-xs text-[#a64742]">{error}</p>}
       <div className="mt-4 flex gap-3">
         <button type="button" onClick={doCancel} disabled={loading}
           className="inline-flex h-9 items-center rounded-full bg-[#a83232] px-4 text-xs font-bold text-white disabled:opacity-50"
@@ -9452,7 +9196,7 @@ function useCompanionPayoutStatus() {
   return useQuery<PayoutStatus>({
     queryKey: ['companion-payout-status'],
     queryFn: async () => {
-      const res = await fetch('/api/companion/stripe/status');
+      const res = await fetch('/api/companion/stripe/status', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to check payout status');
       return res.json() as Promise<PayoutStatus>;
     },
@@ -9463,11 +9207,51 @@ function useCompanionPayoutStatus() {
 function useStartPayoutOnboarding() {
   return useMutation<{ url: string }, Error>({
     mutationFn: async () => {
-      const res = await fetch('/api/companion/stripe/onboard', { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to start payout setup');
+      const res = await fetch('/api/companion/stripe/onboard', { method: 'POST', credentials: 'include' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? 'Failed to start payout setup');
+      }
       return res.json() as Promise<{ url: string }>;
     },
     onSuccess: (data) => { window.location.href = data.url; },
+  });
+}
+
+type WorkspacePrefsData = {
+  quietHours: { enabled: boolean; start: string; end: string };
+  away: { enabled: boolean; returnDate: string; note: string; pausedByAway?: boolean };
+};
+
+function useWorkspacePrefs() {
+  return useQuery<WorkspacePrefsData>({
+    queryKey: ['companion-workspace-prefs'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/workspace-prefs', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load workspace preferences');
+      return res.json() as Promise<WorkspacePrefsData>;
+    },
+    retry: 1,
+  });
+}
+
+function useUpdateWorkspacePrefs() {
+  const qc = useQueryClient();
+  return useMutation<WorkspacePrefsData, Error, WorkspacePrefsData>({
+    mutationFn: async (data) => {
+      const res = await fetch('/api/companion/workspace-prefs', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to save workspace preferences');
+      return res.json() as Promise<WorkspacePrefsData>;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(['companion-workspace-prefs'], data);
+      qc.invalidateQueries({ queryKey: ['companion-paused'] });
+    },
   });
 }
 
@@ -9513,17 +9297,12 @@ function CompanionProfileLinkCard({ url }: { url: string }) {
 }
 
 function QuietHoursToggle() {
-  const STORE_KEY = 'of_quiet_hours';
-  type QuietHoursConfig = { enabled: boolean; start: string; end: string };
-  const load = (): QuietHoursConfig => {
-    try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null') ?? { enabled: false, start: '22:00', end: '08:00' }; }
-    catch { return { enabled: false, start: '22:00', end: '08:00' }; }
-  };
-  const [cfg, setCfg] = useState<QuietHoursConfig>(load);
-
-  const update = (next: QuietHoursConfig) => {
-    setCfg(next);
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch {}
+  const prefs = useWorkspacePrefs();
+  const savePrefs = useUpdateWorkspacePrefs();
+  if (!prefs.data) return null;
+  const cfg = prefs.data.quietHours;
+  const update = (next: WorkspacePrefsData['quietHours']) => {
+    savePrefs.mutate({ quietHours: next, away: prefs.data!.away });
   };
 
   // Determine if currently in quiet hours
@@ -9549,9 +9328,9 @@ function QuietHoursToggle() {
           <div>
             <p className="text-sm font-bold text-[#48213d]">Quiet hours</p>
             <p className="text-[10px] text-[#806c76]">
-              {cfg.enabled && isNowQuiet ? <span className="text-[#7f2e62] font-bold">Active now — messages paused</span>
+              {cfg.enabled && isNowQuiet ? <span className="text-[#7f2e62] font-bold">Active now — request alerts are held</span>
                 : cfg.enabled ? `${cfg.start} – ${cfg.end} · not active now`
-                : 'Pause messages during set hours'}
+                : 'Hold new-request alerts during set hours'}
             </p>
           </div>
         </div>
@@ -9580,7 +9359,7 @@ function QuietHoursToggle() {
               data-testid="input-quiet-end" />
           </label>
           <p className="col-span-2 text-[9px] text-[#9b858e]">
-            Set to overnight by default (10 pm – 8 am). Customers see a "replies slowly" indicator during quiet hours.
+            Set to overnight by default (10 pm – 8 am). This is a preference for your workspace, not a guarantee that messages are blocked.
           </p>
         </div>
       )}
@@ -9589,22 +9368,21 @@ function QuietHoursToggle() {
 }
 
 function AwayModeCard() {
-  const STORE_KEY = 'of_away_mode';
-  type AwayCfg = { enabled: boolean; returnDate: string; note: string };
-  const load = (): AwayCfg => {
-    try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null') ?? { enabled: false, returnDate: '', note: '' }; }
-    catch { return { enabled: false, returnDate: '', note: '' }; }
-  };
-  const [cfg, setCfg] = useState<AwayCfg>(load);
+  const prefs = useWorkspacePrefs();
+  const savePrefs = useUpdateWorkspacePrefs();
+  const [draft, setDraft] = useState({ returnDate: '', note: '' });
   const [open, setOpen] = useState(false);
+  if (!prefs.data) return null;
+  const cfg = prefs.data.away;
 
-  const save = (next: AwayCfg) => {
-    setCfg(next);
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch {}
+  const persist = (next: WorkspacePrefsData['away']) => {
+    savePrefs.mutate({ quietHours: prefs.data!.quietHours, away: next });
   };
-
-  const disableAway = () => save({ ...cfg, enabled: false });
-  const enableAway  = () => { save({ ...cfg, enabled: true }); setOpen(false); };
+  const disableAway = () => persist({ ...cfg, enabled: false });
+  const enableAway = () => {
+    persist({ ...cfg, returnDate: draft.returnDate, note: draft.note, enabled: true });
+    setOpen(false);
+  };
 
   return (
     <div className="mt-3 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5" data-testid="away-mode-card">
@@ -9630,7 +9408,10 @@ function AwayModeCard() {
               Return
             </button>
           )}
-          <button type="button" onClick={() => setOpen((p) => !p)}
+          <button type="button" onClick={() => {
+            setDraft({ returnDate: cfg.returnDate, note: cfg.note });
+            setOpen((p) => !p);
+          }}
             className={`h-8 rounded-full px-3 text-[10px] font-bold transition ${cfg.enabled ? 'bg-[#3d2038] text-[#f0c8dc]' : 'bg-[#ead0dd] text-[#7f2e62] hover:bg-[#c695ae] hover:text-white'}`}
             data-testid="button-toggle-away-form">
             {cfg.enabled ? 'Edit' : 'Set away'}
@@ -9642,15 +9423,15 @@ function AwayModeCard() {
         <div className="mt-4 space-y-3 border-t border-[#ece1d9] pt-4">
           <label className="block">
             <span className="mb-1 block text-[10px] font-bold text-[#654c5f]">Return date (optional)</span>
-            <input type="date" value={cfg.returnDate}
-              onChange={(e) => setCfg((p) => ({ ...p, returnDate: e.target.value }))}
+            <input type="date" value={draft.returnDate}
+              onChange={(e) => setDraft((p) => ({ ...p, returnDate: e.target.value }))}
               className="h-9 w-full rounded-xl border border-[#cbbab5] bg-white px-3 text-sm outline-none focus:border-[#7f2e62]"
               data-testid="input-away-return-date" />
           </label>
           <label className="block">
             <span className="mb-1 block text-[10px] font-bold text-[#654c5f]">Message for customers (optional)</span>
-            <input type="text" maxLength={100} value={cfg.note} placeholder="e.g. On a trip — back soon!"
-              onChange={(e) => setCfg((p) => ({ ...p, note: e.target.value }))}
+            <input type="text" maxLength={100} value={draft.note} placeholder="e.g. On a trip — back soon!"
+              onChange={(e) => setDraft((p) => ({ ...p, note: e.target.value }))}
               className="h-9 w-full rounded-xl border border-[#cbbab5] bg-white px-3 text-sm outline-none focus:border-[#7f2e62]"
               data-testid="input-away-note" />
           </label>
@@ -9667,15 +9448,17 @@ function AwayModeCard() {
 }
 
 function PauseRequestsToggle() {
-  const [paused, setPaused] = useState<boolean | null>(null);
+  const qc = useQueryClient();
+  const pausedQuery = useQuery<{ paused: boolean }>({
+    queryKey: ['companion-paused'],
+    queryFn: async () => {
+      const res = await fetch('/api/companion/requests/paused', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load pause state');
+      return res.json() as Promise<{ paused: boolean }>;
+    },
+  });
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/companion/requests/paused', { credentials: 'include' })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d) setPaused(d.paused); })
-      .catch(() => {});
-  }, []);
+  const paused = pausedQuery.data?.paused ?? null;
 
   const toggle = async () => {
     const next = !paused;
@@ -9687,7 +9470,10 @@ function PauseRequestsToggle() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paused: next }),
       });
-      if (res.ok) { const d = await res.json(); setPaused(d.paused); }
+      if (res.ok) {
+        const d = await res.json() as { paused: boolean };
+        qc.setQueryData(['companion-paused'], d);
+      }
     } catch {}
     setSaving(false);
   };
@@ -9730,7 +9516,7 @@ function AvailabilityTodayToggle() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/companion/availability/today')
+    fetch('/api/companion/availability/today', { credentials: 'include' })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d) setAvailable(d.available); })
       .catch(() => {});
@@ -9742,6 +9528,7 @@ function AvailabilityTodayToggle() {
     try {
       const res = await fetch('/api/companion/availability/today', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ available: next }),
       });
@@ -9904,21 +9691,23 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
     if (!authLoading && !user) navigate('/login');
   }, [authLoading, user, navigate]);
   const isCustomer = mode === 'customer';
-  const customer  = useGetCustomerDashboard({ query: { enabled: isCustomer,  queryKey: getGetCustomerDashboardQueryKey() } });
-  const companion = useGetCompanionDashboard({ query: { enabled: !isCustomer, queryKey: getGetCompanionDashboardQueryKey() } });
+  const signedIn = Boolean(user);
+  const customer  = useGetCustomerDashboard({ query: { enabled: isCustomer && signedIn,  queryKey: getGetCustomerDashboardQueryKey() } });
+  const companion = useGetCompanionDashboard({ query: { enabled: !isCustomer && signedIn, queryKey: getGetCompanionDashboardQueryKey() } });
+  const companionProfile = useCompanionProfile(!isCustomer && signedIn);
   const query = isCustomer ? customer : companion;
 
-  // Fetch bookings list to power "Next up" section — React Query deduplicates these calls
-  const customerBookings  = useCustomerBookings({ query: { enabled: isCustomer,  retry: false } });
-  const companionBookings = useCompanionBookings({ query: { enabled: !isCustomer, retry: false } });
+  const customerBookings  = useCustomerBookings(isCustomer && signedIn);
+  const companionBookings = useCompanionBookings(!isCustomer && signedIn);
   const bookingsList = isCustomer ? (customerBookings.data ?? []) : (companionBookings.data ?? []);
 
+  if (authLoading || !user) return <Shell><main className="mx-auto max-w-7xl px-5 py-16 lg:px-8"><LoadingState label="Preparing your workspace" /></main></Shell>;
   if (query.isLoading) return <Shell><main className="mx-auto max-w-7xl px-5 py-16 lg:px-8"><LoadingState label="Preparing your workspace" /></main></Shell>;
   if (query.isError)   return <Shell><main className="mx-auto max-w-2xl px-5 py-20"><ErrorState onRetry={() => query.refetch()} /></main></Shell>;
 
   const stats = isCustomer
     ? [{ label: 'Upcoming bookings', value: customer.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Completed together', value: customer.data?.completedBookings ?? 0, icon: Check }, { label: 'Saved companions', value: customer.data?.savedCompanions ?? 0, icon: HeartHandshake }, { label: 'Safety plans', value: customer.data?.safetyPlans ?? 0, icon: ShieldCheck }]
-    : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Profile views', value: companion.data?.profileViews ?? 0, icon: EyeOff }];
+    : [{ label: 'Pending requests', value: companion.data?.pendingRequests ?? 0, icon: ClipboardCheck }, { label: 'Upcoming bookings', value: companion.data?.upcomingBookings ?? 0, icon: CalendarDays }, { label: 'Earnings', value: money(companion.data?.earningsCents ?? 0), icon: WalletCards }, { label: 'Reviews', value: (companion.data as { reviewCount?: number } | undefined)?.reviewCount ?? 0, icon: Star }];
 
   const hasData = stats.some((x) => x.value !== 0 && x.value !== '$0.00');
   const stripeReturn = typeof window !== 'undefined' && window.location.search.includes('stripe=return');
@@ -9942,6 +9731,12 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
             <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">
               {isCustomer ? 'Customer workspace' : 'Companion workspace'}
             </p>
+            {user.roles.includes('customer') && user.roles.includes('companion') && (
+              <div className="mt-3 flex overflow-hidden rounded-full border border-[#dfd2c9] w-fit">
+                <Link href="/dashboard/customer" className={`px-3 py-1.5 text-[11px] font-bold ${isCustomer ? 'bg-[#3d2038] text-white' : 'text-[#654c5f]'}`}>Customer</Link>
+                <Link href="/dashboard/companion" className={`px-3 py-1.5 text-[11px] font-bold ${!isCustomer ? 'bg-[#3d2038] text-white' : 'text-[#654c5f]'}`}>Companion</Link>
+              </div>
+            )}
             <h1 className="mt-3 font-serif text-5xl leading-none text-[#48213d]">
               {isCustomer ? (() => {
                 const h = new Date().getHours();
@@ -10069,7 +9864,7 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
         {isCustomer  && (() => {
           // Review nudge: find most-recently completed booking without a review
           const unreviewedCompleted = bookingsList
-            .filter((b) => b.status === 'completed' && !localStorage.getItem(`of_reviewed_${b.id}`))
+            .filter((b) => b.status === 'completed' && !b.reviewed)
             .sort((a, b) => b.date.localeCompare(a.date))[0];
           if (!unreviewedCompleted) return null;
           return (
@@ -10087,11 +9882,15 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
             </div>
           );
         })()}
-        {isCustomer && (
+        {isCustomer && (() => {
+          const completed = bookingsList.filter((b) => b.status === 'completed');
+          const spentCents = completed.reduce((sum, b) => sum + (b.totalCents ?? 0), 0);
+          const hoursTogether = completed.reduce((sum, b) => sum + Number(b.durationHours ?? 0), 0);
+          return (
           <div className="mt-6 grid gap-3 sm:grid-cols-3" data-testid="customer-spending-summary">
             {[
-              { label: 'Total spent', value: money((customer.data?.completedBookings ?? 0) * 6500 + 1000), icon: WalletCards, accent: 'bg-[#ead0dd]', iconColor: 'text-[#7f2e62]' },
-              { label: 'Hours of company', value: `${(customer.data?.completedBookings ?? 0) * 2}h`, icon: CalendarDays, accent: 'bg-[#e8f0e8]', iconColor: 'text-[#477254]' },
+              { label: 'Total spent', value: money(spentCents), icon: WalletCards, accent: 'bg-[#ead0dd]', iconColor: 'text-[#7f2e62]' },
+              { label: 'Hours of company', value: `${hoursTogether}h`, icon: CalendarDays, accent: 'bg-[#e8f0e8]', iconColor: 'text-[#477254]' },
               { label: 'Credits available', value: '$0', icon: HeartHandshake, accent: 'bg-[#f3ead7]', iconColor: 'text-[#bf8750]' },
             ].map(({ label, value, icon: Icon, accent, iconColor }) => (
               <div key={label} className="flex items-center gap-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
@@ -10105,14 +9904,14 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {!isCustomer && (() => {
-          // Companion profile link with copy button
-          const profileUrl = typeof window !== 'undefined'
-            ? `${window.location.origin}/companions/dev-preview-companion`
-            : '/companions/dev-preview-companion';
-          return <CompanionProfileLinkCard url={profileUrl} />;
+          const profileUrl = companionProfile.data?.id
+            ? `${typeof window !== 'undefined' ? window.location.origin : ''}/companions/${companionProfile.data.id}`
+            : '';
+          return profileUrl ? <CompanionProfileLinkCard url={profileUrl} /> : null;
         })()}
         {!isCustomer && (() => {
           const pending = bookingsList.filter((b) => b.status === 'requested');
@@ -10160,9 +9959,8 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
           const totalReqs = bookingsList.length;
           const acceptanceRate = totalReqs > 0 ? Math.round((accepted.length / totalReqs) * 100) : null;
           const avgRating = (() => {
-            const ratings: number[] = [];
-            completed.forEach((b) => { const r = parseFloat(localStorage.getItem(`of_rating_${b.id}`) ?? ''); if (!isNaN(r)) ratings.push(r); });
-            return ratings.length ? (ratings.reduce((s, r) => s + r, 0) / ratings.length).toFixed(1) : null;
+            const fromDash = (companion.data as { avgRating?: number | null } | undefined)?.avgRating;
+            return fromDash != null ? String(fromDash) : null;
           })();
           const earningsThisMonth = (() => {
             const now = new Date(); const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -10195,8 +9993,8 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
         {!isCustomer && (() => {
           const lastCompleted = bookingsList.filter((b) => b.status === 'completed').sort((a, b) => b.date.localeCompare(a.date))[0];
           if (!lastCompleted) return null;
-          const kudosCount = (() => { try { return JSON.parse(localStorage.getItem(`of_kudos_${lastCompleted.id}`) ?? '[]').length; } catch { return 0; } })();
-          const reviewed = Boolean(localStorage.getItem(`of_reviewed_${lastCompleted.id}`));
+          const kudosCount = 0;
+          const reviewed = Boolean(lastCompleted.reviewed);
           return (
             <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-5" data-testid="last-booking-recap">
               <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Last completed</p>
@@ -10296,14 +10094,13 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
 function CompanionOnboarding() {
   const profile = useCompanionProfile();
   const p = profile.data;
+  const payout = useCompanionPayoutStatus();
   const profileSaved = Boolean(p?.displayName?.trim() && p?.bio?.trim());
   const qaSaved = (p?.interviewAnswers ?? []).some(Boolean);
-  const payoutStatus = (() => {
-    try { return localStorage.getItem('of_payout_status') ?? 'not_started'; } catch { return 'not_started'; }
-  })();
+  const payoutStatus = payout.data?.status ?? 'not_started';
 
   const safetyReviewed = Boolean((() => { try { return localStorage.getItem('of_safety_reviewed'); } catch { return null; } })());
-  const availabilitySet = Boolean((() => { try { return localStorage.getItem('of_availability_set'); } catch { return null; } })());
+  const availabilitySet = Boolean(p?.availableDays?.length);
 
   const STEPS = [
     {
@@ -10458,11 +10255,11 @@ function CompanionOnboarding() {
         {/* Tips section */}
         <div className="mt-8 space-y-3">
           <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Tips from top companions</p>
-          {[
-            { icon: Star, text: 'Companions who complete their Q&A interview get 2× more profile views in the first week.' },
-            { icon: ShieldCheck, text: 'Your location is never shown exactly — only a service-area circle to protect your privacy.' },
-            { icon: WalletCards, text: 'You keep 85% of every booking. Payouts go to your bank account within 2–5 business days of completion.' },
-          ].map(({ icon: Icon, text }) => (
+            {[
+              { icon: Star, text: 'Answer the Q&A on your profile. Customers read it before they request.' },
+              { icon: ShieldCheck, text: 'Your location is never shown exactly — only a service-area label to protect your privacy.' },
+              { icon: WalletCards, text: 'You keep 85% of every booking. Payouts go to your bank after a completed favor, once Stripe Connect is set up.' },
+            ].map(({ icon: Icon, text }) => (
             <div key={text} className="flex items-start gap-3 rounded-[14px] border border-[#dfd2c9] bg-[#fbf7f1] px-4 py-3">
               <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#9d557e]" />
               <p className="text-xs leading-5 text-[#725e69]">{text}</p>
@@ -10474,7 +10271,7 @@ function CompanionOnboarding() {
         <div className="mt-6 rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5 text-sm">
           <p className="font-bold text-[#48213d]">Need help?</p>
           <p className="mt-1 text-xs leading-5 text-[#806c76]">
-            Our trust team is here. Email <a href="mailto:companions@onlyfavors.com" className="font-bold text-[#7f2e62] hover:underline">companions@onlyfavors.com</a> — we respond within one business day.
+            Our trust team is here. Email <a href="mailto:companions@onlyfavors.com" className="font-bold text-[#7f2e62] hover:underline">companions@onlyfavors.com</a> — we do not publish a response-time SLA.
           </p>
         </div>
       </main>
@@ -10484,10 +10281,9 @@ function CompanionOnboarding() {
 
 function ApplicationStatus() {
   const STAGES = [
-    { key: 'submitted', label: 'Application received', body: 'We got your details and have added you to the review queue.', icon: ClipboardCheck },
-    { key: 'reviewing', label: 'Under review', body: 'A member of our trust team is reading your application. This typically takes 3–5 business days.', icon: Search },
-    { key: 'interview', label: 'Brief interview', body: 'For most applicants, we schedule a short 15-minute video call to get to know you better.', icon: Users },
-    { key: 'approved', label: 'Approved & onboarded', body: 'Once approved, you\'ll complete your onboarding checklist — profile, Q&A, availability, and Stripe payouts — then go live.', icon: Sparkles },
+    { key: 'submitted', label: 'Application received', body: 'Your application is stored for the trust team.', icon: ClipboardCheck },
+    { key: 'reviewing', label: 'Under review', body: 'A person reads applications. There is no published decision SLA.', icon: Search },
+    { key: 'approved', label: 'Approved', body: 'If approved, you finish profile, availability, and Stripe payouts before going live.', icon: Sparkles },
   ];
   const status = useQuery<{ status: string; stage: number }>({
     queryKey: ['companion-application-me'],
@@ -10508,7 +10304,7 @@ function ApplicationStatus() {
         </Link>
         <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Your journey</p>
         <h1 className="mt-2 font-serif text-5xl leading-none text-[#48213d]">Application status</h1>
-        <p className="mt-4 text-sm leading-6 text-[#725e69]">Here's where your application stands. We'll also email you at each milestone.</p>
+        <p className="mt-4 text-sm leading-6 text-[#725e69]">Status comes from your stored application. We do not promise an email at every step.</p>
 
         {/* Status timeline */}
         <div className="mt-10 relative">
@@ -10545,16 +10341,16 @@ function ApplicationStatus() {
 
         {/* ETA note */}
         <div className="mt-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6">
-          <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Estimated timeline</p>
-          <p className="mt-2 text-sm font-semibold text-[#48213d]">3–5 business days from submission</p>
-          <p className="mt-1 text-[10px] text-[#806c76]">Our trust team reviews every application personally. We'll email you as soon as your status changes. No action needed from you right now.</p>
+          <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">Timeline</p>
+          <p className="mt-2 text-sm font-semibold text-[#48213d]">No published SLA</p>
+          <p className="mt-1 text-[10px] text-[#806c76]">A person reviews applications. Email companions@onlyfavors.com if you have questions. No action is required from you while it is pending.</p>
         </div>
 
         {/* Questions */}
         <div className="mt-6 flex items-center gap-2 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
           <HeartHandshake className="h-5 w-5 shrink-0 text-[#9d557e]" />
           <p className="text-xs text-[#725e69]">
-            Questions? Email us at <a href="mailto:companions@onlyfavors.com" className="font-bold text-[#7f2e62] hover:underline">companions@onlyfavors.com</a> — we respond within one business day.
+            Questions? Email us at <a href="mailto:companions@onlyfavors.com" className="font-bold text-[#7f2e62] hover:underline">companions@onlyfavors.com</a> — we do not publish a response-time SLA.
           </p>
         </div>
       </main>
@@ -10567,21 +10363,14 @@ function ApplicationStatus() {
 // ---------------------------------------------------------------------------
 
 function CompanionStatsPage() {
-  const companionBookings = useCompanionBookings({ query: { retry: false } });
+  const companionBookings = useCompanionBookings();
+  const dash = useGetCompanionDashboard({ query: { retry: false } });
   const bookings = companionBookings.data ?? [];
 
   const completed   = bookings.filter((b) => b.status === 'completed');
   const upcoming    = bookings.filter((b) => ['confirmed', 'deposit_paid', 'authorized'].includes(b.status));
   const totalEarnedCents = completed.reduce((acc, b) => acc + (b.companionPayoutCents ?? 0), 0);
-  const avgRating = (() => {
-    const ratings: number[] = [];
-    completed.forEach((b) => {
-      const r = Number(localStorage.getItem(`of_rating_${b.id}`));
-      if (r > 0) ratings.push(r);
-    });
-    if (!ratings.length) return null;
-    return Math.round((ratings.reduce((a, v) => a + v, 0) / ratings.length) * 10) / 10;
-  })();
+  const avgRating = (dash.data as { avgRating?: number | null } | undefined)?.avgRating ?? null;
 
   // Earnings per month (last 6 months) — from completed bookings
   const MONTHS = Array.from({ length: 6 }, (_, i) => {
@@ -10719,8 +10508,8 @@ function CompanionStatsPage() {
           <p className="font-mono text-[9px] uppercase tracking-[.2em] text-[#c695ae]">Tips to grow</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {[
-              ['Complete your Q&A', 'Companions with answered questions get 2× more profile views.'],
-              ['Add a photo', 'Profiles with photos book 4× faster on average.'],
+              ['Complete your Q&A', 'Customers read your answers before they request. Leave them blank and many will keep browsing.'],
+              ['Add a photo', 'A clear photo of your face builds trust. First name and city only — no last name in the shot.'],
               ['Expand your activities', 'More options means a wider customer fit.'],
               ['Keep your schedule up to date', 'Outdated availability leads to declined requests.'],
             ].map(([title, body]) => (
@@ -10761,6 +10550,7 @@ function Apply() {
     try {
       const res = await fetch('/api/companion/applications', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayName: name, email, city, bio: about }),
       });
@@ -10779,7 +10569,7 @@ function Apply() {
         <div className="rounded-[26px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-12">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><Check /></div>
           <h1 className="mt-8 font-serif text-5xl leading-none">A thoughtful first step.</h1>
-          <p className="mt-5 text-sm leading-7 text-[#dbc3cf]">Thanks, {name || 'there'}. Our trust team will review your application and reach out to <strong>{email || 'your email'}</strong> within 3–5 business days.</p>
+          <p className="mt-5 text-sm leading-7 text-[#dbc3cf]">Thanks, {name || 'there'}. Your application is stored for the trust team. Track it from the status page. We do not auto-email on every decision.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]" data-testid="link-application-home">Back home <ArrowRight className="h-4 w-4" /></Link>
             <Link href="/explore" className="inline-flex h-11 items-center gap-2 rounded-full border border-[#7f5080] px-5 text-sm font-bold text-[#f9efe5]" data-testid="link-application-explore">Browse companions <ArrowRight className="h-4 w-4" /></Link>
@@ -10807,8 +10597,8 @@ function Apply() {
             {/* Companion voices */}
             <div className="mt-10 space-y-4">
               {[
-                { initials: 'MR', name: 'Maya R.', city: 'San Francisco', text: '"The boundary receipt removed any ambiguity before we even met. It made the whole thing feel professional and safe — for both of us."' },
-                { initials: 'JK', name: 'Jordan K.', city: 'New York', text: '"I control my schedule completely. I accept the requests that feel right and decline the ones that don\'t. No pressure, ever."' },
+                { initials: '01', name: 'Clear boundaries', city: 'Before you meet', text: '"The boundary receipt removes ambiguity before anyone meets. That is the professional, platonic standard — for both people."' },
+                { initials: '02', name: 'Your own pace', city: 'You accept or decline', text: '"You control your schedule. Accept the requests that feel right and decline the ones that don\'t. No pressure, ever."' },
               ].map(({ initials, name, city, text }) => (
                 <div key={name} className="rounded-[18px] border border-[#dfd2c9] bg-white p-5">
                   <p className="text-sm leading-6 text-[#654c5f] italic">{text}</p>
@@ -10816,7 +10606,7 @@ function Apply() {
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-serif text-sm text-[#7f2e62]">{initials}</div>
                     <div>
                       <p className="text-xs font-semibold text-[#48213d]">{name}</p>
-                      <p className="text-[10px] text-[#9b858e]">{city} · Verified companion</p>
+                      <p className="text-[10px] text-[#9b858e]">{city}</p>
                     </div>
                   </div>
                 </div>
@@ -10968,11 +10758,11 @@ function SafetyReportPage() {
             </div>
             <h1 className="mt-6 font-serif text-4xl text-[#31533f]">Report received.</h1>
             <p className="mt-4 max-w-sm mx-auto text-sm leading-6 text-[#53725d]">
-              Our trust team will review this within {urgent ? '2 hours' : '24 hours'}. If this is an active safety emergency, please contact local emergency services immediately.
+              The report was saved for the trust team. We do not promise a {urgent ? '2-hour' : '24-hour'} response. If this is an active safety emergency, contact local emergency services immediately.
             </p>
             {urgent && (
               <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#fdf6e8] px-4 py-2 text-xs font-bold text-[#9a6d25]">
-                <Clock3 className="h-3.5 w-3.5" />Escalated to 24/7 trust team
+                <Clock3 className="h-3.5 w-3.5" />Marked urgent — still call 911 if you are in danger
               </div>
             )}
             <div className="mt-8 flex justify-center gap-3">
@@ -10998,7 +10788,7 @@ function SafetyReportPage() {
                 className="mt-0.5 h-4 w-4 accent-[#a64742]" data-testid="checkbox-urgent" />
               <label htmlFor="urgent" className="cursor-pointer">
                 <p className="text-sm font-bold text-[#a64742]">This is urgent</p>
-                <p className="mt-0.5 text-xs leading-5 text-[#806c76]">Check this if you feel unsafe right now. We'll escalate to our 24/7 team immediately.</p>
+                <p className="mt-0.5 text-xs leading-5 text-[#806c76]">Check this if you feel unsafe right now. This flags the report. It does not dispatch a 24/7 team. Call local emergency services if you are in danger.</p>
               </label>
             </div>
 
@@ -11395,10 +11185,10 @@ function SafeSpotDetail() {
               <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">How QR check-in works</p>
               <div className="mt-6 space-y-4">
                 {[
-                  { n: '01', title: 'Booking confirmed', body: 'Once your companion accepts, a unique QR code is generated for your booking.' },
-                  { n: '02', title: 'Arrive and check in', body: 'Open your favor screen and tap Check In. Your QR code appears — show it to venue staff or scan the SafeSpot code.' },
-                  { n: '03', title: 'Trust Circle notified', body: 'A quiet message goes out. No names, no details — just "arrived safely at a SafeSpot."' },
-                  { n: '04', title: 'Hourly check-in', body: 'If a scheduled check-in is missed, your Trust Circle is alerted automatically.' },
+                  { n: '01', title: 'Booking confirmed', body: 'After your companion accepts, Favor Mode can show a check-in control for this booking.' },
+                  { n: '02', title: 'Arrive and check in', body: 'Open Favor Mode and record check-in. That stores a check-in row. It does not message venue staff.' },
+                  { n: '03', title: 'Trust Circle', body: 'Trusted contacts are stored on your account. Check-in does not send them an SMS yet.' },
+                  { n: '04', title: 'Missed check-in', body: 'There is no automatic hourly alert to your Trust Circle yet. If something feels wrong, contact local emergency services and email hello@onlyfavors.com.' },
                 ].map(({ n, title, body }) => (
                   <div key={n} className="flex gap-4">
                     <span className="font-mono text-[10px] text-[#c6aeb8] mt-0.5">{n}</span>
@@ -11485,7 +11275,9 @@ function AdminAnnouncementControl() {
   const post = async (active: boolean) => {
     setSaving(true);
     await fetch('/api/admin/announcement', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg.trim(), kind, active }),
     });
     qc.invalidateQueries({ queryKey: ['platform-announcement'] });
@@ -11751,6 +11543,7 @@ function AdminOperations() {
           );
         })()}
 
+        <AdminIdentitySection />
         <AdminReportsSection />
         <AdminAuditSection />
 
@@ -11805,6 +11598,105 @@ function AdminOperations() {
 
       </main>
     </Shell>
+  );
+}
+
+function AdminIdentitySection() {
+  const qc = useQueryClient();
+  const rows = useQuery<{ id: string; displayName: string; city: string; approved: boolean; verified: boolean; identityStatus: string; payoutsHeld: boolean; accountId: string }[]>({
+    queryKey: ['admin-identity'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/companions/identity', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    retry: false,
+  });
+  const bookings = useQuery<(BookingDetail & { payoutHeld?: boolean })[]>({
+    queryKey: ['admin-bookings-money'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/bookings/recent', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    retry: false,
+  });
+  const [acting, setActing] = useState<string | null>(null);
+  const act = async (url: string, body?: Record<string, unknown>) => {
+    setActing(url);
+    await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    });
+    qc.invalidateQueries({ queryKey: ['admin-identity'] });
+    qc.invalidateQueries({ queryKey: ['admin-bookings-money'] });
+    qc.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
+    setActing(null);
+  };
+  return (
+    <div id="identity-review" className="mt-10 scroll-mt-8">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Identity & payouts</p>
+      <h2 className="mt-1 font-serif text-3xl text-[#48213d]">ID review and holds</h2>
+      <p className="mt-2 text-xs text-[#806c76]">Listing approval is separate from identity. Hold payouts before capture when a booking needs review.</p>
+      <div className="mt-4 space-y-3">
+        {(rows.data ?? []).map((row) => (
+          <div key={row.id} className="rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-[#48213d]">{row.displayName}</p>
+                <p className="mt-1 font-mono text-[10px] text-[#9b858e]">{row.city} · {row.approved ? 'listed' : 'not listed'} · ID {row.identityStatus}{row.payoutsHeld ? ' · payouts held' : ''}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/companions/${row.id}/identity`, { status: 'verified' })}
+                  className="rounded-full bg-[#477254] px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">Verify ID</button>
+                <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/companions/${row.id}/identity`, { status: 'rejected' })}
+                  className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">Reject ID</button>
+                <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/companions/${row.id}/payouts-hold`, { held: !row.payoutsHeld })}
+                  className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">{row.payoutsHeld ? 'Release payouts' : 'Hold payouts'}</button>
+                {row.accountId && (
+                  <>
+                    <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/accounts/${row.accountId}/suspend`, { reason: 'Suspended from operations' })}
+                      className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">Suspend</button>
+                    <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/accounts/${row.accountId}/ban`, { reason: 'Banned from operations' })}
+                      className="rounded-full bg-[#a64742] px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">Ban</button>
+                    <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/accounts/${row.accountId}/restore`)}
+                      className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">Restore</button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        {!rows.isLoading && (rows.data ?? []).length === 0 && (
+          <p className="text-sm text-[#806c76]">No companion profiles yet.</p>
+        )}
+      </div>
+      <div className="mt-8 space-y-3">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Booking money actions</p>
+        {(bookings.data ?? []).filter((b) => !['completed', 'cancelled'].includes(b.status) || b.payoutHeld).slice(0, 12).map((b) => (
+          <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-[#dfd2c9] bg-white px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-[#48213d]">{b.activity} · {money(b.totalCents)}</p>
+              <p className="font-mono text-[10px] text-[#9b858e]">{b.id} · {b.status}{b.payoutHeld ? ' · held' : ''}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/bookings/${b.id}/payout-hold`, { held: !b.payoutHeld })}
+                className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">{b.payoutHeld ? 'Release hold' : 'Hold payout'}</button>
+              <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/bookings/${b.id}/refund`)}
+                className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">Refund</button>
+              <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/bookings/${b.id}/no-show`, { party: 'customer' })}
+                className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">Customer no-show</button>
+              <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/bookings/${b.id}/no-show`, { party: 'companion' })}
+                className="rounded-full border border-[#dfd2c9] px-3 py-1.5 text-[10px] font-bold text-[#654c5f] disabled:opacity-50">Companion no-show</button>
+              <button type="button" disabled={acting !== null} onClick={() => void act(`/api/admin/bookings/${b.id}/capture`)}
+                className="rounded-full bg-[#7f2e62] px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">Capture</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -11902,7 +11794,7 @@ function useSafeSpotApplications() {
   return useQuery<{ id: string; name: string; address: string; city: string; type: string; contactEmail: string; contactName: string; submittedAt: string; status: string }[]>({
     queryKey: ['admin-safespots-pending'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/safespots/pending');
+      const res = await fetch('/api/admin/safespots/pending', { credentials: 'include' });
       if (!res.ok) return [];
       return res.json();
     },
@@ -11919,7 +11811,7 @@ function SafeSpotApplicationsSection() {
   const handle = async (id: string, action: 'approve' | 'reject') => {
     setActing(id);
     try {
-      await fetch(`/api/admin/safespots/${id}/${action}`, { method: 'POST' });
+      await fetch(`/api/admin/safespots/${id}/${action}`, { method: 'POST', credentials: 'include' });
       setDecided((d) => ({ ...d, [id]: action === 'approve' ? 'approved' : 'rejected' }));
       qc.invalidateQueries({ queryKey: ['admin-safespots-pending'] });
     } catch {}
@@ -12014,7 +11906,7 @@ function useAdminCompanions() {
   return useQuery<CompanionApplication[]>({
     queryKey: ['admin-companions-pending'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/companions/pending');
+      const res = await fetch('/api/admin/companions/pending', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
@@ -12026,7 +11918,7 @@ function useAdminBookings() {
   return useQuery<BookingDetail[]>({
     queryKey: ['admin-bookings-recent'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/bookings/recent');
+      const res = await fetch('/api/admin/bookings/recent', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
@@ -12038,7 +11930,7 @@ function useCompanionDecision() {
   const qc = useQueryClient();
   return useMutation<{ id: string; status: string }, Error, { id: string; action: 'approve' | 'reject' }>({
     mutationFn: async ({ id, action }) => {
-      const res = await fetch(`/api/admin/companions/${id}/${action}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/companions/${id}/${action}`, { method: 'POST', credentials: 'include' });
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
@@ -12322,18 +12214,16 @@ function SafeSpotRegister() {
           </div>
           <h1 className="font-serif text-4xl text-[#48213d]">Application received.</h1>
           <p className="mt-4 text-sm leading-7 text-[#725e69]">
-            Our trust team will review your venue within 3–5 business days.
-            We check for safety, lighting, public access, and accessibility.
-            You'll hear back at the email you provided.
+            Your venue application is stored for the trust team. There is no published 3–5 day SLA, site-visit promise, or QR-code pack yet.
+            We'll email the address you provided when there is a decision.
           </p>
           <div className="mt-8 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 text-left">
-            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">What happens next</p>
+            <p className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9d557e]">What this does</p>
             <ul className="mt-4 space-y-3">
               {[
-                'Our team visits or reviews the venue remotely',
-                'If approved, you receive a SafeSpot QR code pack',
-                'Your venue appears on the OnlyFavors SafeSpot map',
-                'Customers get notified when bookings are set near you',
+                'The application is saved for a person to review',
+                'Approved venues can appear on the SafeSpot map',
+                'We will not invent a site visit or printed QR pack until those exist',
               ].map((s) => (
                 <li key={s} className="flex items-start gap-2 text-sm text-[#654c5f]">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#477254]" />{s}
@@ -12463,8 +12353,7 @@ function SafeSpotRegister() {
 }
 
 // ---------------------------------------------------------------------------
-// SafeSpot Check-In landing page
-// Scanned from the QR code in FavorMode — confirms arrival, pings Trust Circle
+// SafeSpot Check-In landing page — records arrival on the booking. Does not SMS Trust Circle.
 // ---------------------------------------------------------------------------
 
 function CheckIn() {
@@ -12542,7 +12431,7 @@ function CheckIn() {
               <div className="mt-5 space-y-3 border-t border-[#4a2040] pt-5">
                 <div className="flex items-center gap-3 text-xs text-[#c695ae]">
                   <div className="h-1.5 w-1.5 rounded-full bg-[#3dbd8c]" />
-                  Trust Circle gets a quiet "arrived safely" ping
+                  Check-in is stored on this booking. Trust Circle is not texted.
                 </div>
                 <div className="flex items-center gap-3 text-xs text-[#c695ae]">
                   <div className="h-1.5 w-1.5 rounded-full bg-[#3dbd8c]" />
@@ -12574,8 +12463,7 @@ function CheckIn() {
             </button>
 
             <p className="mt-4 text-center text-[10px] leading-5 text-[#6b4560]">
-              Only the person who generated this QR code can confirm their arrival.
-              Venue staff — scan this to log a guest's arrival.
+              This records check-in for the signed-in booking. It does not notify venue staff or SMS a Trust Circle.
             </p>
           </>
         )}
@@ -12613,13 +12501,13 @@ function CompanionPayoutPage() {
     {
       num: '03', icon: WalletCards, color: 'bg-[#f3ead7] text-[#bf8750]',
       title: 'Funds arrive within 2–5 days',
-      body: 'Payouts are initiated automatically within 24 hours of completion and land in your bank account on Stripe\'s standard schedule.',
+      body: 'After a booking is marked complete, net earnings go through Stripe Connect on Stripe\'s schedule — often 2–5 business days. OnlyFavors does not promise a 24-hour payout.',
     },
   ];
 
   const FAQS: [string, string][] = [
     ['What percentage do I keep?', 'You keep 85% of your hourly rate. The remaining 15% goes to OnlyFavors to cover platform operations, trust & safety, and Stripe processing. This is calculated server-side — your rate in your profile is what customers see, and you always see exactly what you will earn before confirming.'],
-    ['Can I choose when payouts happen?', 'Payouts are initiated automatically within 24 hours of a booking completing. You cannot batch or delay them. If you want to accumulate earnings, simply don\'t spend from your connected bank account — Stripe always sends per booking.'],
+    ['Can I choose when payouts happen?', 'Payout timing follows Stripe after a booking is completed. You cannot batch or delay transfers from OnlyFavors. If you want to accumulate earnings, leave them in the connected bank account — Stripe sends on its own schedule.'],
     ['What countries are supported?', 'Stripe payouts are available in the US, Canada, UK, Australia, and most of the EU. If your country is unsupported, you will see a message in the Stripe onboarding flow. Reach out to our team if you need help.'],
     ['What if I close my Stripe account?', 'Contact our support team before closing your Stripe account. If you close it while you have a pending payout, that payout may be lost. We will help you transition safely.'],
     ['Is my banking data secure?', 'Yes. All banking data is handled entirely by Stripe — OnlyFavors never stores or sees your account numbers, routing numbers, or any sensitive financial details. We only receive a status flag confirming payouts are active.'],
@@ -12670,7 +12558,7 @@ function CompanionPayoutPage() {
                 </span>
                 <div>
                   <p className="text-sm font-bold text-[#31533f]">Payouts active</p>
-                  <p className="mt-0.5 text-xs leading-5 text-[#53725d]">Your earnings from confirmed bookings transfer to your bank automatically within 24 hours of completion.</p>
+                  <p className="mt-0.5 text-xs leading-5 text-[#53725d]">Your Stripe account can receive transfers. Timing follows Stripe after a booking is completed — not a promised 24-hour window from OnlyFavors.</p>
                 </div>
               </div>
               {data?.accountId && (
@@ -13008,7 +12896,7 @@ function CustomerBookingsPage() {
               <div className="divide-y divide-[#f0e8e2]">
                 {filtered.map((b) => {
                   const isCompleted = b.status === 'completed';
-                  const reviewed = Boolean(localStorage.getItem(`of_reviewed_${b.id}`));
+                  const reviewed = Boolean(b.reviewed);
                   return (
                     <div key={b.id} className="flex items-center gap-4 bg-white px-5 py-4 transition hover:bg-[#fbf7f1]" data-testid={`booking-history-${b.id}`}>
                       {/* Date block */}
@@ -13380,7 +13268,7 @@ function BookingReceiptPage() {
                 <div className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-[#c695ae]" />
                 <div>
                   <p className="text-sm font-semibold text-[#48213d]">Check in at SafeSpot</p>
-                  <p className="mt-0.5 text-xs leading-5 text-[#806c76]">Your companion will scan a QR code at the meeting venue to confirm the booking has started.</p>
+                  <p className="mt-0.5 text-xs leading-5 text-[#806c76]">Record check-in in Favor Mode when you arrive. That stores a timestamp — it does not SMS Trust Circle.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 opacity-50">
@@ -13417,7 +13305,7 @@ function ReviewPage() {
     enabled: Boolean(id),
     retry: false,
   });
-  const alreadyReviewed = Boolean(existingReview.data) || Boolean(id && localStorage.getItem(`of_reviewed_${id}`));
+  const alreadyReviewed = Boolean(existingReview.data);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [phase, setPhase] = useState<'rate' | 'kudos' | 'tip' | 'done'>(alreadyReviewed ? 'done' : 'rate');
@@ -13430,10 +13318,6 @@ function ReviewPage() {
     if (rating === 0) return;
     try {
       await submit.mutateAsync({ rating, comment });
-      // Persist rating so CompanionPerformanceCard can compute avg rating
-      try { localStorage.setItem(`of_rating_${id}`, String(rating)); } catch {}
-      // Mark reviewed so the review prompt won't re-appear
-      try { localStorage.setItem(`of_reviewed_${id}`, '1'); } catch {}
       setPhase('kudos');
     } catch {
       // error shown inline
@@ -13601,7 +13485,7 @@ function ReviewPage() {
             <h1 className="font-serif text-4xl">Thank you.</h1>
             <p className="mt-3 text-sm leading-6 text-[#dbc3cf]">
               Your review of {companionFirstName} has been submitted.
-              {alreadyReviewed ? ' You\'ve already reviewed this booking.' : ' It will appear on their profile within 24 hours.'}
+              {alreadyReviewed ? ' You\'ve already reviewed this booking.' : ' It is on their public profile now.'}
             </p>
             <div className="mt-8 grid gap-3 text-left">
               {[
@@ -13716,6 +13600,28 @@ function Router() {
 function AgeGate() {
   const { user, refresh } = useAuth();
   const [busy, setBusy] = useState(false);
+  if (user?.status === 'deactivated') {
+    return (
+      <div className="fixed inset-0 z-[80] grid place-items-center bg-[#241A20]/70 px-5" role="dialog">
+        <div className="w-full max-w-md rounded-[24px] bg-[#FFFDF9] p-8 text-[#241A20] shadow-2xl">
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8F294C]">Account paused</p>
+          <h2 className="mt-3 font-serif text-4xl">This account is deactivated.</h2>
+          <p className="mt-4 text-sm leading-6 text-[#725e69]">You will not appear in search or be able to book until you reactivate.</p>
+          <button type="button" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try {
+              const res = await fetch('/api/account/reactivate', { method: 'POST', credentials: 'include' });
+              if (res.ok) await refresh();
+            } finally { setBusy(false); }
+          }}
+            className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-[#8F294C] text-sm font-bold text-white disabled:opacity-50"
+            data-testid="button-reactivate">
+            {busy ? 'Reactivating…' : 'Reactivate account'}
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!user || user.ageConfirmed) return null;
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-[#241A20]/70 px-5" role="dialog" aria-labelledby="age-gate-title">

@@ -2,7 +2,6 @@ import type { Request } from "express";
 import { db } from "@workspace/db";
 import { companionProfiles } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { getActorId } from "./auth";
 
 function isMissingTableError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -11,47 +10,28 @@ function isMissingTableError(err: unknown): boolean {
   return msg(e.message) || msg((e.cause as { message?: string } | undefined)?.message);
 }
 
+export function isCompanionUser(req: Request): boolean {
+  return Boolean(
+    req.user?.id &&
+      req.user.status === "active" &&
+      req.user.roles.includes("companion"),
+  );
+}
+
 export async function resolveCompanionProfile(req: Request) {
-  const accountId = getActorId(req, "companion");
-  if (!accountId) return null;
-  const isCompanion = req.user?.roles.includes("companion") || process.env.NODE_ENV === "development";
-  if (!isCompanion) return null;
+  if (!isCompanionUser(req)) return null;
+  const accountId = req.user!.id;
   try {
     const [row] = await db
       .select()
       .from(companionProfiles)
       .where(eq(companionProfiles.accountId, accountId))
       .limit(1);
-    if (row) return row;
+    return row ?? null;
   } catch (err) {
-    if (!isMissingTableError(err)) throw err;
+    if (isMissingTableError(err)) return null;
+    throw err;
   }
-  return {
-    id: accountId,
-    accountId,
-    displayName: "",
-    city: "",
-    serviceArea: "",
-    activities: [] as string[],
-    languages: [] as string[],
-    hourlyRate: 0,
-    dayRate: null as number | null,
-    responseTime: "Usually within a day",
-    rating: "0",
-    reviewCount: 0,
-    verified: false,
-    approved: false,
-    instantBook: false,
-    paused: false,
-    availableToday: false,
-    biography: null as string | null,
-    boundaries: [] as string[],
-    interviewAnswers: [] as string[],
-    photoUrl: null as string | null,
-    stripeAccountId: null as string | null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
 }
 
 export async function resolveCompanionId(req: Request): Promise<string | null> {

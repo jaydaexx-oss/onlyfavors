@@ -1,3 +1,4 @@
+- [OnlyFavors MVP freeze](onlyfavors-mvp-freeze.md) — first-pilot scope, frozen policies, deferred features. Do not add product outside this list.
 - [OnlyFavors production boundaries](onlyfavors-production-boundaries.md) — public discovery must fail closed until approved Supabase records and privacy-safe fields exist.
 - [OnlyFavors pricing model](onlyfavors-pricing.md) — 5% customer fee + 15% companion commission = 20% gross, server-enforced, never from browser; $10 refundable deposit unlocks chat.
 - [Zod format:date coercion](zod-date-coercion.md) — Orval generates zod.coerce.date() for format:date fields; parsed values are Date objects, not strings; must serialize before Drizzle inserts.

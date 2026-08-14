@@ -7,7 +7,10 @@ export type SessionUser = {
   displayName: string | null;
   roles: Array<"customer" | "companion" | "admin">;
   ageConfirmed: boolean;
+  status: "active" | "suspended" | "banned" | "deactivated";
   suspended: boolean;
+  banned: boolean;
+  deactivated: boolean;
   riskLevel: string;
 };
 
@@ -109,6 +112,8 @@ export async function confirmAge() {
   });
   if (!res.ok) throw new Error("Could not confirm age");
 }
+
+export function dashboardPath(user: SessionUser | null) {
   if (!user) return "/login";
   if (user.roles.includes("admin")) return "/admin/operations";
   if (user.roles.includes("companion")) return "/dashboard/companion";

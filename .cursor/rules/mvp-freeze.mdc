@@ -1,0 +1,16 @@
+---
+description: Frozen first-pilot MVP. Do not add deferred features. Close gaps only.
+alwaysApply: true
+---
+
+# MVP freeze
+
+The product is frozen for the **New Orleans** pilot. Do not add features outside `.agents/memory/onlyfavors-mvp-freeze.md` until a verified adult can find, book, meet, pay, and get help.
+
+**Do not build:** AI matching, subscriptions, gift cards, loyalty, referral credits, recurring bookings, venue partnership programs, social feeds, kudos, tips, Next.js rewrite.
+
+**Do not invent:** companion profiles, SafeSpots, metrics, refunds, SMS, SLAs, or payout dates.
+
+**When coding:** only close listed MVP gaps (payments/refunds, overlap, timezone, identity status, block/report, check-in honesty, audit, account delete). Empty DB → empty states. Pricing stays in `pricing.ts` (5% / 15% / $10). Roles from `account_roles` only.
+
+If the user says “next” without naming a freeze gap, implement the next item in the freeze **build order**, not a new product surface.

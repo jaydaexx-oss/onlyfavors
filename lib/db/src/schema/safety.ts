@@ -95,3 +95,16 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const accountBlocks = pgTable("account_blocks", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  blockerId: text("blocker_id")
+    .notNull()
+    .references(() => accounts.id),
+  blockedId: text("blocked_id")
+    .notNull()
+    .references(() => accounts.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

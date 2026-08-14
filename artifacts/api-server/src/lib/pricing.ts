@@ -77,3 +77,31 @@ export function calculatePrice(
     depositCreditedToFinal: true,
   };
 }
+
+export function priceForBooking(
+  hourlyRateDollars: number,
+  durationHours: number,
+  companionId: string,
+  dayRateDollars?: number | null,
+): PriceBreakdown {
+  if (durationHours === 7 && dayRateDollars && dayRateDollars > 0) {
+    const subtotalCents = Math.round(dayRateDollars * 100);
+    const customerFeeCents = Math.round(subtotalCents * (CUSTOMER_FEE_PERCENT / 100));
+    const totalCents = subtotalCents + customerFeeCents;
+    const companionPayoutCents = Math.round(subtotalCents * ((100 - COMPANION_COMMISSION_PERCENT) / 100));
+    return {
+      companionId,
+      durationHours,
+      subtotalCents,
+      customerFeeCents,
+      totalCents,
+      companionPayoutCents,
+      platformRevenueCents: totalCents - companionPayoutCents,
+      customerFeePercent: CUSTOMER_FEE_PERCENT,
+      companionCommissionPercent: COMPANION_COMMISSION_PERCENT,
+      depositCents: DEPOSIT_CENTS,
+      depositCreditedToFinal: true,
+    };
+  }
+  return calculatePrice(hourlyRateDollars, durationHours, companionId);
+}

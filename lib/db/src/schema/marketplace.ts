@@ -11,6 +11,24 @@ import {
 import { sql } from "drizzle-orm";
 import { accounts } from "./accounts";
 
+export type QuietHoursPrefs = {
+  enabled: boolean;
+  start: string;
+  end: string;
+};
+
+export type AwayPrefs = {
+  enabled: boolean;
+  returnDate: string;
+  note: string;
+  pausedByAway?: boolean;
+};
+
+export type WorkspacePrefs = {
+  quietHours?: QuietHoursPrefs;
+  away?: AwayPrefs;
+};
+
 export const companionProfiles = pgTable("companion_profiles", {
   id: text("id")
     .primaryKey()
@@ -29,13 +47,16 @@ export const companionProfiles = pgTable("companion_profiles", {
   rating: numeric("rating").notNull().default("0"),
   reviewCount: integer("review_count").notNull().default(0),
   verified: boolean("verified").notNull().default(false),
+  identityStatus: text("identity_status").notNull().default("unsubmitted"),
   approved: boolean("approved").notNull().default(false),
   instantBook: boolean("instant_book").notNull().default(false),
+  payoutsHeld: boolean("payouts_held").notNull().default(false),
   paused: boolean("paused").notNull().default(false),
   availableToday: boolean("available_today").notNull().default(false),
   biography: text("biography"),
   boundaries: jsonb("boundaries").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   interviewAnswers: jsonb("interview_answers").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  workspacePrefs: jsonb("workspace_prefs").$type<WorkspacePrefs>().notNull().default(sql`'{}'::jsonb`),
   photoUrl: text("photo_url"),
   stripeAccountId: text("stripe_account_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

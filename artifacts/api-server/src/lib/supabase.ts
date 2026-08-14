@@ -11,6 +11,7 @@ export type SupabaseCompanionRow = {
   activities: string[];
   languages: string[];
   hourly_rate: number;
+  day_rate?: number | null;
   response_time: string;
   rating: number;
   review_count: number;
@@ -20,6 +21,9 @@ export type SupabaseCompanionRow = {
   boundaries?: string[];
   interview_answers?: string[];
   photo_url?: string | null;
+  paused?: boolean;
+  available_today?: boolean;
+  created_at?: string;
 };
 
 export type SupabaseSafeSpotRow = {
@@ -47,6 +51,7 @@ function mapProfile(row: typeof companionProfiles.$inferSelect): SupabaseCompani
     activities: row.activities ?? [],
     languages: row.languages ?? [],
     hourly_rate: row.hourlyRate,
+    day_rate: row.dayRate ?? null,
     response_time: row.responseTime,
     rating: Number(row.rating ?? 0),
     review_count: row.reviewCount,
@@ -56,6 +61,9 @@ function mapProfile(row: typeof companionProfiles.$inferSelect): SupabaseCompani
     boundaries: row.boundaries ?? [],
     interview_answers: row.interviewAnswers ?? [],
     photo_url: row.photoUrl,
+    paused: row.paused,
+    available_today: row.availableToday,
+    created_at: row.createdAt.toISOString(),
   };
 }
 
@@ -99,6 +107,25 @@ export async function getApprovedCompanions(): Promise<SupabaseCompanionRow[]> {
   }
   return supabaseGet<SupabaseCompanionRow[]>(
     "/rest/v1/companion_profiles?approved=eq.true&select=id,display_name,city,service_area,activities,languages,hourly_rate,response_time,rating,review_count,verified,instant_book,biography,boundaries,photo_url",
+  );
+}
+
+export async function getPublicCompanion(
+  id: string,
+): Promise<SupabaseCompanionRow[]> {
+  try {
+    const rows = await db
+      .select()
+      .from(companionProfiles)
+      .where(and(eq(companionProfiles.id, id), eq(companionProfiles.approved, true)));
+    if (rows.length > 0) return rows.map(mapProfile);
+  } catch (err) {
+    if (!isMissingTableError(err)) {
+      // continue
+    }
+  }
+  return supabaseGet<SupabaseCompanionRow[]>(
+    `/rest/v1/companion_profiles?id=eq.${encodeURIComponent(id)}&approved=eq.true&select=id,display_name,city,service_area,activities,languages,hourly_rate,response_time,rating,review_count,verified,instant_book,biography,boundaries,photo_url,paused,created_at`,
   );
 }
 

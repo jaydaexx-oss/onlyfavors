@@ -35,13 +35,15 @@ export class WebhookHandlers {
       if (
         event.type === "payment_intent.succeeded" ||
         event.type === "payment_intent.payment_failed" ||
-        event.type === "payment_intent.canceled"
+        event.type === "payment_intent.canceled" ||
+        event.type === "payment_intent.amount_capturable_updated"
       ) {
         const pi = event.data.object as {
           id: string;
+          status?: string;
           metadata: Record<string, string>;
         };
-        await handlePaymentEvent(event.type, pi.id, pi.metadata);
+        await handlePaymentEvent(event.type, pi.id, pi.metadata ?? {}, pi.status);
       }
     } catch (err) {
       // Business logic failure is logged but does not fail the webhook response —

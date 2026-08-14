@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   numeric,
   pgTable,
@@ -25,7 +26,10 @@ export const bookings = pgTable("bookings", {
   date: text("date").notNull(),
   startTime: text("start_time").notNull(),
   durationHours: numeric("duration_hours").notNull(),
+  timezone: text("timezone").notNull().default("America/Chicago"),
+  startsAt: timestamp("starts_at"),
   safeSpotId: text("safe_spot_id"),
+  payoutHeld: boolean("payout_held").notNull().default(false),
 
   // Lifecycle
   status: text("status").notNull().default("draft"),
@@ -91,3 +95,16 @@ export const insertFavorRequestSchema = createInsertSchema(favorRequests).omit({
 
 export type InsertFavorRequest = z.infer<typeof insertFavorRequestSchema>;
 export type FavorRequest = typeof favorRequests.$inferSelect;
+
+export const bookingEvents = pgTable("booking_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  bookingId: text("booking_id").notNull(),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  actorId: text("actor_id"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+

@@ -1,11 +1,19 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+
+export type AccountPrefs = {
+  emailBookingUpdates?: boolean;
+  emailNewsletter?: boolean;
+  showSavedCount?: boolean;
+};
 
 /**
  * One account per email. Roles live in `account_roles` — never in
@@ -19,9 +27,13 @@ export const accounts = pgTable(
       .$defaultFn(() => crypto.randomUUID()),
     email: text("email").notNull(),
     displayName: text("display_name"),
+    prefs: jsonb("prefs").$type<AccountPrefs>().notNull().default(sql`'{}'::jsonb`),
     ageConfirmedAt: timestamp("age_confirmed_at"),
     suspendedAt: timestamp("suspended_at"),
     suspensionReason: text("suspension_reason"),
+    bannedAt: timestamp("banned_at"),
+    deactivatedAt: timestamp("deactivated_at"),
+    deletedAt: timestamp("deleted_at"),
     riskLevel: text("risk_level").notNull().default("standard"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

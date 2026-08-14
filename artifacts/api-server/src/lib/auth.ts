@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { logger } from "./logger";
+import { lifecycleOf } from "./accountState";
 
 export const SESSION_COOKIE = "of_session";
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -17,6 +18,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
 
 export type AccountRole = "customer" | "companion" | "admin";
+export type AccountStatus = "active" | "suspended" | "banned" | "deactivated";
 
 export type AuthUser = {
   id: string;
@@ -24,7 +26,10 @@ export type AuthUser = {
   displayName: string | null;
   roles: AccountRole[];
   ageConfirmed: boolean;
+  status: AccountStatus;
   suspended: boolean;
+  banned: boolean;
+  deactivated: boolean;
   riskLevel: string;
 };
 
@@ -66,16 +71,11 @@ function isMissingTableError(err: unknown): boolean {
 
 export function getActorId(
   req: Request,
-  fallbackRole: "customer" | "companion" = "customer",
+  _fallbackRole?: "customer" | "companion",
 ): string | null {
   if (req.user?.id) {
-    if (req.user.suspended) return null;
+    if (req.user.status === "suspended" || req.user.status === "banned") return null;
     return req.user.id;
-  }
-  if (process.env.NODE_ENV === "development") {
-    return fallbackRole === "companion"
-      ? "dev-preview-companion"
-      : "dev-preview-customer";
   }
   return null;
 }
@@ -87,7 +87,9 @@ export async function loadUserById(accountId: string): Promise<AuthUser | null> 
       .from(accounts)
       .where(eq(accounts.id, accountId))
       .limit(1);
-    if (!account) return null;
+    if (!account || account.deletedAt) return null;
+    const life = lifecycleOf(account);
+    if (life === "deleted") return null;
     const roles = await db
       .select()
       .from(accountRoles)
@@ -98,7 +100,10 @@ export async function loadUserById(accountId: string): Promise<AuthUser | null> 
       displayName: account.displayName,
       roles: roles.map((r) => r.role as AccountRole),
       ageConfirmed: Boolean(account.ageConfirmedAt),
-      suspended: Boolean(account.suspendedAt),
+      status: life,
+      suspended: life === "suspended",
+      banned: life === "banned",
+      deactivated: life === "deactivated",
       riskLevel: account.riskLevel,
     };
   } catch (err) {
@@ -154,7 +159,7 @@ export async function attachUser(
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const id = getActorId(req);
-  if (!id || (req.user && req.user.suspended)) {
+  if (!id || (req.user && (req.user.status === "suspended" || req.user.status === "banned"))) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
@@ -168,8 +173,8 @@ export function requireRole(...roles: AccountRole[]) {
       res.status(401).json({ error: "Authentication required" });
       return;
     }
-    if (user.suspended) {
-      res.status(403).json({ error: "This account is suspended" });
+    if (user.suspended || user.banned) {
+      res.status(403).json({ error: user.banned ? "This account is banned" : "This account is suspended" });
       return;
     }
     if (!roles.some((role) => user.roles.includes(role))) {
@@ -303,6 +308,12 @@ export async function verifyOtp(emailRaw: string, codeRaw: string, purpose = "lo
     });
   }
 
+  if (account.deletedAt) {
+    throw Object.assign(new Error("This account was deleted"), { status: 403 });
+  }
+  if (account.bannedAt) {
+    throw Object.assign(new Error("This account is banned"), { status: 403 });
+  }
   if (account.suspendedAt) {
     throw Object.assign(new Error("This account is suspended"), { status: 403 });
   }
@@ -320,6 +331,13 @@ export async function verifyOtp(emailRaw: string, codeRaw: string, purpose = "lo
         accountId: account.id,
         role: "admin",
         grantedBy: "system:bootstrap",
+      });
+      await writeAudit({
+        actorId: account.id,
+        action: "role.grant",
+        subjectType: "account",
+        subjectId: account.id,
+        note: "admin bootstrap",
       });
     }
   }
@@ -357,6 +375,17 @@ export async function revokeSession(token: string | undefined): Promise<void> {
       .update(sessions)
       .set({ revokedAt: new Date() })
       .where(eq(sessions.tokenHash, hashSecret(token)));
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
+}
+
+export async function revokeAllSessions(accountId: string): Promise<void> {
+  try {
+    await db
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.accountId, accountId), isNull(sessions.revokedAt)));
   } catch (err) {
     if (!isMissingTableError(err)) throw err;
   }

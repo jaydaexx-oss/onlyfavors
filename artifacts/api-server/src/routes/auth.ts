@@ -4,6 +4,7 @@ import {
   clearSessionCookie,
   requestOtp,
   revokeSession,
+  revokeAllSessions,
   SESSION_COOKIE,
   setSessionCookie,
   verifyOtp,
@@ -73,6 +74,16 @@ router.post("/auth/logout", async (req, res) => {
       ? req.cookies[SESSION_COOKIE]
       : undefined;
   await revokeSession(token);
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+router.post("/auth/logout-all", async (req, res) => {
+  if (!req.user?.id) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  await revokeAllSessions(req.user.id);
   clearSessionCookie(res);
   res.json({ ok: true });
 });
