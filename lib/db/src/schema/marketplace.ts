@@ -35,6 +35,7 @@ export const companionProfiles = pgTable("companion_profiles", {
   availableToday: boolean("available_today").notNull().default(false),
   biography: text("biography"),
   boundaries: jsonb("boundaries").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  interviewAnswers: jsonb("interview_answers").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   photoUrl: text("photo_url"),
   stripeAccountId: text("stripe_account_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

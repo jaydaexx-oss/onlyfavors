@@ -238,13 +238,14 @@ router.get("/companion/profile", async (req, res) => {
     paused: profile.paused,
     availableToday: profile.availableToday,
     approved: profile.approved,
+    interviewAnswers: profile.interviewAnswers ?? [],
   });
 });
 
 router.put("/companion/profile", async (req, res) => {
   const accountId = getActorId(req, "companion");
   if (!accountId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const { displayName, bio, hourlyRateCents, activities, languages, serviceArea } = req.body ?? {};
+  const { displayName, bio, hourlyRateCents, activities, languages, serviceArea, interviewAnswers } = req.body ?? {};
   if (!displayName?.trim()) { res.status(400).json({ error: "Display name is required" }); return; }
   if (!bio?.trim()) { res.status(400).json({ error: "Bio is required" }); return; }
   if (typeof hourlyRateCents !== "number" || hourlyRateCents < 2000 || hourlyRateCents > 50000) {
@@ -264,6 +265,9 @@ router.put("/companion/profile", async (req, res) => {
       languages: languages.slice(0, 8).map((l: unknown) => String(l).slice(0, 40)),
       serviceArea: String(serviceArea ?? "").slice(0, 100),
       city: String(serviceArea ?? existing[0]?.city ?? "Unknown").slice(0, 80),
+      interviewAnswers: Array.isArray(interviewAnswers)
+        ? interviewAnswers.slice(0, 3).map((a: unknown) => String(a).slice(0, 400))
+        : (existing[0]?.interviewAnswers ?? []),
       updatedAt: new Date(),
     };
     if (existing[0]) {
@@ -276,6 +280,7 @@ router.put("/companion/profile", async (req, res) => {
         languages: updated.languages,
         serviceArea: updated.serviceArea,
         photoUrl: updated.photoUrl,
+        interviewAnswers: updated.interviewAnswers ?? [],
       });
       return;
     }
@@ -293,6 +298,7 @@ router.put("/companion/profile", async (req, res) => {
       languages: created.languages,
       serviceArea: created.serviceArea,
       photoUrl: created.photoUrl,
+      interviewAnswers: created.interviewAnswers ?? [],
     });
   } catch (err) {
     req.log.error({ err }, "Companion profile save failed");

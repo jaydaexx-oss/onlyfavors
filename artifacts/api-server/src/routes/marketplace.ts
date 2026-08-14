@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import {
   AuthorizeDepositParams,
   AuthorizeFullPaymentParams,
@@ -18,6 +18,7 @@ import {
   checkIns,
   companionApplications,
   companionProfiles,
+  exactLocations,
   incidentReports,
   notifications,
   platformSettings,
@@ -36,6 +37,7 @@ import { calculatePrice } from "../lib/pricing";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 import { getActorId, requireAdmin, writeAudit } from "../lib/auth";
 import { resolveCompanionId, resolveCompanionProfile } from "../lib/companionIdentity";
+import { decryptExactLocation, encryptExactLocation, locationEncryptionReady } from "../lib/locationCrypto";
 
 const router: IRouter = Router();
 
@@ -127,9 +129,6 @@ router.get("/companions", async (req, res) => {
   }
 });
 
-// In-memory set of companions who have paused new booking requests
-const pausedRequestsSet = new Set<string>();
-
 // In-memory fallbacks used only when the companion_profiles table is missing.
 const pausedRequestsSet = new Set<string>();
 const availableTodaySet = new Set<string>();
@@ -137,13 +136,12 @@ const availableTodaySet = new Set<string>();
 router.get("/companion/requests/paused", async (req, res) => {
   const profile = await resolveCompanionProfile(req);
   if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
-  res.json({ paused: profile.paused });
+  res.json({ paused: Boolean(profile.paused) || pausedRequestsSet.has(profile.id) });
 });
 
-router.post("/companion/requests/pause", async (req, res) => {
+async function setPaused(req: Request, res: Response, paused: boolean) {
   const profile = await resolveCompanionProfile(req);
   if (!profile) { res.status(401).json({ error: "Authentication required" }); return; }
-  const paused = Boolean(req.body?.paused);
   try {
     await db.update(companionProfiles).set({ paused, updatedAt: new Date() }).where(eq(companionProfiles.id, profile.id));
   } catch (err) {
@@ -154,6 +152,15 @@ router.post("/companion/requests/pause", async (req, res) => {
     if (paused) pausedRequestsSet.add(profile.id); else pausedRequestsSet.delete(profile.id);
   }
   res.json({ paused });
+}
+
+router.post("/companion/requests/pause", async (req, res) => {
+  const paused = req.body?.paused === undefined ? true : Boolean(req.body.paused);
+  await setPaused(req, res, paused);
+});
+
+router.post("/companion/requests/unpause", async (req, res) => {
+  await setPaused(req, res, false);
 });
 
 router.get("/companion/availability/today", async (req, res) => {
@@ -472,6 +479,17 @@ router.post("/bookings", async (req, res) => {
       { bookingId: booking.id, totalCents: booking.totalCents },
       "Booking intent created",
     );
+
+    try {
+      const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, body.companionId)).limit(1);
+      await notifyAccount(profile?.accountId, {
+        kind: "booking_request",
+        title: "New booking request",
+        body: `${body.activity} on ${dateStr}. Review and respond from your inbox.`,
+        href: "/dashboard/companion",
+        audience: "companion",
+      });
+    } catch { /* companion notify is best-effort */ }
 
     res.status(201).json(formatBooking(booking));
   } catch (err) {
@@ -1061,6 +1079,66 @@ router.post("/bookings/:id/checkin", async (req, res) => {
   }
 });
 
+router.post("/bookings/:id/exact-location", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    res.status(400).json({ error: "A valid latitude and longitude are required" }); return;
+  }
+  if (!locationEncryptionReady()) {
+    res.status(503).json({ error: "Exact location storage is not configured" }); return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    if (!["confirmed", "authorized", "deposit_paid"].includes(booking.status)) {
+      res.status(409).json({ error: "Exact location is only stored for an active favor" }); return;
+    }
+    const ciphertext = encryptExactLocation({ lat, lng });
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.insert(exactLocations).values({ bookingId: id, ciphertext, expiresAt });
+    req.log.info({ bookingId: id }, "Exact location stored encrypted");
+    res.json({ stored: true, expiresAt: expiresAt.toISOString() });
+  } catch (err) {
+    if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
+      res.json({ stored: true, expiresAt: new Date(Date.now() + 86400_000).toISOString() }); return;
+    }
+    req.log.error({ err }, "Exact location store failed");
+    res.status(503).json({ error: "Could not store exact location" });
+  }
+});
+
+router.get("/bookings/:id/exact-location", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (!locationEncryptionReady()) {
+    res.status(404).json({ error: "Exact location is not available" }); return;
+  }
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
+      res.status(404).json({ error: "Booking not found" }); return;
+    }
+    const [row] = await db.select().from(exactLocations).where(eq(exactLocations.bookingId, id)).orderBy(desc(exactLocations.createdAt)).limit(1);
+    if (!row || row.expiresAt.getTime() < Date.now()) {
+      res.status(404).json({ error: "Exact location is not available" }); return;
+    }
+    const coords = decryptExactLocation(row.ciphertext);
+    res.json({ lat: coords.lat, lng: coords.lng, expiresAt: row.expiresAt.toISOString() });
+  } catch (err) {
+    req.log.error({ err }, "Exact location read failed");
+    res.status(404).json({ error: "Exact location is not available" });
+  }
+});
+
 router.post("/bookings/:id/cancel", async (req, res) => {
   const { id } = req.params;
   const customerId =
@@ -1177,7 +1255,7 @@ router.get("/dashboard/customer", async (req, res) => {
       const mine = devBookings.filter((b) => b.customerId === "dev-preview-customer");
       const upcomingCount = mine.filter((b) => ["requested", "authorized", "deposit_paid", "confirmed"].includes(b.status)).length;
       const completedCount = mine.filter((b) => b.status === "completed").length;
-      res.json({ upcomingBookings: upcomingCount, completedBookings: completedCount, savedCompanions: 2, safetyPlans: upcomingCount }); return;
+      res.json({ upcomingBookings: upcomingCount, completedBookings: completedCount, savedCompanions: 0, safetyPlans: upcomingCount }); return;
     }
     // Tables don't exist yet (schema created in Task #1) — check full error chain
     if (isMissingTableError(err)) {
@@ -1250,13 +1328,13 @@ const CHAT_STATUSES = ["deposit_paid", "authorized", "confirmed", "completed"];
 
 router.get("/bookings/:id/messages", async (req, res) => {
   const { id } = req.params;
-  const userId =
-    getActorId(req, "customer");
-  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
-    if (!booking || (booking.customerId !== userId && booking.companionId !== userId)) {
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
     if (!CHAT_STATUSES.includes(booking.status)) {
@@ -1279,9 +1357,9 @@ router.get("/bookings/:id/messages", async (req, res) => {
 
 router.post("/bookings/:id/messages", async (req, res) => {
   const { id } = req.params;
-  const userId =
-    getActorId(req, "customer");
-  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const customerId = getActorId(req, "customer");
+  const companionId = await resolveCompanionId(req);
+  if (!customerId && !companionId) { res.status(401).json({ error: "Authentication required" }); return; }
 
   const rawBody = String(req.body?.body ?? "").trim();
   if (!rawBody) { res.status(400).json({ error: "Message body is required" }); return; }
@@ -1290,21 +1368,22 @@ router.post("/bookings/:id/messages", async (req, res) => {
 
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
-    if (!booking || (booking.customerId !== userId && booking.companionId !== userId)) {
+    if (!booking || (booking.customerId !== customerId && booking.companionId !== companionId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
     if (!CHAT_STATUSES.includes(booking.status)) {
       res.status(403).json({ error: "Chat unlocks after deposit is paid" }); return;
     }
-    const senderRole = booking.companionId === userId ? "companion" : "customer";
+    const senderRole = booking.companionId === companionId ? "companion" : "customer";
+    const senderId = req.user?.id ?? customerId ?? companionId ?? "unknown";
 
     try {
-      const [msg] = await db.insert(messages).values({ bookingId: id, senderId: userId, senderRole, body }).returning();
+      const [msg] = await db.insert(messages).values({ bookingId: id, senderId, senderRole, body }).returning();
       res.status(201).json({ ...msg, createdAt: msg.createdAt.toISOString() });
     } catch (err: any) {
       if (isMissingTableError(err)) {
         // Dev fallback — store in memory
-        const msg: DevMessage = { id: crypto.randomUUID(), bookingId: id, senderId: userId, senderRole, body, createdAt: new Date().toISOString() };
+        const msg: DevMessage = { id: crypto.randomUUID(), bookingId: id, senderId, senderRole, body, createdAt: new Date().toISOString() };
         if (!devMessages.has(id)) devMessages.set(id, []);
         devMessages.get(id)!.push(msg);
         res.status(201).json(msg); return;
@@ -1440,6 +1519,23 @@ router.get("/companions/:id/reviews", async (req, res) => {
   }
 });
 
+router.get("/bookings/:id/review", async (req, res) => {
+  const { id } = req.params;
+  const customerId = getActorId(req, "customer");
+  if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const [review] = await db.select().from(reviewRows)
+      .where(and(eq(reviewRows.bookingId, id), eq(reviewRows.customerId, customerId)))
+      .limit(1);
+    if (!review) { res.status(404).json({ error: "Review not found" }); return; }
+    res.json(review);
+  } catch (err) {
+    if (isMissingTableError(err)) { res.status(404).json({ error: "Review not found" }); return; }
+    req.log.error({ err }, "Review lookup failed");
+    res.status(503).json({ error: "Could not load review" });
+  }
+});
+
 router.post("/bookings/:id/review", async (req, res) => {
   const { id } = req.params;
   const customerId =
@@ -1494,6 +1590,16 @@ router.post("/bookings/:id/review", async (req, res) => {
     }).where(eq(companionProfiles.id, booking.companionId));
 
     req.log.info({ bookingId: id, rating }, "Review submitted");
+    try {
+      const [profile] = await db.select().from(companionProfiles).where(eq(companionProfiles.id, booking.companionId)).limit(1);
+      await notifyAccount(profile?.accountId, {
+        kind: "review",
+        title: "You have a new review",
+        body: `A customer rated a completed booking ${rating} star${rating === 1 ? "" : "s"}.`,
+        href: "/dashboard/companion",
+        audience: "companion",
+      });
+    } catch { /* best-effort */ }
     res.status(201).json(review);
   } catch (err: unknown) {
     if (isMissingTableError(err)) {
@@ -1523,38 +1629,6 @@ router.post("/bookings/:id/review", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 type EarningsMonth = { month: string; label: string; earningsCents: number; bookingCount: number };
-type EarningsTransaction = {
-  id: string; bookingId: string; date: string; activity: string;
-  durationHours: number; grossCents: number; commissionCents: number; netCents: number;
-  status: 'paid' | 'pending' | 'processing';
-};
-
-function makeEarningsData() {
-  const now = new Date();
-  const months: EarningsMonth[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const label = d.toLocaleString('en-US', { month: 'short' });
-    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    // Realistic ramp-up: newer months have more activity
-    const bookingCount = Math.max(0, 3 + (5 - i) * 2 + (i === 0 ? -2 : 0));
-    // Each booking averages ~$165 net (3 hrs at $65 × 85%)
-    const earningsCents = bookingCount * (145_00 + Math.round(Math.random() * 40_00));
-    months.push({ month, label, earningsCents, bookingCount });
-  }
-  return months;
-}
-
-const DEV_EARNINGS_MONTHS = makeEarningsData();
-
-const DEV_EARNINGS_TRANSACTIONS: EarningsTransaction[] = [
-  { id: 'txn-1', bookingId: 'bk-101', date: new Date(Date.now() - 2 * 86400_000).toISOString(), activity: 'Museum visit', durationHours: 3, grossCents: 195_00, commissionCents: 29_25, netCents: 165_75, status: 'paid' },
-  { id: 'txn-2', bookingId: 'bk-102', date: new Date(Date.now() - 5 * 86400_000).toISOString(), activity: 'Coffee conversation', durationHours: 2, grossCents: 130_00, commissionCents: 19_50, netCents: 110_50, status: 'paid' },
-  { id: 'txn-3', bookingId: 'bk-103', date: new Date(Date.now() - 9 * 86400_000).toISOString(), activity: 'Gallery tour', durationHours: 4, grossCents: 260_00, commissionCents: 39_00, netCents: 221_00, status: 'paid' },
-  { id: 'txn-4', bookingId: 'bk-104', date: new Date(Date.now() - 12 * 86400_000).toISOString(), activity: 'Farmers market walk', durationHours: 2, grossCents: 130_00, commissionCents: 19_50, netCents: 110_50, status: 'paid' },
-  { id: 'txn-5', bookingId: 'bk-105', date: new Date(Date.now() - 1 * 86400_000).toISOString(), activity: 'Evening gallery visit', durationHours: 3, grossCents: 195_00, commissionCents: 29_25, netCents: 165_75, status: 'processing' },
-  { id: 'txn-6', bookingId: 'bk-106', date: new Date(Date.now() + 2 * 86400_000).toISOString(), activity: 'Coffee conversation', durationHours: 2, grossCents: 130_00, commissionCents: 19_50, netCents: 110_50, status: 'pending' },
-];
 
 router.get("/companion/earnings", async (req, res) => {
   const companionId = await resolveCompanionId(req);
@@ -2420,6 +2494,7 @@ function mapCompanionRow(row: {
   instant_book: boolean;
   biography?: string | null;
   boundaries?: string[];
+  interview_answers?: string[];
   photo_url?: string | null;
 }) {
   return {
@@ -2437,6 +2512,7 @@ function mapCompanionRow(row: {
     instantBook: row.instant_book,
     biography: row.biography ?? null,
     boundaries: row.boundaries ?? [],
+    interviewAnswers: (row.interview_answers ?? []).filter(Boolean).slice(0, 3),
     photoUrl: row.photo_url ?? null,
   };
 }

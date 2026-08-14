@@ -2439,13 +2439,10 @@ const COMPANION_QA_QUESTIONS = [
 ] as const;
 
 function CompanionQA({ companionId, name }: { companionId: string; name: string }) {
-  const answers = useMemo<string[]>(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(`of_qa_${companionId}`) ?? 'null');
-      if (Array.isArray(stored) && stored.some(Boolean)) return stored;
-    } catch {}
-    return [];
-  }, [companionId]);
+  const query = useGetCompanion(companionId, {
+    query: { enabled: Boolean(companionId), queryKey: getGetCompanionQueryKey(companionId), retry: false },
+  });
+  const answers = ((query.data as { interviewAnswers?: string[] } | undefined)?.interviewAnswers ?? []).filter(Boolean);
 
   const STARTERS = [
     `Ask ${name.split(' ')[0]} about their favourite hidden gem in their city.`,
@@ -3861,6 +3858,7 @@ function useSubmitReview(bookingId: string) {
     mutationFn: async ({ rating, comment }) => {
       const res = await fetch(`/api/bookings/${bookingId}/review`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating, comment }),
       });
@@ -6034,19 +6032,15 @@ function CompanionAchievementsCard({ bookings }: { bookings: Array<{ status: str
 }
 
 function CompanionProfileCompletionCard() {
-  // Check common profile fields against the dev companion data as a proxy
-  const qaDone = (() => {
-    try {
-      const a = JSON.parse(localStorage.getItem('of_qa_dev-preview-companion') ?? 'null');
-      return Array.isArray(a) && a.some(Boolean);
-    } catch { return false; }
-  })();
+  const profile = useCompanionProfile();
+  const p = profile.data;
+  const qaDone = (p?.interviewAnswers ?? []).some(Boolean);
   const payoutDone = (() => { try { return localStorage.getItem('of_payout_status') === 'active'; } catch { return false; } })();
 
   const steps: { label: string; done: boolean; href?: string }[] = [
-    { label: 'Profile photo', done: true },
-    { label: 'Biography written', done: true },
-    { label: 'Activities listed', done: true },
+    { label: 'Profile photo', done: Boolean(p?.photoUrl), href: '/dashboard/companion/profile' },
+    { label: 'Biography written', done: Boolean(p?.bio?.trim()), href: '/dashboard/companion/profile' },
+    { label: 'Activities listed', done: Boolean(p?.activities?.length), href: '/dashboard/companion/profile' },
     { label: 'Q&A interview answered', done: qaDone, href: '/dashboard/companion/profile' },
     { label: 'Stripe payout connected', done: payoutDone, href: '/dashboard/companion/payout' },
     { label: 'Availability set', done: false, href: '/dashboard/companion/profile' },
@@ -7494,7 +7488,7 @@ function useCompanionEarnings() {
   return useQuery<EarningsData>({
     queryKey: ['companion-earnings'],
     queryFn: async () => {
-      const res = await fetch('/api/companion/earnings');
+      const res = await fetch('/api/companion/earnings', { credentials: 'include' });
       if (!res.ok) throw new Error('Could not load earnings');
       return res.json();
     },
@@ -8401,13 +8395,15 @@ type CompanionProfileData = {
   availableDays: string[];
   availableHoursStart: string;
   availableHoursEnd: string;
+  interviewAnswers?: string[];
+  photoUrl?: string | null;
 };
 
 function useCompanionProfile() {
   return useQuery<CompanionProfileData>({
     queryKey: ['companion-profile'],
     queryFn: async () => {
-      const res = await fetch('/api/companion/profile');
+      const res = await fetch('/api/companion/profile', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load profile');
       return res.json();
     },
@@ -8421,6 +8417,7 @@ function useUploadCompanionPhoto() {
     mutationFn: async (photoDataUrl: string) => {
       const res = await fetch('/api/companion/profile/photo', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ photoDataUrl }),
       });
@@ -8440,6 +8437,7 @@ function useUpdateCompanionProfile() {
     mutationFn: async (data) => {
       const res = await fetch('/api/companion/profile', {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
@@ -8530,11 +8528,9 @@ function CompanionProfileEditor() {
       setAvailableDays(p.availableDays);
       setHoursStart(p.availableHoursStart);
       setHoursEnd(p.availableHoursEnd);
-      // Load Q&A from localStorage (dev) or profile data
-      try {
-        const stored = JSON.parse(localStorage.getItem(`of_qa_dev-preview-companion`) ?? 'null');
-        if (Array.isArray(stored)) setQaAnswers(stored);
-      } catch {}
+      if (Array.isArray(p.interviewAnswers) && p.interviewAnswers.some(Boolean)) {
+        setQaAnswers([...p.interviewAnswers, '', '', ''].slice(0, 3));
+      }
       setSeeded(true);
     }
   }, [profileQuery.data, seeded]);
@@ -8542,10 +8538,8 @@ function CompanionProfileEditor() {
   const handleSave = () => {
     const rate = Math.round(parseFloat(hourlyRate) * 100);
     if (!displayName.trim() || !bio.trim() || isNaN(rate)) return;
-    // Persist Q&A to localStorage for dev mode
-    try { localStorage.setItem('of_qa_dev-preview-companion', JSON.stringify(qaAnswers)); } catch {}
     updateProfile.mutate(
-      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd },
+      { displayName, bio, hourlyRateCents: rate, activities, languages, serviceArea, availableDays, availableHoursStart: hoursStart, availableHoursEnd: hoursEnd, interviewAnswers: qaAnswers },
       {
         onSuccess: () => {
           setSaved(true);
@@ -9677,7 +9671,7 @@ function PauseRequestsToggle() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/companion/requests/paused')
+    fetch('/api/companion/requests/paused', { credentials: 'include' })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d) setPaused(d.paused); })
       .catch(() => {});
@@ -9689,6 +9683,7 @@ function PauseRequestsToggle() {
     try {
       const res = await fetch('/api/companion/requests/pause', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paused: next }),
       });
@@ -9856,22 +9851,37 @@ function PayoutSetup({ stripeReturn }: { stripeReturn: boolean }) {
 }
 
 function CompanionAvailabilityToggle() {
-  const [available, setAvailable] = useState<boolean>(() => {
-    try { return localStorage.getItem('of_companion_available') !== 'false'; } catch { return true; }
-  });
+  const [available, setAvailable] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const toggle = () => {
+  useEffect(() => {
+    fetch('/api/companion/requests/paused', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setAvailable(!d.paused); })
+      .catch(() => setAvailable(true));
+  }, []);
+
+  const toggle = async () => {
+    if (available === null) return;
     const next = !available;
     setAvailable(next);
-    try { localStorage.setItem('of_companion_available', String(next)); } catch {}
-    // Wire to API — pausing/unpausing new booking requests
     setSyncing(true);
-    const endpoint = next ? '/api/companion/requests/unpause' : '/api/companion/requests/pause';
-    fetch(endpoint, { method: 'POST' })
-      .catch(() => {/* Silently ignore dev-mode failures */})
-      .finally(() => setSyncing(false));
+    try {
+      const res = await fetch('/api/companion/requests/pause', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paused: !next }),
+      });
+      if (res.ok) {
+        const d = await res.json() as { paused: boolean };
+        setAvailable(!d.paused);
+      }
+    } catch {}
+    setSyncing(false);
   };
+
+  if (available === null) return null;
 
   return (
     <button type="button" onClick={toggle} disabled={syncing}
@@ -10284,18 +10294,10 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
 // ---------------------------------------------------------------------------
 
 function CompanionOnboarding() {
-  // Read profile completeness signals from localStorage (dev mode)
-  const profileSaved = Boolean(
-    (() => { try { return localStorage.getItem('of_companion_profile_saved'); } catch { return null; } })()
-  );
-  const qaSaved = Boolean(
-    (() => {
-      try {
-        const a = JSON.parse(localStorage.getItem('of_qa_dev-preview-companion') ?? 'null');
-        return Array.isArray(a) && a.some(Boolean);
-      } catch { return false; }
-    })()
-  );
+  const profile = useCompanionProfile();
+  const p = profile.data;
+  const profileSaved = Boolean(p?.displayName?.trim() && p?.bio?.trim());
+  const qaSaved = (p?.interviewAnswers ?? []).some(Boolean);
   const payoutStatus = (() => {
     try { return localStorage.getItem('of_payout_status') ?? 'not_started'; } catch { return 'not_started'; }
   })();
@@ -13404,7 +13406,18 @@ function ReviewPage() {
   const { id = '' } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { data: booking, isLoading, isError } = useBooking(id);
-  const alreadyReviewed = Boolean(id && localStorage.getItem(`of_reviewed_${id}`));
+  const existingReview = useQuery({
+    queryKey: ['booking-review', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${id}/review`, { credentials: 'include' });
+      if (res.status === 404) return null;
+      if (!res.ok) return null;
+      return res.json() as Promise<{ rating: number; comment: string | null }>;
+    },
+    enabled: Boolean(id),
+    retry: false,
+  });
+  const alreadyReviewed = Boolean(existingReview.data) || Boolean(id && localStorage.getItem(`of_reviewed_${id}`));
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [phase, setPhase] = useState<'rate' | 'kudos' | 'tip' | 'done'>(alreadyReviewed ? 'done' : 'rate');
@@ -13720,28 +13733,6 @@ function AgeGate() {
 }
 
 function App() {
-  // Seed dev companion Q&A answers so profiles show populated interview sections
-  useEffect(() => {
-    const DEV_QA: Record<string, string[]> = {
-      'companion-maya': [
-        "I've always loved how a good conversation can make a place feel alive — museums, markets, quiet gardens. Being present with someone and watching them genuinely enjoy themselves is something I find deeply rewarding.",
-        "An unhurried morning at a photography exhibition, then coffee somewhere with big windows. No agenda, just curiosity and good conversation that goes wherever it wants to go.",
-        "I'm warm but not performatively cheerful. I'll match your energy — quiet if you need quiet, animated if you're excited. I won't fill silences just to fill them, and I think that's something people appreciate.",
-      ],
-      'companion-jordan': [
-        "Honestly? The variety. Every person brings a completely different perspective. I've had cooking class bookings turn into conversations about architecture and hiking trips turn into deep dives on local history. It keeps me genuinely engaged.",
-        "A cooking class where we both have absolutely no idea what we're doing, followed by eating whatever we made with a bottle of wine and good conversation. Low stakes, high fun.",
-        "I'm punctual and I follow through — if I say I'll be somewhere, I'm there. I also genuinely research the spots we're meeting at so I can suggest the best table or the quietest corner.",
-      ],
-    };
-    Object.entries(DEV_QA).forEach(([id, answers]) => {
-      const key = `of_qa_${id}`;
-      if (!localStorage.getItem(key)) {
-        try { localStorage.setItem(key, JSON.stringify(answers)); } catch {}
-      }
-    });
-  }, []);
-
   return <QueryClientProvider client={queryClient}><TooltipProvider><AuthProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><AgeGate /><Router /></WouterRouter><Toaster /></AuthProvider></TooltipProvider></QueryClientProvider>;
 }
 

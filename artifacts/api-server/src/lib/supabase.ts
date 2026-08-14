@@ -18,6 +18,7 @@ export type SupabaseCompanionRow = {
   instant_book: boolean;
   biography?: string | null;
   boundaries?: string[];
+  interview_answers?: string[];
   photo_url?: string | null;
 };
 
@@ -53,6 +54,7 @@ function mapProfile(row: typeof companionProfiles.$inferSelect): SupabaseCompani
     instant_book: row.instantBook,
     biography: row.biography,
     boundaries: row.boundaries ?? [],
+    interview_answers: row.interviewAnswers ?? [],
     photo_url: row.photoUrl,
   };
 }

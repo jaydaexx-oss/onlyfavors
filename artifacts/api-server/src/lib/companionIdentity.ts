@@ -46,6 +46,7 @@ export async function resolveCompanionProfile(req: Request) {
     availableToday: false,
     biography: null as string | null,
     boundaries: [] as string[],
+    interviewAnswers: [] as string[],
     photoUrl: null as string | null,
     stripeAccountId: null as string | null,
     createdAt: new Date(),

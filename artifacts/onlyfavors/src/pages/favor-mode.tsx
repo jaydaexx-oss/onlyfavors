@@ -101,6 +101,22 @@ export default function FavorMode() {
   const [bonusMinutes, setBonusMinutes] = useState(0);
   const [extending, setExtending] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (!id || !live || !locationSharing || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        fetch(`/api/bookings/${id}/exact-location`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        }).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
+    );
+  }, [id, live, locationSharing]);
+
   const totalMinutes = (live?.totalMinutes ?? 120) + bonusMinutes;
   const progress = Math.min(elapsed / (totalMinutes * 60), 1);
   const remainingMin = Math.max(0, totalMinutes - Math.floor(elapsed / 60));
