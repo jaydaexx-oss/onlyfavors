@@ -4195,7 +4195,7 @@ function LiveActivityTicker() {
     { text: 'New companion approved in Washington D.C.', ago: '3h ago', icon: UserPlus },
     { text: 'Hiking outing confirmed in Portland', ago: '4h ago', icon: Mountain },
   ];
-  const [idx, setIdx] = useState(0);
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * 18));
   useEffect(() => {
     const id = setInterval(() => setIdx((i) => (i + 1) % EVENTS.length), 3200);
     return () => clearInterval(id);
@@ -7431,8 +7431,16 @@ function CustomerSettings() {
   const [saved, setSaved] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  const save = () => {
+  const save = async () => {
     try { localStorage.setItem('of_customer_prefs', JSON.stringify(prefs)); } catch {}
+    // Also persist to API when auth is live
+    try {
+      await fetch('/api/customer/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+      });
+    } catch {}
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -10421,12 +10429,17 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
             </div>
           );
         })()}
-        {isCustomer && (
+        {isCustomer && (() => {
+          const completedBks = (allBookings ?? []).filter((b) => b.status === 'completed');
+          const totalSpentCents = completedBks.reduce((s, b) => s + (b.totalCents ?? 0), 0);
+          const totalHours = completedBks.reduce((s, b) => s + (b.durationHours ?? 0), 0);
+          const depositCreditCents = completedBks.reduce((s, b) => s + (b.depositCents ?? 0), 0);
+          return (
           <div className="mt-6 grid gap-3 sm:grid-cols-3" data-testid="customer-spending-summary">
             {[
-              { label: 'Total spent', value: money((customer.data?.completedBookings ?? 0) * 6500 + 1000), icon: WalletCards, accent: 'bg-[#ead0dd]', iconColor: 'text-[#7f2e62]' },
-              { label: 'Hours of company', value: `${(customer.data?.completedBookings ?? 0) * 2}h`, icon: CalendarDays, accent: 'bg-[#e8f0e8]', iconColor: 'text-[#477254]' },
-              { label: 'Credits available', value: '$0', icon: HeartHandshake, accent: 'bg-[#f3ead7]', iconColor: 'text-[#bf8750]' },
+              { label: 'Total spent', value: money(totalSpentCents || (customer.data?.completedBookings ?? 0) * 6500), icon: WalletCards, accent: 'bg-[#ead0dd]', iconColor: 'text-[#7f2e62]' },
+              { label: 'Hours of company', value: `${totalHours || (customer.data?.completedBookings ?? 0) * 2}h`, icon: CalendarDays, accent: 'bg-[#e8f0e8]', iconColor: 'text-[#477254]' },
+              { label: 'Deposits credited', value: money(depositCreditCents), icon: HeartHandshake, accent: 'bg-[#f3ead7]', iconColor: 'text-[#bf8750]' },
             ].map(({ label, value, icon: Icon, accent, iconColor }) => (
               <div key={label} className="flex items-center gap-4 rounded-[20px] border border-[#dfd2c9] bg-[#fbf7f1] p-5">
                 <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${accent}`}>
@@ -10439,7 +10452,8 @@ function Dashboard({ mode }: { mode: 'customer' | 'companion' }) {
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {!isCustomer && (() => {
           // Companion profile link with copy button
