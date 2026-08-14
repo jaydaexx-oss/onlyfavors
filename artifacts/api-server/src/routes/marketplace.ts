@@ -1844,9 +1844,9 @@ router.get("/admin/overview", async (req, res) => {
     }
     res.json({
       verificationQueue: process.env.NODE_ENV === "development" ? DEV_COMPANION_APPLICATIONS.length : 0,
-      openReports: 0,
-      activeBookings,
-      checkInsDue: 0,
+      openReports: process.env.NODE_ENV === "development" ? 2 : 0,
+      activeBookings: activeBookings || (process.env.NODE_ENV === "development" ? Object.values(DEV_BOOKING_FIXTURES).filter((b: any) => ['deposit_paid','authorized','confirmed'].includes(b.status)).length : 0),
+      checkInsDue: process.env.NODE_ENV === "development" ? 1 : 0,
     });
   } catch (err) {
     req.log.error({ err }, "Admin overview failed");

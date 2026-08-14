@@ -3181,10 +3181,12 @@ function TrustCircleSetup() {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Phone number</span>
-                <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                <input required type="tel" value={phone}
+                  onChange={(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(null); }}
                   placeholder="+1 (808) 555-0123"
-                  className="h-11 w-full rounded-xl border border-[#dfd2c9] bg-white px-4 text-sm outline-none focus:border-[#7f2e62]"
+                  className={`h-11 w-full rounded-xl border bg-white px-4 text-sm outline-none focus:border-[#7f2e62] ${phoneError ? 'border-[#c74c4c]' : 'border-[#dfd2c9]'}`}
                   data-testid="input-trust-phone" />
+                {phoneError && <p className="mt-1 text-[10px] text-[#c74c4c]">{phoneError}</p>}
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-bold text-[#654c5f]">Relationship</span>
