@@ -4748,23 +4748,6 @@ const STORIES = [
     ],
   },
   {
-    id: 'companion-spotlight-isadora',
-    category: 'Companion spotlight',
-    title: 'Isadora on building a practice across three languages',
-    excerpt: '"About a third of my bookings come from international visitors — people who feel more comfortable in Spanish or Portuguese. The whole conversation changes."',
-    readTime: '5 min read',
-    color: '#f3ead7',
-    textColor: '#9a6d25',
-    body: [
-      { kind: 'p', text: '"I\'d been freelancing for a while — writing, a bit of photography. And I loved the flexibility, but I missed the human part of working with people. A friend mentioned OnlyFavors and I was skeptical at first, honestly. It sounded like it could easily go sideways."' },
-      { kind: 'p', text: '"But the more I read about the boundary receipts and the SafeSpot system, the more I understood this was something different. The entire structure is built around me having control. I set my rate, I choose which requests I accept, I define my activities. Nobody is asking me to do anything I haven\'t already agreed to."' },
-      { kind: 'h2', text: 'On what customers are actually looking for' },
-      { kind: 'p', text: '"People think it\'s lonely people who book companions. And sometimes it is — someone new to the city, someone going through a divorce, someone whose friends are all too busy. But honestly, a lot of my regulars are just interesting people who have this thing they want to do and want someone to go with them. Last month I went to a Japanese ceramics exhibition with someone who spent the whole time teaching me things about the craft. I learned more in two hours than I would have in a week of reading."' },
-      { kind: 'h2', text: 'On the Boundary Receipt' },
-      { kind: 'p', text: '"I was nervous about the Boundary Receipt at first — would it feel awkward? Like some kind of legal document being passed between two strangers? But it\'s actually the opposite. It\'s a way of saying \'here\'s what I\'m comfortable with\' before we\'ve even met. By the time we\'re face to face, the groundwork is already done. We can just be people."' },
-    ],
-  },
-  {
     id: 'setting-your-rate',
     category: 'For companions',
     title: 'How to set your hourly rate — and when to raise it',
