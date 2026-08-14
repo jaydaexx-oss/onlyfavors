@@ -105,7 +105,16 @@ router.get("/stripe/booking/:id/status", async (req, res) => {
     }
 
     res.json({ bookingId: id, status: booking.status });
-  } catch (err) {
+  } catch (err: any) {
+    // Dev fallback: DB table not yet created — serve from fixture map
+    if (process.env.NODE_ENV === "development") {
+      const { DEV_BOOKING_FIXTURES } = await import("./marketplace.js") as any;
+      const fixture = (DEV_BOOKING_FIXTURES as Record<string, any>)?.[id];
+      if (fixture) {
+        res.json({ bookingId: id, status: fixture.status }); return;
+      }
+      res.json({ bookingId: id, status: "requested" }); return;
+    }
     logger.error({ err }, "Unable to fetch booking status");
     res.status(500).json({ error: "Unable to check payment status" });
   }

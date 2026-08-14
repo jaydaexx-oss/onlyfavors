@@ -62,9 +62,15 @@ export default function FavorMode() {
   const [showExtend, setShowExtend] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
   const [locationSharing, setLocationSharing] = useState(true);
+  const [completing, setCompleting] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [completedAt, setCompletedAt] = useState('');
+  const [bonusMinutes, setBonusMinutes] = useState(0);
+  const [extending, setExtending] = useState<number | null>(null);
 
-  const progress = Math.min(elapsed / (DEMO.totalMinutes * 60), 1);
-  const remainingMin = Math.max(0, DEMO.totalMinutes - Math.floor(elapsed / 60));
+  const totalMinutes = DEMO.totalMinutes + bonusMinutes;
+  const progress = Math.min(elapsed / (totalMinutes * 60), 1);
+  const remainingMin = Math.max(0, totalMinutes - Math.floor(elapsed / 60));
 
   return (
     <div className="min-h-screen bg-[#1f0c1b] text-[#f9efe5]">
@@ -326,13 +332,43 @@ export default function FavorMode() {
               Your Trust Circle will be notified. You don't need to explain anything to anyone right now.
             </p>
             <div className="mt-6 space-y-3">
-              <button className="flex w-full items-center justify-between rounded-[16px] bg-[#7f2e62] p-4 text-sm font-bold text-white" data-testid="button-exit-walk">
+              {/* Opens Google Maps walking directions to nearest transit */}
+              <a
+                href={`https://www.google.com/maps/search/transit+station+near+${encodeURIComponent(DEMO.venue.name)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex w-full items-center justify-between rounded-[16px] bg-[#7f2e62] p-4 text-sm font-bold text-white"
+                data-testid="button-exit-walk">
                 <span>Walk me to transport</span><Navigation className="h-4 w-4" />
-              </button>
-              <button className="flex w-full items-center justify-between rounded-[16px] bg-[#2d1228] p-4 text-sm font-bold text-[#f9efe5]" data-testid="button-exit-contact">
-                <span>Call a trusted contact</span><Phone className="h-4 w-4" />
-              </button>
-              <button className="flex w-full items-center justify-between rounded-[16px] bg-[#2d1228] p-4 text-sm font-bold text-[#f9efe5]" data-testid="button-exit-end">
+              </a>
+              {/* Dial first Trust Circle contact, or show trust circle setup */}
+              {trustContacts.length > 0 ? (
+                <a href={`tel:${trustContacts[0].phone}`}
+                  className="flex w-full items-center justify-between rounded-[16px] bg-[#2d1228] p-4 text-sm font-bold text-[#f9efe5]"
+                  data-testid="button-exit-contact">
+                  <span>Call {trustContacts[0].name}</span><Phone className="h-4 w-4" />
+                </a>
+              ) : (
+                <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/trust-circle`}
+                  className="flex w-full items-center justify-between rounded-[16px] bg-[#2d1228] p-4 text-sm font-bold text-[#f9efe5]"
+                  data-testid="button-exit-contact">
+                  <span>Set up trusted contact</span><Phone className="h-4 w-4" />
+                </a>
+              )}
+              <button
+                onClick={async () => {
+                  setShowExit(false);
+                  setCompleting(true);
+                  try {
+                    await fetch(`/api/bookings/${id ?? 'demo'}/complete`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    });
+                  } catch {}
+                  setCompletedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                  setCompleted(true);
+                  setCompleting(false);
+                }}
+                className="flex w-full items-center justify-between rounded-[16px] bg-[#2d1228] p-4 text-sm font-bold text-[#f9efe5]"
+                data-testid="button-exit-end">
                 <span>End booking now</span><X className="h-4 w-4" />
               </button>
             </div>
@@ -352,11 +388,31 @@ export default function FavorMode() {
             <p className="mt-3 text-sm text-[#d9c4cf]">Both you and your companion must agree. Payment is processed immediately.</p>
             <div className="mt-6 grid grid-cols-2 gap-3">
               {[30, 60].map((min) => (
-                <button key={min} onClick={() => setShowExtend(false)}
-                  className="rounded-[16px] bg-[#3d2038] p-5 text-center hover:bg-[#4a2842]"
+                <button key={min}
+                  disabled={extending !== null}
+                  onClick={async () => {
+                    setExtending(min);
+                    try {
+                      await fetch(`/api/bookings/${id ?? 'demo'}/extend`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ extraMinutes: min }),
+                      });
+                    } catch {}
+                    setBonusMinutes((b) => b + min);
+                    setExtending(null);
+                    setShowExtend(false);
+                  }}
+                  className="rounded-[16px] bg-[#3d2038] p-5 text-center hover:bg-[#4a2842] disabled:opacity-60"
                   data-testid={`button-extend-${min}`}>
-                  <p className="font-serif text-3xl text-[#f9efe5]">+{min}</p>
-                  <p className="mt-1 text-xs text-[#c695ae]">minutes</p>
+                  {extending === min ? (
+                    <p className="font-serif text-xl text-[#c695ae]">Adding…</p>
+                  ) : (
+                    <>
+                      <p className="font-serif text-3xl text-[#f9efe5]">+{min}</p>
+                      <p className="mt-1 text-xs text-[#c695ae]">minutes</p>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
@@ -383,7 +439,7 @@ export default function FavorMode() {
             <div className="mt-6 flex justify-center">
               <div className="rounded-[20px] bg-white p-5">
                 <QRCodeSVG
-                  value={`onlyfavors://checkin?session=${DEMO.companion.id}&venue=${encodeURIComponent(DEMO.venue.name)}&ts=${Date.now()}`}
+                  value={`${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/checkin?booking=${id ?? 'demo'}&venue=${encodeURIComponent(DEMO.venue.name)}&ts=${Date.now()}`}
                   size={180}
                   level="M"
                   includeMargin={false}
@@ -413,17 +469,86 @@ export default function FavorMode() {
 
       {/* End booking modal */}
       {showEnd && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowEnd(false)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => { if (!completing) setShowEnd(false); }}>
           <div className="w-full max-w-md rounded-t-[28px] bg-[#1f0c1b] p-8" onClick={(e) => e.stopPropagation()}>
             <CheckCircle2 className="h-8 w-8 text-[#3dbd8c]" />
             <h2 className="mt-4 font-serif text-3xl text-[#f9efe5]">End this booking?</h2>
             <p className="mt-3 text-sm text-[#d9c4cf]">Both parties confirm. Payment releases, location sharing stops, and a private memory card is offered.</p>
-            <button onClick={() => setShowEnd(false)}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#3dbd8c] px-5 py-3 text-sm font-bold text-white"
+            <button
+              disabled={completing}
+              onClick={async () => {
+                setCompleting(true);
+                try {
+                  const bookingId = id ?? 'demo';
+                  await fetch(`/api/bookings/${bookingId}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                } catch {}
+                setCompletedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                setCompleted(true);
+                setShowEnd(false);
+                setCompleting(false);
+              }}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#3dbd8c] px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
               data-testid="button-confirm-end">
-              Confirm mutual checkout <Check className="h-4 w-4" />
+              {completing ? 'Wrapping up…' : (<>Confirm mutual checkout <Check className="h-4 w-4" /></>)}
             </button>
             <button onClick={() => setShowEnd(false)} className="mt-4 w-full text-center text-sm text-[#9d7e8e]">Go back</button>
+          </div>
+        </div>
+      )}
+
+      {/* Memory Card — shown after booking completes */}
+      {completed && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-t-[28px] bg-gradient-to-b from-[#2d1128] to-[#1f0c1b] p-8">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-[13px] bg-[#7f2e62]">
+                <Heart className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-mono text-[9px] uppercase tracking-widest text-[#9d7e8e]">Private memory card</p>
+                <p className="text-sm font-bold text-[#f9efe5]">Booking complete</p>
+              </div>
+            </div>
+
+            {/* Memory details */}
+            <div className="mt-6 rounded-[18px] border border-[#4a2040] bg-[#2d1128] p-5">
+              <p className="font-serif text-2xl text-[#f9efe5]">{DEMO.companion.activity}</p>
+              <p className="mt-1 text-xs text-[#9d7e8e]">with {DEMO.companion.name} · {DEMO.venue.name}</p>
+              <div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#4a2040] pt-5">
+                <div className="text-center">
+                  <p className="font-mono text-[9px] uppercase tracking-wider text-[#6b4560]">Duration</p>
+                  <p className="mt-1 font-serif text-lg text-[#f9efe5]">{fmt(elapsed)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="font-mono text-[9px] uppercase tracking-wider text-[#6b4560]">Ended at</p>
+                  <p className="mt-1 font-serif text-lg text-[#f9efe5]">{completedAt}</p>
+                </div>
+                <div className="text-center">
+                  <p className="font-mono text-[9px] uppercase tracking-wider text-[#6b4560]">Check-in</p>
+                  <p className="mt-1 font-serif text-lg text-[#f9efe5]">{checkedIn ? 'Yes' : '—'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Privacy note */}
+            <div className="mt-4 flex items-start gap-3">
+              <LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#6b4560]" />
+              <p className="text-[10px] leading-5 text-[#6b4560]">This card exists only on this device. Nothing is shared without your explicit consent. No names, no places, no timestamps leave this screen.</p>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <a
+                href={id ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/booking/${id}` : '/'}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] px-5 py-3 text-sm font-bold text-white"
+                data-testid="link-memory-card-booking"
+              >
+                Leave a review <ArrowRight className="h-4 w-4" />
+              </a>
+              <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/`} className="block w-full text-center text-sm text-[#9d7e8e]">
+                Back to home
+              </a>
+            </div>
           </div>
         </div>
       )}
