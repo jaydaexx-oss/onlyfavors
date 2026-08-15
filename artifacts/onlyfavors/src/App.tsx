@@ -203,7 +203,83 @@ type FavorIntent = {
   durationHours: number;
   vibe: string;
   area: string;
+  moment?: string;
+  favorId?: string;
 };
+
+type LaunchFavor = {
+  id: string;
+  name: string;
+  activity: string;
+  vibe: string;
+  energy: string;
+  durationHours: number;
+  keywords: string[];
+  example: string;
+};
+
+const LAUNCH_FAVORS: LaunchFavor[] = [
+  {
+    id: 'plus-one',
+    name: 'Event Plus-One',
+    activity: 'Event plus-one',
+    vibe: 'social',
+    energy: 'Outgoing company for a wedding, gala, or work event',
+    durationHours: 3,
+    keywords: ['wedding', 'plus-one', 'plus one', 'gala', 'reception', 'work event', 'formal'],
+    example: 'I’m attending a wedding Saturday and want a funny, outgoing plus-one.',
+  },
+  {
+    id: 'city',
+    name: 'Explore the City',
+    activity: 'City exploring',
+    vibe: 'cultural',
+    energy: 'A local to walk New Orleans with — public places only',
+    durationHours: 3,
+    keywords: ['city', 'explore', 'local', 'show me', 'walk', 'neighborhood', 'french quarter', 'museum'],
+    example: 'Show me New Orleans like someone who lives here.',
+  },
+  {
+    id: 'coffee',
+    name: 'Coffee & Conversation',
+    activity: 'Coffee conversations',
+    vibe: 'low-key',
+    energy: 'Unhurried talk at a public café',
+    durationHours: 1.5,
+    keywords: ['coffee', 'conversation', 'talk', 'café', 'cafe', 'chat'],
+    example: 'Coffee and conversation tonight.',
+  },
+];
+
+function nextSaturdayChicago(): string {
+  const today = chicagoToday();
+  const [y, m, d] = today.split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d, 18, 0, 0)).getUTCDay();
+  const add = weekday === 6 ? 0 : (6 - weekday + 7) % 7;
+  const next = new Date(Date.UTC(y, m - 1, d + add, 18, 0, 0));
+  return next.toISOString().slice(0, 10);
+}
+
+function favorFromId(id: string | undefined): LaunchFavor {
+  return LAUNCH_FAVORS.find((f) => f.id === id) ?? LAUNCH_FAVORS[2];
+}
+
+function parseMoment(text: string): FavorIntent {
+  const t = text.toLowerCase();
+  const favor = LAUNCH_FAVORS.find((f) => f.keywords.some((k) => t.includes(k))) ?? LAUNCH_FAVORS[2];
+  let date = chicagoToday();
+  if (/\bsaturday\b/.test(t)) date = nextSaturdayChicago();
+  else if (/\btonight\b|\btoday\b/.test(t)) date = chicagoToday();
+  return {
+    activity: favor.activity,
+    date,
+    durationHours: favor.durationHours,
+    vibe: favor.vibe,
+    area: 'New Orleans',
+    moment: text.trim(),
+    favorId: favor.id,
+  };
+}
 
 function chicagoToday(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -249,13 +325,6 @@ function intentExplorePath(intent: FavorIntent): string {
   const s = q.toString();
   return s ? `/explore?${s}` : '/explore';
 }
-
-const INTENT_EXAMPLES: Array<{ label: string; activity: string; vibe: string; area: string }> = [
-  { label: 'I need a wedding plus-one.', activity: 'Event plus-one', vibe: 'social', area: 'New Orleans' },
-  { label: 'Coffee and conversation tonight.', activity: 'Coffee conversations', vibe: 'low-key', area: 'French Quarter' },
-  { label: 'Come to this concert with me.', activity: 'Concerts', vibe: 'social', area: 'New Orleans' },
-  { label: 'A museum afternoon.', activity: 'Museum visits', vibe: 'cultural', area: 'Warehouse District' },
-];
 
 const INTENT_VIBE_KEYWORDS: Record<string, string[]> = {
   adventurous: ['hiking', 'climbing', 'outdoor', 'adventure', 'walk', 'cycling'],
@@ -320,27 +389,54 @@ function GuestMatchCard({
 
 function HomeIntentPreview() {
   const saved = readFavorIntent();
+  const [moment, setMoment] = useState(saved?.moment ?? '');
   const [activity, setActivity] = useState(saved?.activity ?? '');
   const [date, setDate] = useState(saved?.date ?? chicagoToday());
   const [durationHours, setDurationHours] = useState(saved?.durationHours ?? 2);
   const [vibe, setVibe] = useState(saved?.vibe ?? '');
   const [area, setArea] = useState(saved?.area ?? 'New Orleans');
+  const [favorId, setFavorId] = useState(saved?.favorId ?? '');
   const [submitted, setSubmitted] = useState(Boolean(saved?.activity));
+  const [refine, setRefine] = useState(false);
 
-  const intent: FavorIntent = { activity, date, durationHours, vibe, area };
+  const intent: FavorIntent = { activity, date, durationHours, vibe, area, moment, favorId };
+  const favor = favorFromId(favorId || undefined);
 
-  const applyExample = (example: (typeof INTENT_EXAMPLES)[number]) => {
-    setActivity(example.activity);
-    setVibe(example.vibe);
-    setArea(example.area);
-    setDate(chicagoToday());
+  const applyIntent = (next: FavorIntent) => {
+    setActivity(next.activity);
+    setDate(next.date);
+    setDurationHours(next.durationHours);
+    setVibe(next.vibe);
+    setArea(next.area);
+    setMoment(next.moment ?? '');
+    setFavorId(next.favorId ?? '');
+    writeFavorIntent(next);
     setSubmitted(true);
-    writeFavorIntent({ activity: example.activity, date: chicagoToday(), durationHours, vibe: example.vibe, area: example.area });
   };
 
+  useEffect(() => {
+    const onIntent = () => {
+      const next = readFavorIntent();
+      if (!next?.activity) return;
+      setActivity(next.activity);
+      setDate(next.date);
+      setDurationHours(next.durationHours);
+      setVibe(next.vibe);
+      setArea(next.area);
+      setMoment(next.moment ?? '');
+      setFavorId(next.favorId ?? '');
+      setSubmitted(true);
+    };
+    window.addEventListener('of-favor-intent', onIntent);
+    return () => window.removeEventListener('of-favor-intent', onIntent);
+  }, []);
+
   const search = () => {
-    writeFavorIntent(intent);
-    setSubmitted(true);
+    const parsed = moment.trim() ? parseMoment(moment) : intent;
+    const next = moment.trim()
+      ? { ...parsed, durationHours: durationHours || parsed.durationHours, area, date: date || parsed.date }
+      : intent;
+    applyIntent(next);
   };
 
   const listParams = useMemo(() => ({
@@ -371,88 +467,108 @@ function HomeIntentPreview() {
   }, [query.data, vibe, activity]);
 
   return (
-    <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#efe1dc]">
-      <div className="mx-auto grid max-w-7xl items-start gap-10 px-5 py-16 md:grid-cols-[1.05fr_.95fr] lg:px-8 lg:py-20">
+    <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#f4ebe3]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_60%_at_80%_0%,rgba(232,93,76,0.14),transparent_60%)] motion-reduce:bg-none" />
+      <div className="relative mx-auto grid max-w-7xl items-start gap-10 px-5 py-16 md:grid-cols-[1.05fr_.95fr] lg:px-8 lg:py-20">
         <div>
-          <p className="mb-5 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]">New Orleans pilot</p>
-          <h1 className="font-serif text-[52px] leading-[.92] tracking-[-.04em] text-[#48213d] md:text-[72px]">What don’t you want<br /><em className="text-[#8e416e]">to do alone?</em></h1>
-          <p className="mt-6 max-w-md text-[17px] leading-7 text-[#654c5f]">Tell us the plan. We’ll show who is actually available — with the full price — before you create an account.</p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            {INTENT_EXAMPLES.map((example) => (
-              <button key={example.label} type="button" onClick={() => applyExample(example)}
-                className="rounded-full border border-[#dfd2c9] bg-white px-3.5 py-2 text-left text-xs font-semibold text-[#654c5f] hover:border-[#7f2e62] hover:text-[#7f2e62]"
-                data-testid={`intent-example-${example.activity.toLowerCase().replace(/\s+/g, '-')}`}>
-                {example.label}
+          <p className="mb-5 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#e85d4c]">Book the moment, not the person</p>
+          <h1 className="font-serif text-[52px] leading-[.92] tracking-[-.04em] text-[#1f0c1b] md:text-[72px]">What don’t you want<br /><em className="text-[#e85d4c]">to do alone?</em></h1>
+          <p className="mt-6 max-w-md text-[17px] leading-7 text-[#654c5f]">OnlyFavors helps people confidently do the things they would otherwise miss. New Orleans. Three favors. No swiping.</p>
+          <div className="mt-6 grid gap-2 sm:grid-cols-3">
+            {LAUNCH_FAVORS.map((item) => (
+              <button key={item.id} type="button" onClick={() => applyIntent({
+                activity: item.activity, date: chicagoToday(), durationHours: item.durationHours, vibe: item.vibe, area: 'New Orleans', moment: item.example, favorId: item.id,
+              })}
+                className={`rounded-[16px] border px-3 py-3 text-left transition ${favorId === item.id ? 'border-[#e85d4c] bg-white' : 'border-[#dfd2c9] bg-[#fbf7f1] hover:border-[#e85d4c]'}`}
+                data-testid={`launch-favor-${item.id}`}>
+                <p className="font-serif text-lg text-[#1f0c1b]">{item.name}</p>
+                <p className="mt-1 text-[11px] leading-4 text-[#806c76]">{item.energy}</p>
               </button>
             ))}
           </div>
-          <form className="mt-8 grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); search(); }} data-testid="form-home-intent">
-            <label className="sm:col-span-2">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Activity</span>
-              <input value={activity} onChange={(e) => setActivity(e.target.value)} required placeholder="Coffee, museum, concert, plus-one…"
-                className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-intent-activity" />
+          <form className="mt-8 space-y-3" onSubmit={(e) => { e.preventDefault(); search(); }} data-testid="form-home-intent">
+            <label className="block">
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">The moment</span>
+              <textarea value={moment} onChange={(e) => setMoment(e.target.value)} rows={3} required
+                placeholder="I’m attending a wedding Saturday and want a funny, outgoing plus-one."
+                className="w-full rounded-[16px] border border-[#cbbab5] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 outline-none focus:border-[#e85d4c]" data-testid="input-intent-moment" />
             </label>
-            <label>
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Neighborhood</span>
-              <select value={area} onChange={(e) => setArea(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-intent-area">
-                {NOLA_AREAS.map((n) => <option key={n.name} value={n.name}>{n.name}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Date (Central Time)</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
-                className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-intent-date" />
-            </label>
-            <label>
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Duration</span>
-              <select value={durationHours} onChange={(e) => setDurationHours(Number(e.target.value))} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-intent-duration">
-                {[1, 1.5, 2, 3, 4, 7].map((h) => <option key={h} value={h}>{h === 7 ? 'Full day (7 hr)' : `${h} hour${h === 1 ? '' : 's'}`}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Vibe</span>
-              <select value={vibe} onChange={(e) => setVibe(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-intent-vibe">
-                <option value="">Any</option>
-                <option value="low-key">Low-key</option>
-                <option value="cultural">Cultural</option>
-                <option value="social">Social</option>
-                <option value="foodie">Foodie</option>
-                <option value="creative">Creative</option>
-              </select>
-            </label>
-            <button type="submit" className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] sm:col-span-2" data-testid="button-intent-search">
-              Show who is available <ArrowRight className="h-4 w-4" />
+            <button type="button" onClick={() => setRefine((v) => !v)} className="text-[11px] font-bold text-[#7f2e62]" data-testid="button-intent-refine">
+              {refine ? 'Hide date and duration' : 'Add date, duration, neighborhood'}
+            </button>
+            {refine && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Neighborhood</span>
+                  <select value={area} onChange={(e) => setArea(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#e85d4c]" data-testid="select-intent-area">
+                    {NOLA_AREAS.map((n) => <option key={n.name} value={n.name}>{n.name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Date (Central Time)</span>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                    className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#e85d4c]" data-testid="input-intent-date" />
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Duration</span>
+                  <select value={durationHours} onChange={(e) => setDurationHours(Number(e.target.value))} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#e85d4c]" data-testid="select-intent-duration">
+                    {[1, 1.5, 2, 3, 4, 7].map((h) => <option key={h} value={h}>{h === 7 ? 'Full day (7 hr)' : `${h} hour${h === 1 ? '' : 's'}`}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Energy</span>
+                  <select value={vibe} onChange={(e) => setVibe(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#e85d4c]" data-testid="select-intent-vibe">
+                    <option value="">Any</option>
+                    <option value="low-key">Low-key</option>
+                    <option value="cultural">Curious</option>
+                    <option value="social">Outgoing</option>
+                  </select>
+                </label>
+              </div>
+            )}
+            <button type="submit" className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#e85d4c] text-sm font-bold text-[#fff8f5] transition hover:bg-[#d24c3c] motion-reduce:transition-none" data-testid="button-intent-search">
+              Make a Favor Card <ArrowRight className="h-4 w-4" />
             </button>
           </form>
-          <p className="mt-4 text-xs leading-5 text-[#856c79]">Signup is only required to send a request or open masked chat. Browse and this preview stay free. We never invent companions to fill three slots.</p>
+          <p className="mt-4 text-xs leading-5 text-[#856c79]">We map your words to one of three launch favors. We do not score attraction or safety with AI. Voice notes and Chemistry Preview are not in this pilot.</p>
         </div>
         <div>
           {!submitted ? (
-            <div className="rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-8">
-              <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Personalized preview</p>
-              <h2 className="mt-3 font-serif text-3xl text-[#48213d]">Tell us the moment.</h2>
-              <p className="mt-3 text-sm leading-6 text-[#725e69]">Up to three approved people with a real availability window for that date, and a server-calculated total. Empty means empty.</p>
+            <div className="rounded-[28px] border border-[#1f0c1b]/10 bg-[#1f0c1b] p-8 text-[#f4ebe3]" data-testid="favor-card-empty">
+              <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#e85d4c]">Favor Card</p>
+              <h2 className="mt-3 font-serif text-4xl leading-none">The occasion unfolds here.</h2>
+              <p className="mt-4 text-sm leading-6 text-[#d9c4cf]">Occasion, energy, duration, transparent price, a public SafeSpot, and a Boundary Receipt before payment. Up to three approved people — never a fake catalog.</p>
             </div>
           ) : query.isLoading ? (
-            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Looking at real availability…</p>
-          ) : matches.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-[#c6aeb8] bg-[#fdf9f6] p-8" data-testid="guest-matches-empty">
-              <p className="font-serif text-3xl text-[#48213d]">No one is listed for that plan yet.</p>
-              <p className="mt-3 text-sm leading-6 text-[#725e69]">OnlyFavors does not invent matches. Try another activity or date, or browse the directory when companions are approved.</p>
-              <Link href="/explore" className="mt-6 inline-flex text-xs font-bold text-[#7f2e62]">Open Explore <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link>
-            </div>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#e85d4c]">Checking real availability…</p>
           ) : (
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">{matches.length} available preview{matches.length === 1 ? '' : 's'}</p>
-              <div className="mt-4 grid gap-3">
-                {matches.map((c) => (
-                  <GuestMatchCard key={c.id} companion={c} durationHours={durationHours} intent={intent} />
-                ))}
-              </div>
-              <Link href={intentExplorePath(intent)} className="mt-4 inline-flex text-xs font-bold text-[#7f2e62]" data-testid="link-intent-explore">
-                See everyone who matches <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            <div className="rounded-[28px] border border-[#1f0c1b]/10 bg-[#1f0c1b] p-6 text-[#f4ebe3] md:p-8" data-testid="favor-card">
+              <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#e85d4c]">Favor Card · New Orleans</p>
+              <h2 className="mt-3 font-serif text-4xl leading-none">{favor.name}</h2>
+              <p className="mt-3 text-sm leading-6 text-[#d9c4cf]">{favor.energy}</p>
+              <dl className="mt-6 grid gap-3 text-xs sm:grid-cols-2">
+                <div><dt className="font-mono uppercase tracking-wider text-[#9d7e8e]">When</dt><dd className="mt-1 text-sm text-[#f4ebe3]">{date} · {durationHours} hr · CT</dd></div>
+                <div><dt className="font-mono uppercase tracking-wider text-[#9d7e8e]">Meet</dt><dd className="mt-1 text-sm text-[#f4ebe3]">Listed public SafeSpot — never a home</dd></div>
+                <div><dt className="font-mono uppercase tracking-wider text-[#9d7e8e]">Consent</dt><dd className="mt-1 text-sm text-[#f4ebe3]">Boundary Receipt signed before payment</dd></div>
+                <div><dt className="font-mono uppercase tracking-wider text-[#9d7e8e]">Safety plan</dt><dd className="mt-1 text-sm text-[#f4ebe3]">Trust Circle + arrival / midpoint / departure</dd></div>
+              </dl>
+              {matches.length === 0 ? (
+                <div className="mt-6 rounded-[18px] border border-dashed border-[#5a3450] p-5" data-testid="guest-matches-empty">
+                  <p className="font-serif text-2xl">No one is listed for this moment yet.</p>
+                  <p className="mt-2 text-sm leading-6 text-[#d9c4cf]">Empty stays empty. We do not invent three matches.</p>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#e85d4c]">{matches.length} verified preview{matches.length === 1 ? '' : 's'}</p>
+                  {matches.map((c) => (
+                    <GuestMatchCard key={c.id} companion={c} durationHours={durationHours} intent={intent} />
+                  ))}
+                </div>
+              )}
+              <Link href={intentExplorePath(intent)} className="mt-5 inline-flex text-xs font-bold text-[#e85d4c]" data-testid="link-intent-explore">
+                Open Explore with this plan <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
-              <p className="mt-3 text-[11px] leading-5 text-[#806c76]">If a companion cancels or no-shows, the customer is refunded. We do not promise a replacement person.</p>
+              <p className="mt-3 text-[11px] leading-5 text-[#9d7e8e]">If they cancel or no-show, you are refunded. We do not promise a replacement person or a voice preview.</p>
             </div>
           )}
         </div>
@@ -1213,10 +1329,10 @@ function Home() {
         <section className="border-b border-[#ddcfc6] bg-[#fdf9f5] px-5 py-8 lg:px-8" data-testid="home-how-it-works-strip">
           <div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-4">
             {([
-              { n: '1', label: 'Tell us the plan', desc: 'Activity, date, duration, and vibe — no account needed.' },
-              { n: '2', label: 'See who is free', desc: 'Up to three approved people with real windows and a full price.' },
-              { n: '3', label: 'Sign in to request', desc: 'Email code only. Your plan is waiting after signup.' },
-              { n: '4', label: 'Boundaries, then chat', desc: 'Sign a Boundary Receipt. $10 deposit unlocks masked chat.' },
+              { n: '1', label: 'Describe the moment', desc: 'One sentence. We map it to Plus-One, Explore the City, or Coffee.' },
+              { n: '2', label: 'A Favor Card', desc: 'Occasion, energy, duration, price, SafeSpot — up to three real people.' },
+              { n: '3', label: 'Boundary Receipt', desc: 'Both sign consent before payment. Masked chat after the $10 deposit.' },
+              { n: '4', label: 'Show up safely', desc: 'Trust Circle, check-ins, Help me leave. Call 911 in an emergency.' },
             ] as const).map(({ n, label, desc }) => (
               <div key={n} className="flex items-start gap-3">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-mono text-xs font-bold text-[#7f2e62]">{n}</div>
@@ -1447,43 +1563,38 @@ function Home() {
           <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 md:grid-cols-[.9fr_1.1fr] lg:px-8">
             <div>
               <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">A simple ritual</p>
-              <h2 className="font-serif text-5xl leading-[.95] text-[#48213d]">From "maybe"<br /><em>to "see you there."</em></h2>
+              <h2 className="font-serif text-5xl leading-[.95] text-[#48213d]">Book the moment,<br /><em>not the person.</em></h2>
             </div>
             <div className="space-y-3">
-              <Step n="01" icon={Compass} title="Browse by feeling" body="Filter by city, activity, language, or an instant booking preference." />
-              <Step n="02" icon={ClipboardCheck} title="Set boundaries together" body="A Boundary Receipt stores activity, SafeSpot, time, transportation, contact, photos, and alcohol expectations. Both people sign. Chat is masked, not end-to-end encrypted." />
-              <Step n="03" icon={MessageSquare} title="Chat once the deposit clears" body="A private, masked thread opens after the $10 deposit. Phone numbers and emails are stripped. Reported threads can be reviewed by the safety team." />
-              <Step n="04" icon={MapPin} title="Meet at a SafeSpot" body="Check in at the agreed public venue. Trust Circle can get a venue notice — never a companion name or live pin." />
+              <Step n="01" icon={Compass} title="Describe the moment" body="A wedding plus-one, a walk through the city, or coffee. We map that to one of three launch favors — not a dating catalog." />
+              <Step n="02" icon={ClipboardCheck} title="Sign a Boundary Receipt" body="Activity, SafeSpot, time, transportation, photography, contact, and prohibited behavior. Both people sign. Changing it means a new booking." />
+              <Step n="03" icon={MessageSquare} title="Chat once the deposit clears" body="A private, masked thread opens after the $10 deposit. Phone numbers stay hidden. Reported threads can be reviewed by the safety team." />
+              <Step n="04" icon={MapPin} title="Meet, check in, leave safely" body="Arrival, midpoint, and departure at a listed SafeSpot. Trust Circle can get a venue notice. Help me leave is one tap. Call 911 first in an emergency." />
             </div>
           </div>
         </section>
 
         {/* ── Curated collections ── */}
         <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8" data-testid="curated-collections">
-          <SectionIntro eyebrow="Curated for you" title={"Find your kind of favor."} />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {([
-              { title: 'Great for first timers', desc: 'Low-key activities with companions who love newcomers.', href: '/explore?activity=Coffee+conversations', bg: '#ead0dd', text: '#48213d', emoji: '👋', tag: 'Approachable' },
-              { title: 'Available this weekend', desc: 'Companions with instant booking and open schedules.', href: '/explore', bg: '#d3e1d8', text: '#253d2b', emoji: '📅', tag: 'Weekend picks' },
-              { title: 'Museum & gallery lovers', desc: 'Companions who know their way around a great exhibition.', href: '/explore?activity=Museum+visits', bg: '#dce4f5', text: '#1e3460', emoji: '🖼️', tag: 'Cultural' },
-              { title: 'Conversation companions', desc: 'For when you just need someone good to talk to.', href: '/explore?activity=Coffee+conversations', bg: '#f0e4db', text: '#5a3520', emoji: '☕', tag: 'Low-key' },
-              { title: 'Foodies & dining', desc: 'Companions who make any restaurant feel like a celebration.', href: '/explore?activity=Restaurant+dining', bg: '#f3ded0', text: '#6b3110', emoji: '🍽️', tag: 'Foodie' },
-              { title: 'Evening city walks', desc: 'Explore your city — or a new one — with great company.', href: '/explore?activity=Evening+walks', bg: '#e4e0f5', text: '#2c1f60', emoji: '🌆', tag: 'Active' },
-            ] as const).map(({ title, desc, href, bg, text, emoji, tag }) => (
-              <Link key={title} href={href}
-                className="group relative flex flex-col justify-between overflow-hidden rounded-[22px] p-6 transition hover:-translate-y-0.5 hover:shadow-lg"
-                style={{ background: bg, color: text }}
-                data-testid={`collection-${tag.toLowerCase()}`}>
+          <SectionIntro eyebrow="Three favors. One city." title={"Experiences, not a body catalog."} body="New Orleans launches with Event Plus-One, Explore the City, and Coffee & Conversation. Practice Date, voice chemistry, and virtual hours are not in this pilot." />
+          <div className="grid gap-4 md:grid-cols-3">
+            {LAUNCH_FAVORS.map((item) => (
+              <button key={item.id} type="button" onClick={() => {
+                writeFavorIntent({
+                  activity: item.activity, date: chicagoToday(), durationHours: item.durationHours, vibe: item.vibe, area: 'New Orleans', moment: item.example, favorId: item.id,
+                });
+                window.dispatchEvent(new Event('of-favor-intent'));
+                window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+              }}
+                className="group flex flex-col justify-between rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-6 text-left transition hover:-translate-y-0.5 hover:border-[#e85d4c] motion-reduce:transform-none"
+                data-testid={`collection-${item.id}`}>
                 <div>
-                  <p className="mb-2 text-3xl">{emoji}</p>
-                  <p className="font-mono text-[8px] font-bold uppercase tracking-[.18em] opacity-60">{tag}</p>
-                  <h3 className="mt-1.5 font-serif text-2xl leading-tight">{title}</h3>
-                  <p className="mt-2 text-[12px] leading-5 opacity-70">{desc}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#e85d4c]">{item.name}</p>
+                  <h3 className="mt-3 font-serif text-3xl text-[#1f0c1b]">{item.example}</h3>
+                  <p className="mt-3 text-sm leading-6 text-[#725e69]">{item.energy}</p>
                 </div>
-                <div className="mt-5 flex items-center gap-1 text-xs font-bold opacity-80 group-hover:opacity-100">
-                  Browse <ArrowRight className="h-3.5 w-3.5" />
-                </div>
-              </Link>
+                <p className="mt-6 text-xs font-bold text-[#e85d4c]">Make this Favor Card <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></p>
+              </button>
             ))}
           </div>
         </section>
@@ -1493,7 +1604,7 @@ function Home() {
           <SectionIntro eyebrow="Built-in safety" title="Four layers that protect every favor." />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <HomeTrustPillar icon={ShieldCheck} title="SafeSpot Network" body="Every booking starts at a verified public venue — no private addresses, ever." accent="bg-[#e8f0e8] text-[#477254]" />
-            <HomeTrustPillar icon={ClipboardCheck} title="Boundary Receipt" body="Both sides agree in writing before any booking is confirmed." accent="bg-[#ead0dd] text-[#7f2e62]" />
+            <HomeTrustPillar icon={ClipboardCheck} title="Boundary Receipt" body="Named consent before payment: activity, SafeSpot, time, transportation, photos, contact, and what stays off-limits. Both people sign." accent="bg-[#ead0dd] text-[#7f2e62]" />
             <HomeTrustPillar icon={Users} title="Trust Circle" body="Up to 3 contacts can get a venue check-in or missed-check-in notice — never a companion name or live pin." accent="bg-[#f3ead7] text-[#7a5a12]" />
             <HomeTrustPillar icon={MessageCircle} title="Protected Chat" body="Chat unlocks after the $10 deposit. Phone numbers stay hidden. Messages are masked, not end-to-end encrypted." accent="bg-[#fdf3e3] text-[#bf8750]" />
           </div>
@@ -1501,7 +1612,7 @@ function Home() {
 
         {/* ── Why book ── */}
         <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
-          <SectionIntro eyebrow="Why people book" title={"Company without the performance."} />
+          <SectionIntro eyebrow="Why people book" title={"The things you would otherwise miss."} />
           <div className="grid gap-4 md:grid-cols-3">
             {([
               { quote: "A museum, a meal, a long walk — with someone who agreed to show up. No dating script, no private addresses.", name: "Always platonic", city: "Written into every booking" },

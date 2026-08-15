@@ -29,7 +29,8 @@ Pricing stays server-only in `pricing.ts`: **5% customer fee**, **15% companion 
 
 ## In scope — customer
 
-- Guest browse by **city or neighborhood** (New Orleans). Homepage intent form shows **up to three** approved companions with real availability windows and a server quote. Empty stays empty — never invent three matches.
+- Homepage is **three launch favors** in New Orleans: Event Plus-One, Explore the City, Coffee & Conversation. A **Favor Card** shows occasion, energy, duration, server price, SafeSpot, and Boundary Receipt. Keyword mapping only — not AI matching. Empty stays empty.
+- **Boundary Receipt** is the named consent agreement (activity, location, duration, transportation, photography, contact, prohibited behavior). Do not rename the table; do not add Chemistry Preview, voice notes, Practice Date, or virtual hours.
 - Preserve the guest plan after email OTP (`sessionStorage` + `/book` and `/explore` query). Signup is required to send a request, not to see the preview.
 - Save companions in the browser without an account (localStorage). Server save after sign-in.
 - Nearby **available** approved companions (availability windows, not invented “available today”).
@@ -87,7 +88,7 @@ Pricing stays server-only in `pricing.ts`: **5% customer fee**, **15% companion 
 
 ## Deferred until after the first working pilot
 
-AI matching, paid memberships/subscriptions (Plus), gift cards, loyalty, referrals-with-credits, recurring bookings, venue partnership programs (staff training, discounts, emergency desks), social/community feeds, kudos, tips, compare-companions, city waitlists, careers ATS, press kits, newsletters, 14-day trials, invented SLAs, voice intros, Duo Favors, reliability scores, disappearing media, photo watermarks, concierge matching, selling “best match,” passkeys/2FA, invisible browsing / private-profile modes, new-device confirmation emails, compatibility AI blurbs, Trust Passport metrics (repeat-booking %, safety training), Apple/Google signup, “First Favor Guarantee” as a replacement companion (refunds follow the cancel table).
+AI matching, paid memberships/subscriptions (Plus), gift cards, loyalty, referrals-with-credits, recurring bookings, venue partnership programs (staff training, discounts, emergency desks), social/community feeds, kudos, tips, compare-companions, city waitlists, careers ATS, press kits, newsletters, 14-day trials, invented SLAs, voice intros / Chemistry Preview, Duo Favors, reliability scores, disappearing media, photo watermarks, concierge matching, selling “best match,” passkeys/2FA, invisible browsing / private-profile modes, new-device confirmation emails, compatibility AI blurbs, Trust Passport metrics (repeat-booking %, safety training), Apple/Google signup, “First Favor Guarantee” as a replacement companion (refunds follow the cancel table), Practice Date, Call Me for an Hour, extra favor types beyond the three launch cards.
 
 SafeSpot in the pilot is a **listed public venue + QR/app check-in**. Do not claim venue staff awareness or partnerships until those exist.
 
