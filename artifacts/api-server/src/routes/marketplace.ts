@@ -81,13 +81,26 @@ function isMissingTableError(err: unknown): boolean {
   return false;
 }
 
+function publicFirstName(name: string | null | undefined): string {
+  const first = String(name ?? "").trim().split(/\s+/)[0];
+  return first || "Companion";
+}
+
+/** In-app notices stay privacy-safe. Detail lives behind a signed-in booking screen. */
 async function notifyAccount(
   accountId: string | null | undefined,
-  payload: { kind: string; title: string; body: string; href: string; audience: "customer" | "companion" },
+  payload: { kind: string; href: string; audience: "customer" | "companion"; title?: string; body?: string },
 ) {
   if (!accountId) return;
   try {
-    await db.insert(notifications).values({ accountId, ...payload });
+    await db.insert(notifications).values({
+      accountId,
+      kind: payload.kind,
+      title: "You have a booking update",
+      body: "Open OnlyFavors to see it. This notice never includes an address, phone number, or live pin.",
+      href: payload.href,
+      audience: payload.audience,
+    });
   } catch {
     /* notifications table may not exist yet */
   }
@@ -1056,7 +1069,11 @@ router.post("/bookings/:id/complete", async (req, res) => {
 router.post("/bookings/:id/checkin", async (req, res) => {
   const { id } = req.params;
   const { venue } = req.body ?? {};
-  const kind = String(req.body?.kind ?? "arrival").slice(0, 40) || "arrival";
+  const requestedKind = String(req.body?.kind ?? "arrival").slice(0, 40) || "arrival";
+  const kind = requestedKind === "ok" ? "midpoint" : requestedKind;
+  if (!["arrival", "midpoint", "checkout", "missed"].includes(kind)) {
+    res.status(400).json({ error: "Check-in must be arrival, midpoint, or checkout." }); return;
+  }
   const customerId = getActorId(req, "customer");
   const companionId = await resolveCompanionId(req);
   if (!customerId && !companionId) {
@@ -1087,10 +1104,6 @@ router.post("/bookings/:id/checkin", async (req, res) => {
     }).returning();
     await notifyAccount(accountId, {
       kind: "safety",
-      title: kind === "ok" ? "All-clear recorded" : "Check-in recorded",
-      body: venue
-        ? `${kind === "ok" ? "An all-clear" : "Arrival"} at ${String(venue).slice(0, 80)} was saved to this booking.`
-        : "Your SafeSpot check-in was recorded.",
       href: `/favor/${id}`,
       audience: booking.customerId === customerId ? "customer" : "companion",
     });
@@ -1772,7 +1785,14 @@ router.post("/companions/:id/report", async (req, res) => {
       urgent: false,
     }).returning();
     req.log.warn({ companionId: id, reportId: row.id }, "Companion report submitted");
-    res.json({ received: true, id: row.id, message: "Report received. It is stored for the trust team. There is no published review SLA." });
+    await writeAudit({
+      actorId: req.user?.id ?? "anonymous",
+      action: "report.create",
+      subjectType: "incident_report",
+      subjectId: row.id,
+      note: `companion:${id}`,
+    });
+    res.json({ received: true, id: row.id, message: "Report received. The other person is not notified. It is stored for the trust team.", reportedUserNotified: false });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
       res.json({ received: true, message: "Report received. It is stored for the trust team. There is no published review SLA." });
@@ -1802,7 +1822,34 @@ router.post("/reports", async (req, res) => {
       urgent: Boolean(urgent),
       riskLevel: urgent ? "high" : "standard",
     }).returning();
-    res.status(201).json({ id: row.id, status: row.status });
+    await writeAudit({
+      actorId: req.user?.id ?? "anonymous",
+      action: "report.create",
+      subjectType: "incident_report",
+      subjectId: row.id,
+      note: row.bookingId ? `booking:${row.bookingId}` : row.companionId,
+    });
+    if (row.bookingId) {
+      const [booking] = await db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1);
+      const actorCompanionId = await resolveCompanionId(req);
+      const reporterIsParty = Boolean(
+        booking && req.user?.id && (
+          booking.customerId === req.user.id ||
+          (actorCompanionId && booking.companionId === actorCompanionId)
+        ),
+      );
+      if (booking && reporterIsParty) {
+        await db.update(bookings).set({ payoutHeld: true, updatedAt: new Date() }).where(eq(bookings.id, booking.id));
+        await writeAudit({
+          actorId: req.user!.id,
+          action: "booking.payout_hold",
+          subjectType: "booking",
+          subjectId: booking.id,
+          note: "open_safety_report",
+        });
+      }
+    }
+    res.status(201).json({ id: row.id, status: row.status, reportedUserNotified: false });
   } catch (err: unknown) {
     if (isMissingTableError(err) && process.env.NODE_ENV === "development") {
       res.status(201).json({ id: `dev-report-${Date.now()}`, status: "open" });
@@ -1873,7 +1920,7 @@ router.get("/reviews/recent", async (_req, res) => {
           comment: row.comment,
           createdAt: row.createdAt.toISOString(),
           companionId: row.companionId,
-          companionName: row.companionName,
+          companionName: publicFirstName(row.companionName),
           city: row.city,
         })),
     );
@@ -3147,7 +3194,7 @@ function mapCompanionRow(
   const areas = approvedAreas.length ? approvedAreas : row.service_area ? [row.service_area] : [];
   return {
     id: row.id,
-    displayName: row.display_name,
+    displayName: publicFirstName(row.display_name),
     city: row.city,
     serviceArea: areas[0] ?? row.service_area,
     approvedAreas: areas,

@@ -7,6 +7,7 @@ import {
   KeyRound, Landmark, LifeBuoy, LockKeyhole, LogIn, Mail, Map, MapPin, Menu, MessageCircle, MessageSquare,
   Navigation2, PanelLeft, Pencil, Plus, RefreshCw, Search, Send, Share2, Shield, ShieldCheck, SlidersHorizontal,
   Sparkles, Star, Sunrise, TrendingUp, User, UserPlus, Users, UsersRound, UtensilsCrossed, WalletCards, X, Zap, Lock, Lightbulb,
+  Mountain, Wine,
 } from 'lucide-react';
 import SafeSpotMap from '@/components/safe-spot-map';
 import FavorMode from '@/pages/favor-mode';
@@ -36,10 +37,21 @@ const cn = (...parts: Array<string | false | null | undefined>) => parts.filter(
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 function Brand({ dark = false }: { dark?: boolean }) {
-  return <Link href="/" className={cn('inline-flex items-center gap-2.5 group', dark ? 'text-[#f9efe5]' : 'text-[#48213d')} data-testid="link-brand">
-    <span className={cn('grid h-9 w-9 place-items-center rounded-[13px] text-sm font-bold transition-transform group-hover:rotate-6', dark ? 'bg-[#c45b8f] text-[#281223]' : 'bg-[#7f2e62] text-[#fff5eb]')}>of</span>
-    <span className="font-serif text-[25px] leading-none tracking-tight">OnlyFavors</span>
-  </Link>;
+  return (
+    <Link href="/" className={cn('inline-flex items-center gap-2.5 group', dark ? 'text-[#f9efe5]' : 'text-[#48213d')} data-testid="link-brand">
+      <span className={cn('relative grid h-9 w-9 place-items-center rounded-full border-2 font-serif text-[17px] leading-none transition-transform group-hover:rotate-6', dark ? 'border-[#f9efe5] text-[#f9efe5]' : 'border-[#7f2e62] text-[#7f2e62]')} aria-hidden>
+        O
+        <Shield className={cn('absolute h-2.5 w-2.5', dark ? 'text-[#c45b8f]' : 'text-[#7f2e62]')} strokeWidth={2.6} />
+      </span>
+      <span className="font-serif text-[25px] leading-none tracking-tight">
+        <span className="relative inline-block">
+          O
+          <Shield className={cn('absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-[42%]', dark ? 'text-[#c45b8f]' : 'text-[#7f2e62]')} strokeWidth={2.6} aria-hidden />
+        </span>
+        nlyFavors
+      </span>
+    </Link>
+  );
 }
 
 function Header() {
@@ -181,6 +193,272 @@ function useSavedCompanionIds() {
   }, [ids, add, remove]);
 
   return { ids, add, remove, toggle };
+}
+
+const FAVOR_INTENT_KEY = 'of_favor_intent';
+
+type FavorIntent = {
+  activity: string;
+  date: string;
+  durationHours: number;
+  vibe: string;
+  area: string;
+};
+
+function chicagoToday(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function readFavorIntent(): FavorIntent | null {
+  try {
+    const raw = sessionStorage.getItem(FAVOR_INTENT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as FavorIntent;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeFavorIntent(intent: FavorIntent) {
+  try { sessionStorage.setItem(FAVOR_INTENT_KEY, JSON.stringify(intent)); } catch {}
+}
+
+function bookHref(companionId: string, intent?: FavorIntent | null): string {
+  const q = new URLSearchParams({ companion: companionId });
+  const saved = intent ?? readFavorIntent();
+  if (saved?.activity) q.set('activity', saved.activity);
+  if (saved?.date) q.set('date', saved.date);
+  if (saved?.durationHours) q.set('duration', String(saved.durationHours));
+  return `/book?${q.toString()}`;
+}
+
+function intentExplorePath(intent: FavorIntent): string {
+  const q = new URLSearchParams();
+  if (intent.activity) q.set('activity', intent.activity);
+  if (intent.date) q.set('date', intent.date);
+  if (intent.durationHours) q.set('duration', String(intent.durationHours));
+  if (intent.vibe) q.set('vibe', intent.vibe);
+  if (intent.area && intent.area !== 'New Orleans') q.set('area', intent.area);
+  const s = q.toString();
+  return s ? `/explore?${s}` : '/explore';
+}
+
+const INTENT_EXAMPLES: Array<{ label: string; activity: string; vibe: string; area: string }> = [
+  { label: 'I need a wedding plus-one.', activity: 'Event plus-one', vibe: 'social', area: 'New Orleans' },
+  { label: 'Coffee and conversation tonight.', activity: 'Coffee conversations', vibe: 'low-key', area: 'French Quarter' },
+  { label: 'Come to this concert with me.', activity: 'Concerts', vibe: 'social', area: 'New Orleans' },
+  { label: 'A museum afternoon.', activity: 'Museum visits', vibe: 'cultural', area: 'Warehouse District' },
+];
+
+const INTENT_VIBE_KEYWORDS: Record<string, string[]> = {
+  adventurous: ['hiking', 'climbing', 'outdoor', 'adventure', 'walk', 'cycling'],
+  cultural: ['museum', 'gallery', 'art', 'theatre', 'history', 'architecture'],
+  'low-key': ['coffee', 'conversation', 'walk', 'quiet', 'bookstore', 'reading'],
+  foodie: ['dinner', 'cooking', 'food', 'restaurant', 'dining', 'brunch'],
+  creative: ['art', 'photography', 'craft', 'sketch', 'painting', 'writing'],
+  social: ['event', 'plus-one', 'concert', 'festival', 'meetup', 'party'],
+};
+
+function GuestMatchCard({
+  companion, durationHours, intent,
+}: {
+  companion: DirectoryCompanion;
+  durationHours: number;
+  intent: FavorIntent;
+}) {
+  const { user } = useAuth();
+  const quoteParams = { companionId: companion.id, durationHours };
+  const quoteQuery = useGetBookingQuote(quoteParams, {
+    query: { enabled: durationHours >= 1, queryKey: getGetBookingQuoteQueryKey(quoteParams) },
+  });
+  const quote = quoteQuery.data;
+  const requestHref = user
+    ? bookHref(companion.id, intent)
+    : `/login?intent=customer&next=${encodeURIComponent(bookHref(companion.id, intent))}`;
+  return (
+    <article className="rounded-[22px] border border-[#dfd2c9] bg-[#fbf7f1] p-5" data-testid={`guest-match-${companion.id}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-serif text-2xl text-[#48213d]">{companion.displayName}</p>
+          <p className="mt-1 flex items-center gap-1 text-xs text-[#806c76]"><MapPin className="h-3 w-3" />{companion.serviceArea}, New Orleans</p>
+        </div>
+        {companion.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#7f2e62]" />}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {companion.activities.slice(0, 3).map((act) => (
+          <span key={act} className="rounded-full bg-[#ead0dd] px-2.5 py-1 text-[10px] font-semibold text-[#7f2e62]">{act}</span>
+        ))}
+      </div>
+      <div className="mt-4 border-t border-[#ece1d9] pt-4">
+        {quote ? (
+          <>
+            <p className="font-serif text-2xl text-[#48213d]">{money(quote.totalCents)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[#806c76]">{durationHours} hr · includes 5% safety fee · $10 deposit credited</p>
+          </>
+        ) : (
+          <p className="text-xs text-[#806c76]">{money(companion.hourlyRate * 100)} / hr · total calculated on the server</p>
+        )}
+      </div>
+      <div className="mt-4 flex flex-col gap-2">
+        <Link href={`/companions/${companion.id}`} className="inline-flex h-10 items-center justify-center rounded-full border border-[#dfd2c9] text-xs font-bold text-[#654c5f]" data-testid={`link-guest-profile-${companion.id}`}>
+          {user ? 'View profile' : 'View profile — signup to request'}
+        </Link>
+        <Link href={requestHref} className="inline-flex h-10 items-center justify-center rounded-full bg-[#7f2e62] text-xs font-bold text-[#fff5eb]" data-testid={`link-guest-request-${companion.id}`}>
+          {user ? 'Send a request' : 'Sign in to send a request'}
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function HomeIntentPreview() {
+  const saved = readFavorIntent();
+  const [activity, setActivity] = useState(saved?.activity ?? '');
+  const [date, setDate] = useState(saved?.date ?? chicagoToday());
+  const [durationHours, setDurationHours] = useState(saved?.durationHours ?? 2);
+  const [vibe, setVibe] = useState(saved?.vibe ?? '');
+  const [area, setArea] = useState(saved?.area ?? 'New Orleans');
+  const [submitted, setSubmitted] = useState(Boolean(saved?.activity));
+
+  const intent: FavorIntent = { activity, date, durationHours, vibe, area };
+
+  const applyExample = (example: (typeof INTENT_EXAMPLES)[number]) => {
+    setActivity(example.activity);
+    setVibe(example.vibe);
+    setArea(example.area);
+    setDate(chicagoToday());
+    setSubmitted(true);
+    writeFavorIntent({ activity: example.activity, date: chicagoToday(), durationHours, vibe: example.vibe, area: example.area });
+  };
+
+  const search = () => {
+    writeFavorIntent(intent);
+    setSubmitted(true);
+  };
+
+  const listParams = useMemo(() => ({
+    city: 'New Orleans',
+    ...(area && area !== 'New Orleans' ? { area } : {}),
+    ...(activity ? { activity } : {}),
+    ...(date ? { when: date } : {}),
+  }), [area, activity, date]);
+
+  const query = useListCompanions(listParams as Parameters<typeof useListCompanions>[0], {
+    query: {
+      enabled: submitted,
+      queryKey: getListCompanionsQueryKey(listParams as Parameters<typeof getListCompanionsQueryKey>[0]),
+      retry: false,
+    },
+  });
+
+  const matches = useMemo(() => {
+    const rows = (query.data ?? []) as DirectoryCompanion[];
+    const kw = vibe ? INTENT_VIBE_KEYWORDS[vibe] ?? [] : [];
+    const vibeFiltered = kw.length
+      ? rows.filter((c) => {
+          const hay = [...c.activities, ...(c.interviewAnswers ?? []), c.biography ?? ''].join(' ').toLowerCase();
+          return kw.some((k) => hay.includes(k)) || c.activities.some((a) => a.toLowerCase().includes(activity.toLowerCase()));
+        })
+      : rows;
+    return (vibeFiltered.length ? vibeFiltered : rows).slice(0, 3);
+  }, [query.data, vibe, activity]);
+
+  return (
+    <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#efe1dc]">
+      <div className="mx-auto grid max-w-7xl items-start gap-10 px-5 py-16 md:grid-cols-[1.05fr_.95fr] lg:px-8 lg:py-20">
+        <div>
+          <p className="mb-5 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]">New Orleans pilot</p>
+          <h1 className="font-serif text-[52px] leading-[.92] tracking-[-.04em] text-[#48213d] md:text-[72px]">What don’t you want<br /><em className="text-[#8e416e]">to do alone?</em></h1>
+          <p className="mt-6 max-w-md text-[17px] leading-7 text-[#654c5f]">Tell us the plan. We’ll show who is actually available — with the full price — before you create an account.</p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {INTENT_EXAMPLES.map((example) => (
+              <button key={example.label} type="button" onClick={() => applyExample(example)}
+                className="rounded-full border border-[#dfd2c9] bg-white px-3.5 py-2 text-left text-xs font-semibold text-[#654c5f] hover:border-[#7f2e62] hover:text-[#7f2e62]"
+                data-testid={`intent-example-${example.activity.toLowerCase().replace(/\s+/g, '-')}`}>
+                {example.label}
+              </button>
+            ))}
+          </div>
+          <form className="mt-8 grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); search(); }} data-testid="form-home-intent">
+            <label className="sm:col-span-2">
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Activity</span>
+              <input value={activity} onChange={(e) => setActivity(e.target.value)} required placeholder="Coffee, museum, concert, plus-one…"
+                className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-intent-activity" />
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Neighborhood</span>
+              <select value={area} onChange={(e) => setArea(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-intent-area">
+                {NOLA_AREAS.map((n) => <option key={n.name} value={n.name}>{n.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Date (Central Time)</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
+                className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-intent-date" />
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Duration</span>
+              <select value={durationHours} onChange={(e) => setDurationHours(Number(e.target.value))} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-intent-duration">
+                {[1, 1.5, 2, 3, 4, 7].map((h) => <option key={h} value={h}>{h === 7 ? 'Full day (7 hr)' : `${h} hour${h === 1 ? '' : 's'}`}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9b858e]">Vibe</span>
+              <select value={vibe} onChange={(e) => setVibe(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="select-intent-vibe">
+                <option value="">Any</option>
+                <option value="low-key">Low-key</option>
+                <option value="cultural">Cultural</option>
+                <option value="social">Social</option>
+                <option value="foodie">Foodie</option>
+                <option value="creative">Creative</option>
+              </select>
+            </label>
+            <button type="submit" className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] sm:col-span-2" data-testid="button-intent-search">
+              Show who is available <ArrowRight className="h-4 w-4" />
+            </button>
+          </form>
+          <p className="mt-4 text-xs leading-5 text-[#856c79]">Signup is only required to send a request or open masked chat. Browse and this preview stay free. We never invent companions to fill three slots.</p>
+        </div>
+        <div>
+          {!submitted ? (
+            <div className="rounded-[24px] border border-[#dfd2c9] bg-[#fbf7f1] p-8">
+              <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Personalized preview</p>
+              <h2 className="mt-3 font-serif text-3xl text-[#48213d]">Tell us the moment.</h2>
+              <p className="mt-3 text-sm leading-6 text-[#725e69]">Up to three approved people with a real availability window for that date, and a server-calculated total. Empty means empty.</p>
+            </div>
+          ) : query.isLoading ? (
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Looking at real availability…</p>
+          ) : matches.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-[#c6aeb8] bg-[#fdf9f6] p-8" data-testid="guest-matches-empty">
+              <p className="font-serif text-3xl text-[#48213d]">No one is listed for that plan yet.</p>
+              <p className="mt-3 text-sm leading-6 text-[#725e69]">OnlyFavors does not invent matches. Try another activity or date, or browse the directory when companions are approved.</p>
+              <Link href="/explore" className="mt-6 inline-flex text-xs font-bold text-[#7f2e62]">Open Explore <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link>
+            </div>
+          ) : (
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">{matches.length} available preview{matches.length === 1 ? '' : 's'}</p>
+              <div className="mt-4 grid gap-3">
+                {matches.map((c) => (
+                  <GuestMatchCard key={c.id} companion={c} durationHours={durationHours} intent={intent} />
+                ))}
+              </div>
+              <Link href={intentExplorePath(intent)} className="mt-4 inline-flex text-xs font-bold text-[#7f2e62]" data-testid="link-intent-explore">
+                See everyone who matches <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+              <p className="mt-3 text-[11px] leading-5 text-[#806c76]">If a companion cancels or no-shows, the customer is refunded. We do not promise a replacement person.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -919,7 +1197,6 @@ function Home() {
   const featured = live.slice(0, 3);
   const spotlight = [...live].sort((a, b) => (b.reviewCount - a.reviewCount) || (b.rating - a.rating))[0] ?? featured[0];
   const spotlightAnswers = ((spotlight as { interviewAnswers?: string[] } | undefined)?.interviewAnswers ?? []).filter(Boolean).slice(0, 3);
-  const hero = spotlight;
   const publicStats = stats.data ?? { companionCount: 0, completedBookings: 0, averageRating: 0, cityCount: 0 };
   const safeSpotCount = spotsQuery.data?.length ?? 0;
   return (
@@ -930,54 +1207,16 @@ function Home() {
         <PlatformAnnouncementBanner />
         <HomeUpcomingBookingBanner />
 
-        {/* ── Hero ── */}
-        <section className="relative overflow-hidden border-b border-[#ddcfc6] bg-[#efe1dc]">
-          <div className="absolute -right-36 -top-44 h-[560px] w-[560px] rounded-full border-[55px] border-[#d8afc4]/50" />
-          <div className="absolute right-12 top-24 h-20 w-20 rounded-full bg-[#dd8caf]/30 blur-2xl" />
-          <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-20 md:min-h-[650px] md:grid-cols-[1.02fr_.98fr] md:py-24 lg:px-8">
-            <div className="relative z-10 max-w-xl">
-              <p className="mb-5 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]"><span className="h-2 w-2 rounded-full bg-[#a75c87]" />A more human kind of marketplace</p>
-              <h1 className="font-serif text-[62px] leading-[.9] tracking-[-.04em] text-[#48213d] md:text-[88px]">Good company,<br /><em className="text-[#8e416e]">on your terms.</em></h1>
-              <p className="mt-7 max-w-md text-[17px] leading-7 text-[#654c5f]">Book thoughtful, approved companions for the things you would rather not do alone. Dinner, a museum, a long walk — always platonic, always clear.</p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href="/explore" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#7f2e62] px-6 text-sm font-bold text-[#fff5eb] shadow-[0_10px_24px_rgba(127,46,98,.2)] transition hover:-translate-y-0.5 hover:bg-[#65234e]" data-testid="link-hero-explore">Find your kind of company <ArrowRight className="h-4 w-4" /></Link>
-                <Link href="/safety" className="inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-bold text-[#654c5f] transition hover:bg-[#e6d4d2]" data-testid="link-hero-safety"><ShieldCheck className="h-4 w-4" />See how safety works</Link>
-              </div>
-              <p className="mt-5 flex items-center gap-2 text-xs text-[#856c79]"><LockKeyhole className="h-3.5 w-3.5" />Your exact location is never shared publicly.</p>
-            </div>
-            <div className="relative mx-auto h-[390px] w-full max-w-[450px] md:h-[480px]">
-              <div className="absolute left-5 top-12 h-[310px] w-[275px] rotate-[-7deg] rounded-[28px] bg-[#d2a9bb] shadow-[0_24px_50px_rgba(85,38,71,.13)] md:h-[370px] md:w-[330px]" />
-              <div className="absolute bottom-5 right-3 h-[265px] w-[255px] rotate-[8deg] rounded-[28px] bg-[#b7c4b3] shadow-[0_24px_50px_rgba(49,74,57,.13)] md:h-[310px] md:w-[290px]" />
-              <div className="float-slow absolute left-14 top-1 z-10 w-[290px] rounded-[25px] border border-[#f4e4dc] bg-[#fbf4ed] p-5 shadow-[0_25px_55px_rgba(66,29,56,.18)] md:left-20 md:w-[330px]">
-                <div className="flex items-center justify-between"><span className="rounded-full bg-[#e9d0df] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#7f2e62]">{hero?.verified ? 'Verified companion' : 'Platonic company'}</span><HeartHandshake className="h-5 w-5 text-[#7f2e62]" /></div>
-                {hero ? (
-                  <>
-                    <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">{companionInitials(hero.displayName)}</div><div><p className="font-serif text-2xl text-[#48213d]">{hero.displayName}</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />{hero.city}</p></div></div>
-                    <div className="mt-3 flex items-center gap-1">{hero.rating > 0 ? <><StarDisplay rating={Math.round(hero.rating)} size="xs" /><span className="ml-1 font-mono text-[10px] font-bold text-[#48213d]">{hero.rating.toFixed(1)}</span><span className="text-[10px] text-[#9b858e]">· {hero.reviewCount} {hero.reviewCount === 1 ? 'review' : 'reviews'}</span></> : <span className="text-[10px] text-[#9b858e]">New to OnlyFavors</span>}</div>
-                    <div className="mt-4 flex flex-wrap gap-2">{hero.activities.slice(0, 3).map((act) => <span key={act} className="rounded-full bg-[#f0e4db] px-3 py-1.5 text-xs text-[#654c5f]">{act}</span>)}</div>
-                    <Link href={`/companions/${hero.id}`} className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">${hero.hourlyRate} / hour</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">View profile <ChevronRight className="h-3.5 w-3.5" /></span></Link>
-                  </>
-                ) : (
-                  <>
-                    <div className="mt-7 flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-[#e1b1bd] font-serif text-2xl text-[#7f2e62]">of</div><div><p className="font-serif text-2xl text-[#48213d]">Your companion</p><p className="flex items-center gap-1 text-xs text-[#806b76]"><MapPin className="h-3 w-3" />Approved profiles appear here</p></div></div>
-                    <p className="mt-4 text-xs leading-5 text-[#806c76]">When companions are approved, their public profiles show here — never invented names or ratings.</p>
-                    <Link href="/explore" className="mt-6 flex items-center justify-between border-t border-[#e8dcd5] pt-4"><span className="font-mono text-[10px] uppercase tracking-wider text-[#9b858e]">Directory</span><span className="flex items-center gap-1 text-xs font-bold text-[#7f2e62]">Browse <ChevronRight className="h-3.5 w-3.5" /></span></Link>
-                  </>
-                )}
-              </div>
-              <div className="absolute bottom-7 left-0 z-20 flex items-center gap-2 rounded-full border border-[#f4e4dc] bg-[#fbf4ed] px-4 py-3 shadow-lg"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#cad8cb] text-[#376448]"><Check className="h-4 w-4" /></span><span className="text-xs font-semibold text-[#543d50]">Safety plan included</span></div>
-            </div>
-          </div>
-        </section>
+        <HomeIntentPreview />
 
         {/* ── How it works mini-strip ── */}
         <section className="border-b border-[#ddcfc6] bg-[#fdf9f5] px-5 py-8 lg:px-8" data-testid="home-how-it-works-strip">
           <div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-4">
             {([
-              { n: '1', label: 'Browse', desc: 'Explore approved companions by city or activity.' },
-              { n: '2', label: 'Plan',   desc: 'Choose a date, time, and public SafeSpot venue.' },
-              { n: '3', label: 'Chat',   desc: 'A $10 deposit unlocks the masked chat thread.' },
-              { n: '4', label: 'Enjoy',  desc: 'Meet, connect, and leave a review after.' },
+              { n: '1', label: 'Tell us the plan', desc: 'Activity, date, duration, and vibe — no account needed.' },
+              { n: '2', label: 'See who is free', desc: 'Up to three approved people with real windows and a full price.' },
+              { n: '3', label: 'Sign in to request', desc: 'Email code only. Your plan is waiting after signup.' },
+              { n: '4', label: 'Boundaries, then chat', desc: 'Sign a Boundary Receipt. $10 deposit unlocks masked chat.' },
             ] as const).map(({ n, label, desc }) => (
               <div key={n} className="flex items-start gap-3">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#ead0dd] font-mono text-xs font-bold text-[#7f2e62]">{n}</div>
@@ -1007,34 +1246,18 @@ function Home() {
           </div>
         </section>
 
-        {/* ── Cities strip ── */}
+        {/* ── Neighborhoods ── */}
         <section className="border-b border-[#ddcfc6] bg-[#fbf7f1] px-5 py-6 lg:px-8" data-testid="home-cities-strip">
           <div className="mx-auto max-w-7xl">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">Available in</span>
-              {[
-                { city: 'San Francisco', slug: 'san-francisco' },
-                { city: 'New York',      slug: 'new-york'      },
-                { city: 'Los Angeles',   slug: 'los-angeles'   },
-                { city: 'Chicago',       slug: 'chicago'       },
-                { city: 'Austin',        slug: 'austin'        },
-                { city: 'Seattle',       slug: 'seattle'       },
-                { city: 'Denver',        slug: 'denver'        },
-                { city: 'Miami',         slug: 'miami'         },
-                { city: 'Boston',        slug: 'boston'        },
-                { city: 'Washington D.C.', slug: 'washington-dc' },
-                { city: 'Atlanta',       slug: 'atlanta'       },
-                { city: 'Portland',      slug: 'portland'      },
-              ].map(({ city, slug }) => (
-                <Link key={slug} href={`/cities/${slug}`}
+              <span className="font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e]">New Orleans neighborhoods</span>
+              {NOLA_AREAS.filter((a) => a.name !== 'New Orleans').map((area) => (
+                <Link key={area.name} href={`/explore?area=${encodeURIComponent(area.name)}`}
                   className="rounded-full border border-[#dfd2c9] bg-white px-3 py-1 text-xs font-semibold text-[#654c5f] transition hover:border-[#9d557e] hover:text-[#7f2e62]"
-                  data-testid={`city-chip-${slug}`}>
-                  {city}
+                  data-testid={`city-chip-${area.name.toLowerCase().replace(/\s+/g, '-')}`}>
+                  {area.name}
                 </Link>
               ))}
-              <Link href="/safespots" className="flex items-center gap-1 text-xs font-bold text-[#7f2e62] hover:underline ml-1">
-                +35 more <ArrowRight className="h-3 w-3" />
-              </Link>
             </div>
           </div>
         </section>
@@ -1065,18 +1288,17 @@ function Home() {
                 </Link>
               ))}
             </div>
-            {/* City row */}
+            {/* Neighborhood row */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="shrink-0 font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e] mr-2">Cities</span>
-              {['San Francisco', 'New York', 'Chicago', 'Los Angeles', 'Seattle', 'Austin', 'Boston', 'Miami', 'Denver'].map((city) => (
-                <Link key={city}
-                  href={`/cities/${city.toLowerCase().replace(/ /g, '-')}`}
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-[.15em] text-[#9b858e] mr-2">Around town</span>
+              {NOLA_AREAS.filter((a) => a.name !== 'New Orleans').map((area) => (
+                <Link key={area.name}
+                  href={`/explore?area=${encodeURIComponent(area.name)}`}
                   className="shrink-0 flex items-center gap-1.5 rounded-full border border-[#dfd2c9] bg-white px-3.5 py-2 text-xs font-semibold text-[#654c5f] transition hover:border-[#7f2e62] hover:text-[#7f2e62]"
-                  data-testid={`city-link-${city.toLowerCase().replace(/ /g, '-')}`}>
-                  <MapPin className="h-3 w-3" />{city}
+                  data-testid={`city-link-${area.name.toLowerCase().replace(/ /g, '-')}`}>
+                  <MapPin className="h-3 w-3" />{area.name}
                 </Link>
               ))}
-              <Link href="/cities" className="shrink-0 text-xs font-bold text-[#9d557e] hover:underline">All cities →</Link>
             </div>
           </div>
         </section>
@@ -1085,7 +1307,7 @@ function Home() {
         <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
           <SectionIntro eyebrow="The OnlyFavors difference" title="Connection without the guesswork." body="A considered way to find company — not a feed to scroll, a profile to perform, or a stranger to decode." />
           <div className="grid gap-4 md:grid-cols-[1.15fr_.85fr]">
-            <div className="min-h-[270px] rounded-[24px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-10"><div className="flex items-start justify-between"><Shield className="h-7 w-7 text-[#d897b6]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#c695ae]">01 / Private by default</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Approximate areas.<br />No public addresses.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#d9c4cf]">We reveal only what helps you choose. Exact meeting details stay between you, your companion, and our trust team.</p></div>
+            <div className="min-h-[270px] rounded-[24px] bg-[#3d2038] p-8 text-[#f9efe5] md:p-10"><div className="flex items-start justify-between"><Shield className="h-7 w-7 text-[#d897b6]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#c695ae]">01 / Private by default</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Identity before.<br />Safety during.<br />Privacy after.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#d9c4cf]">First name and neighborhood only. Phone, email, and home stay hidden. Location exists only during an active booking, then it is deleted.</p></div>
             <div className="min-h-[270px] rounded-[24px] bg-[#d9e1d7] p-8 text-[#31533f] md:p-10"><div className="flex items-start justify-between"><BadgeCheck className="h-7 w-7 text-[#477254]" /><span className="font-mono text-[10px] uppercase tracking-widest text-[#63816a]">02 / Carefully verified</span></div><h3 className="mt-16 max-w-md font-serif text-4xl leading-none">Real people.<br />Clear boundaries.</h3><p className="mt-4 max-w-sm text-sm leading-6 text-[#53725d]">Every approved companion shares their way of working, the activities they enjoy, and what stays out of bounds.</p></div>
           </div>
         </section>
@@ -1764,20 +1986,20 @@ function CompareCompanions() {
 function Explore() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const [city, setCity] = useState('New Orleans');
+  const [city, setCity] = useState(() => { try { return new URLSearchParams(window.location.search).get('area') ?? 'New Orleans'; } catch { return 'New Orleans'; } });
   const [activity, setActivity] = useState(() => { try { return new URLSearchParams(window.location.search).get('activity') ?? ''; } catch { return ''; } });
   const [language, setLanguage] = useState('');
   const [maxRate, setMaxRate] = useState('');
   const [instant, setInstant] = useState(false);
   const [timeWindow, setTimeWindow] = useState<'now' | 'tonight' | 'weekend' | null>(null);
-  const [customDate, setCustomDate] = useState('');
+  const [customDate, setCustomDate] = useState(() => { try { return new URLSearchParams(window.location.search).get('date') ?? ''; } catch { return ''; } });
   const [customTime, setCustomTime] = useState('');
   const { ids: savedIdList, toggle: toggleSaved } = useSavedCompanionIds();
   const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'best' | 'price_asc' | 'price_desc' | 'near'>('best');
   const [filters, setFilters] = useState(false);
-  const [vibe, setVibe] = useState<string | null>(null);
+  const [vibe, setVibe] = useState<string | null>(() => { try { return new URLSearchParams(window.location.search).get('vibe'); } catch { return null; } });
 
   const [view, setView] = useState<'list' | 'map'>('list');
 
@@ -1817,17 +2039,13 @@ function Explore() {
   }, [nearMe]);
 
   const handleSave = useCallback(async (id: string) => {
-    if (!user) {
-      navigate(`/login?intent=customer&next=${encodeURIComponent('/explore')}`);
-      return;
-    }
     const wasSaved = savedIds.has(id);
     await toggleSaved(id);
     if (!wasSaved) {
       setSaveToast(id);
       setTimeout(() => setSaveToast((t) => (t === id ? null : t)), 3500);
     }
-  }, [user, navigate, savedIds, toggleSaved]);
+  }, [savedIds, toggleSaved]);
 
   const whenValue = customDate && customTime
     ? `${customDate}T${customTime}`
@@ -2868,7 +3086,7 @@ function Profile() {
 {(c as any).paused ? (
   <p className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[#dfd2c9] text-sm font-bold text-[#654c5f]" data-testid="companion-paused-notice">Not accepting bookings right now</p>
 ) : (
-  <Link href={`/book?companion=${c.id}`} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link>
+  <Link href={bookHref(c.id)} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-book-companion">Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" /></Link>
 )}<p className="mt-4 text-center text-[11px] leading-5 text-[#9b858e]">You will choose an activity, date, and public SafeSpot next.</p><div className="mt-5 flex items-center justify-center gap-4 border-t border-[#ece1d9] pt-4"><ShareButton /><GiftSessionButton companionName={c.displayName} companionId={c.id} /></div>{(c as any).acceptanceRate && (
   <div className="mt-3 flex items-center justify-center gap-3 text-[10px] text-[#9b858e]">
     <span className="flex items-center gap-1">
@@ -2889,7 +3107,7 @@ function Profile() {
   {(c as any).paused ? (
     <p className="flex-1 text-right text-xs font-bold text-[#654c5f]">Not accepting bookings</p>
   ) : (
-    <Link href={`/book?companion=${c.id}`} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-mobile-book-companion">
+    <Link href={bookHref(c.id)} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#7f2e62] text-sm font-bold text-[#fff5eb] transition hover:bg-[#65234e]" data-testid="link-mobile-book-companion">
       Plan time with {c.displayName.split(' ')[0]} <ArrowRight className="h-4 w-4" />
     </Link>
   )}
@@ -3677,7 +3895,11 @@ function Book() {
   const companionQuery = useGetCompanion(companionId, { query: { queryKey: getGetCompanionQueryKey(companionId), enabled: Boolean(companionId) } });
   const companion = companionQuery.data;
   const spotsQuery = useListSafeSpots(companion?.city ? { city: companion.city } : undefined, { query: { queryKey: getListSafeSpotsQueryKey(companion?.city ? { city: companion.city } : undefined), enabled: Boolean(companion?.city), retry: false } });
-  const [activity, setActivity] = useState(''); const [date, setDate] = useState(''); const [time, setTime] = useState(''); const [duration, setDuration] = useState('2'); const [spot, setSpot] = useState(''); const [created, setCreated] = useState<Booking | null>(null);
+  const [activity, setActivity] = useState(search.get('activity') ?? '');
+  const [date, setDate] = useState(search.get('date') ?? '');
+  const [time, setTime] = useState('');
+  const [duration, setDuration] = useState(search.get('duration') ?? '2');
+  const [spot, setSpot] = useState(''); const [created, setCreated] = useState<Booking | null>(null);
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutLabel, setCheckoutLabel] = useState('');
   const [checkoutAmount, setCheckoutAmount] = useState(0);
@@ -6445,24 +6667,24 @@ function MembershipPage() {
       <main className="page-enter">
         <section className="border-b border-[#ddcfc6] bg-[#efe1dc] px-5 py-20 text-center lg:px-8">
           <p className="mx-auto font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#8e4b75]">Your membership</p>
-          <h1 className="mx-auto mt-4 max-w-2xl font-serif text-[62px] leading-[.9] text-[#48213d]">Explorer is live. Paid plans are not.</h1>
+          <h1 className="mx-auto mt-4 max-w-2xl font-serif text-[62px] leading-[.9] text-[#48213d]">Chat is not a $99 product.</h1>
           <p className="mx-auto mt-6 max-w-lg text-[16px] leading-7 text-[#654c5f]">
-            Everyone uses the same booking path: $10 deposit, 5% service fee, approved companions when they exist, SafeSpots when they exist, Trust Circle, and a Boundary Receipt. There is no Insider checkout or 14-day trial yet.
+            Browse and apply for free. A structured Favor Request is free. Masked chat opens after a $10 deposit on a real booking — credited to the total. Trust Circle, Boundary Receipt, and Help me leave stay free. There is no Plus checkout.
           </p>
         </section>
         <section className="mx-auto grid max-w-5xl gap-5 px-5 py-14 lg:grid-cols-2 lg:px-8">
           <div className="rounded-[26px] border border-[#dfd2c9] bg-[#f0e4db] p-8" data-testid="tier-explorer">
-            <span className="rounded-full bg-[#ead0dd] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#7f2e62]">Explorer</span>
+            <span className="rounded-full bg-[#ead0dd] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#7f2e62]">Live now</span>
             <div className="mt-6">
               <span className="font-serif text-5xl leading-none text-[#654c5f]">Free</span>
               <span className="ml-2 text-xs text-[#654c5f]/60">No subscription</span>
             </div>
             <ul className="mt-8 space-y-3 text-xs leading-5 text-[#654c5f]/85">
-              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Browse approved companions</li>
-              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> $10 deposit unlocks masked chat</li>
-              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Trust Circle (up to 3 contacts)</li>
-              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Boundary Receipt on bookings</li>
-              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Email support: hello@onlyfavors.com</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Signup, browse, and companion application</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Structured request — activity, time, venue, attire, access</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> $10 deposit unlocks masked chat (credited)</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> Trust Circle, Boundary Receipt, Help me leave</li>
+              <li className="flex items-start gap-2.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#477254]" /> 5% customer fee + 15% companion commission on completed bookings</li>
             </ul>
             <Link href="/explore" className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-[#ead0dd] text-sm font-bold text-[#654c5f]" data-testid="cta-explorer">
               Browse companions <ArrowRight className="h-4 w-4" />
@@ -6471,13 +6693,14 @@ function MembershipPage() {
           <div className="rounded-[26px] border border-[#dfd2c9] bg-[#fbf7f1] p-8" data-testid="tier-paid">
             <span className="rounded-full bg-[#bf8750] px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-white">Later</span>
             <div className="mt-6">
-              <span className="font-serif text-5xl leading-none text-[#48213d]">Not live</span>
+              <span className="font-serif text-5xl leading-none text-[#48213d]">Plus</span>
+              <span className="ml-2 text-xs text-[#654c5f]/60">$99 / year — not billed</span>
             </div>
             <p className="mt-8 text-sm leading-6 text-[#725e69]">
-              Insider and Founding Friend were sketched as $9 / $29 monthly perks (no deposit, extra Trust Circle slots, credits). Those subscriptions, credits, concierge, and response-time SLAs are not billed and not enforced. Email hello@onlyfavors.com if you want to be notified.
+              A later optional membership could waive the 5% customer fee and add concierge-style extras. It will not unlock chat, phone numbers, Trust Circle, or emergency tools. Those stay on the free path. There is no checkout for Plus today.
             </p>
-            <a href="mailto:hello@onlyfavors.com?subject=Paid%20membership" className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#3d2038] text-sm font-bold text-white" data-testid="cta-membership-waitlist">
-              Ask about paid plans <ArrowRight className="h-4 w-4" />
+            <a href="mailto:hello@onlyfavors.com?subject=OnlyFavors%20Plus" className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#3d2038] text-sm font-bold text-white" data-testid="cta-membership-waitlist">
+              Ask about Plus later <ArrowRight className="h-4 w-4" />
             </a>
           </div>
         </section>
@@ -6485,9 +6708,9 @@ function MembershipPage() {
           <h2 className="font-serif text-4xl text-[#48213d]">Membership questions</h2>
           <div className="mt-8 space-y-4">
             {[
-              { q: 'Can I buy Insider today?', a: 'No. There is no membership checkout. Explorer is the live plan.' },
-              { q: 'Does a membership change companion pay?', a: 'When paid plans exist, they will not change the 15% companion commission or 5% customer fee. Credits would reduce what you pay, not what companions receive.' },
-              { q: 'Is there a free trial?', a: 'No. A 14-day Insider trial was mock copy. Explorer is already free.' },
+              { q: 'Do I need Plus to chat?', a: 'No. Send a structured request for free. A $10 refundable deposit on that booking opens masked chat. We do not sell phone numbers or charge $99 to message.' },
+              { q: 'Can I buy Plus today?', a: 'No. There is no membership checkout. Browse, book, and safety tools use the free path.' },
+              { q: 'Does Plus change companion pay?', a: 'When it exists, Plus must not change the 15% companion commission. A sketched perk is waiving the customer 5% fee — not taking more from companions, and not gating safety.' },
             ].map(({ q, a }) => (
               <details key={q} className="group rounded-[18px] border border-[#dfd2c9] bg-[#fbf7f1]">
                 <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 text-sm font-bold text-[#48213d] marker:content-none">
@@ -7146,8 +7369,8 @@ function CustomerSettings() {
               </button>
             </div>
           <div className="rounded-[18px] border border-[#f0d5d5] bg-[#fdf6f6] p-5">
-            <p className="text-sm font-bold text-[#48213d]">Delete this account</p>
-            <p className="mt-1 text-xs leading-5 text-[#806c76]">Open bookings are refunded and cancelled. Sessions end immediately. This cannot be undone.</p>
+            <p className="text-sm font-bold text-[#48213d]">Delete my account and data</p>
+            <p className="mt-1 text-xs leading-5 text-[#806c76]">Cancels open bookings, ends sessions, and removes account data we can delete. Safety audit rows needed for an active investigation may be retained. This cannot be undone.</p>
             {deleteError && <p className="mt-2 text-xs text-[#a64742]">{deleteError}</p>}
             <button type="button" disabled={deleting}
               onClick={async () => {
@@ -7167,7 +7390,7 @@ function CustomerSettings() {
               }}
               className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dfd2c9] px-4 text-xs font-bold text-[#725e69] transition hover:border-[#a64742] hover:text-[#a64742] disabled:opacity-50"
               data-testid="button-request-delete">
-              {deleting ? 'Deleting…' : 'Delete my account'}
+              {deleting ? 'Deleting…' : 'Delete my account and data'}
             </button>
           </div>
           </div>
@@ -7761,12 +7984,20 @@ function CompanionEarnings() {
 
 const PRICING_FAQS = [
   {
+    q: 'Do I need a membership to chat?',
+    a: 'No. Signup and browsing are free. A structured request is free. Masked chat unlocks after a $10 deposit on that booking — credited to the total. OnlyFavors Plus ($99/year) is not for sale and will not gate chat, privacy, or emergency tools.',
+  },
+  {
     q: 'When is the 5% fee charged?',
-    a: 'The safety & service fee is added on top of the companion\'s hourly rate at checkout. You see the exact total — companion rate + fee — before any payment is taken. No surprises at the end.',
+    a: 'The safety & service fee is added on top of the companion\'s hourly rate at checkout. On a $100 favor you pay $105. You see the exact total before any payment is taken. Amounts are calculated on the server.',
+  },
+  {
+    q: 'Is the 20% what OnlyFavors keeps?',
+    a: 'It is gross. On a $100 favor the platform share is $20 before card processing (around 2.9% + 30¢ in the US) and Stripe Connect payout fees. Companions still receive $85 of that $100 subtotal.',
   },
   {
     q: 'Is the $10 deposit refundable?',
-    a: 'The deposit is meant to be credited toward your booking total after your companion accepts. If they decline, email hello@onlyfavors.com — Stripe refunds are not automatic from the decline action.',
+    a: 'The deposit is credited toward your booking total after your companion accepts. If they decline, email hello@onlyfavors.com — Stripe refunds are not automatic from the decline action.',
   },
   {
     q: 'How quickly do companions get paid?',
@@ -7806,8 +8037,8 @@ function PricingFaq({ q, a }: { q: string; a: string }) {
 
 function Pricing() {
   // Worked example state
-  const [exRate, setExRate] = useState(65);
-  const [exHours, setExHours] = useState(3);
+  const [exRate, setExRate] = useState(50);
+  const [exHours, setExHours] = useState(2);
   const subtotal = exRate * exHours;
   const customerFee = Math.round(subtotal * 0.05 * 100) / 100;
   const customerTotal = subtotal + customerFee;
@@ -7825,7 +8056,7 @@ function Pricing() {
           <div className="mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-24">
             <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#c695ae]">Transparent by design</p>
             <h1 className="font-serif text-[60px] leading-[.92] text-[#f9efe5] md:text-[80px]">Simple, honest<br /><em>pricing.</em></h1>
-            <p className="mt-6 max-w-lg text-[17px] leading-7 text-[#d9c4cf]">No hidden markups. Every fee is shown before you pay, calculated server-side so the number you see is the number you pay.</p>
+            <p className="mt-6 max-w-lg text-[17px] leading-7 text-[#d9c4cf]">20% gross on a completed booking — 5% from the customer, 15% from the companion. Signup, browse, and safety tools are free. Chat is a $10 deposit on a real booking, not a $99 membership.</p>
             <div className="mt-8 flex items-center gap-3">
               <p className="flex items-center gap-2 rounded-full border border-[#5e3458] bg-[#4a2842] px-4 py-2 text-xs text-[#d9c4cf]">
                 <LockKeyhole className="h-3.5 w-3.5 text-[#c695ae]" />All amounts are calculated on our server — your browser never sets prices.
@@ -7906,7 +8137,8 @@ function Pricing() {
             <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
               <div>
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">See it in action</p>
-                <h2 className="mt-2 font-serif text-4xl text-[#48213d]">A real example.</h2>
+                <h2 className="mt-2 font-serif text-4xl text-[#48213d]">A $100 favor.</h2>
+                <p className="mt-2 max-w-md text-sm leading-6 text-[#725e69]">Customer pays $105. Companion receives $85. OnlyFavors earns $20 gross — before Stripe (~2.9% + 30¢) and Connect payout fees.</p>
               </div>
               {/* Sliders */}
               <div className="flex flex-wrap gap-6">
@@ -7973,7 +8205,7 @@ function Pricing() {
 
             <p className="mt-5 flex items-center gap-2 text-[11px] text-[#9b858e]">
               <LockKeyhole className="h-3.5 w-3.5" />
-              This is a client-side illustration. Actual booking amounts are calculated and locked server-side at time of booking.
+              Illustration of the same math the server locks at booking. The 20% is gross revenue. Card processing and Connect payouts come out of that, not on top of the customer total.
             </p>
           </div>
         </section>
@@ -7983,16 +8215,16 @@ function Pricing() {
           <div className="grid gap-10 md:grid-cols-[1fr_1fr] md:items-center">
             <div>
               <p className="font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[#9d557e]">Before you commit</p>
-              <h2 className="mt-3 font-serif text-4xl leading-none text-[#48213d]">The $10 deposit<br />unlocks the conversation.</h2>
-              <p className="mt-4 text-sm leading-7 text-[#725e69]">Not ready to book a full session? A refundable $10 deposit opens a private, masked chat thread with your companion — no phone numbers, no emails, no exposure. The deposit is credited in full when you complete payment after the companion accepts.</p>
-              <p className="mt-4 text-sm leading-7 text-[#725e69]">If the companion declines, you get the full $10 back. No questions, no hold.</p>
+              <h2 className="mt-3 font-serif text-4xl leading-none text-[#48213d]">Chat follows a booking,<br />not a membership.</h2>
+              <p className="mt-4 text-sm leading-7 text-[#725e69]">Send a structured request for free — activity, SafeSpot, time, attire, access. A refundable $10 deposit opens a private, masked thread. Phone numbers stay hidden. The $10 is credited toward the final total. We do not charge $99 to message, and we do not sell contact details.</p>
+              <p className="mt-4 text-sm leading-7 text-[#725e69]">If the companion declines, the deposit is refundable. Trust Circle and Help me leave stay free.</p>
             </div>
             <div className="space-y-3">
               {[
-                { step: '01', title: 'Pay $10 deposit', desc: 'Refundable. Charged only to unlock the chat — not a booking commitment.' },
-                { step: '02', title: 'Chat privately', desc: 'A masked thread opens. Phone numbers and emails are stripped automatically.' },
-                { step: '03', title: 'Companion accepts', desc: 'Pay the remaining balance (deposit credited). Booking is confirmed.' },
-                { step: '04', title: 'Companion declines', desc: 'Full $10 returned to your original payment method within 5–10 days.' },
+                { step: '01', title: 'Structured request — free', desc: 'Activity, public venue, time, attire, and access. No open chat yet.' },
+                { step: '02', title: 'Pay $10 deposit', desc: 'Refundable. Credited to the booking. Unlocks masked chat.' },
+                { step: '03', title: 'Companion accepts or declines', desc: 'Accept confirms the Boundary Receipt. Decline returns the deposit path.' },
+                { step: '04', title: 'Remainder authorized', desc: 'Captured at checkout. Companion receives 85% via Stripe Connect.' },
               ].map(({ step, title, desc }) => (
                 <div key={step} className="flex items-start gap-4 rounded-[16px] border border-[#dfd2c9] bg-[#fbf7f1] px-5 py-4">
                   <span className="mt-0.5 font-mono text-[10px] text-[#a47e8f]">{step}</span>
@@ -8029,9 +8261,8 @@ function Pricing() {
                     ['Trust Circle check-ins', '✓ Venue email if configured', '✗ DIY'],
                     ['Companion commission', '15% — disclosed upfront', 'Up to 30% + hidden fees'],
                     ['Customer service fee', '5% flat, shown before pay', 'Variable, often hidden'],
-                    ['$10 refundable deposit', '✓ Chat before committing', '✗ Full charge upfront'],
-                    ['Trust team reports', '✓ In-app + email', '~ Varies'],
-                    ['Masked private chat', '✓ No personal info exposed', '✗ Direct contact exposed'],
+                    ['$10 refundable deposit', '✓ Chat on a real booking', '✗ Pay $99 to message'],
+                    ['Masked private chat', '✓ No phone numbers sold', '✗ Direct contact exposed'],
                   ].map(([feature, us, them]) => (
                     <tr key={feature} className="group hover:bg-[#fbf7f1]">
                       <td className="py-3 pr-6 text-[#654c5f]">{feature}</td>
@@ -11244,7 +11475,7 @@ function InfoTile({ icon: Icon, title, body }: { icon: typeof MapPin; title: str
 }
 
 const legalCopy: Record<string, { eyebrow: string; title: string; intro: string; sections: Array<[string, string]> }> = {
-  privacy: { eyebrow: 'Privacy policy', title: 'Your details are not the product.', intro: 'OnlyFavors is built around a simple promise: share only what is useful for a safe, respectful booking.', sections: [['What we collect', 'We collect the account, booking, and application details needed to operate the marketplace. Approximate service areas are shown publicly; exact addresses are not.'], ['How we use it', 'We use information to verify companions, facilitate requests, provide support, and keep the community safe. We do not sell personal information.'], ['Your choices', 'You can ask us to access, correct, or delete eligible account information by contacting support through your signed-in workspace.']] },
+  privacy: { eyebrow: 'Privacy policy', title: 'Your details are not the product.', intro: 'OnlyFavors protects your identity before the meeting, your safety during it, and your privacy afterward.', sections: [['What other people see', 'Public profiles show a first name and an approximate New Orleans neighborhood. Phone numbers, emails, and exact addresses stay hidden. Browsing is not a social feed.'], ['During a booking', 'Masked chat unlocks after a $10 deposit. Location is collected only while a favor is active, then unread and deleted after 24 hours. Notifications say “You have a booking update” — never an address or “they’re here.” A Boundary Receipt records whether photos are allowed.'], ['Afterward', 'Temporary location data expires. You can download eligible account data or use Delete my account and data in Settings. Safety reports go to staff only; the reported person is not notified. We never store card numbers — Stripe does.']] },
   terms: { eyebrow: 'Terms & community', title: 'A shared standard for good company.', intro: 'OnlyFavors is a platonic marketplace for adults. These guidelines keep the experience human, clear, and safe.', sections: [['Platonic by design', 'OnlyFavors does not facilitate dating, sexual services, escorting, or transactional intimacy. Every booking must stay within the agreed activity and boundaries.'], ['Treat people like people', 'No harassment, discrimination, coercion, threats, doxxing, or pressure. Respect a no, a pause, a cancellation, and a boundary the first time.'], ['Accountability', 'We may review activity, pause bookings, or remove accounts when community safety requires it. Contact the trust team when something does not feel right.']] },
   cancellation: { eyebrow: 'Cancellation policy', title: 'Plans can change. Clarity helps.', intro: 'A good cancellation policy makes room for real life while respecting the time a companion set aside.', sections: [['Before confirmation', 'Booking requests are not confirmed until the companion accepts. You may withdraw a pending request without a cancellation charge.'], ['After confirmation', 'Cancellation terms and any applicable amount are shown before a confirmed booking is finalized. Give as much notice as possible.'], ['When safety is involved', 'If a situation feels unsafe, prioritize getting to a safe place and contacting local emergency services. Reach out to trust support as soon as you can.']] },
 };

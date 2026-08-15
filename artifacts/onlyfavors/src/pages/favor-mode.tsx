@@ -192,7 +192,7 @@ export default function FavorMode() {
   const progress = Math.min(elapsed / (totalMinutes * 60), 1);
   const remainingMin = Math.max(0, totalMinutes - Math.floor(elapsed / 60));
 
-  const postCheckIn = async (kind: 'arrival' | 'ok' | 'checkout') => {
+  const postCheckIn = async (kind: 'arrival' | 'midpoint' | 'checkout') => {
     if (!id || !live) return;
     await fetch(`/api/bookings/${id}/checkin`, {
       method: 'POST',
@@ -252,7 +252,10 @@ export default function FavorMode() {
       <header className="sticky top-0 z-30 border-b border-[#4a2040] bg-[#1f0c1b]/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
           <div className="flex items-center gap-3">
-            <span className="grid h-9 w-9 place-items-center rounded-[13px] bg-[#7f2e62] text-sm font-bold text-[#fff5eb]">of</span>
+            <span className="relative grid h-9 w-9 place-items-center rounded-full border-2 border-[#c695ae] font-serif text-[17px] leading-none text-[#f9efe5]" aria-hidden>
+              O
+              <ShieldCheck className="absolute h-2.5 w-2.5 text-[#c695ae]" />
+            </span>
             <div>
               <p className="text-[10px] font-mono uppercase tracking-widest text-[#c695ae]">Favor in progress</p>
               <p className="text-sm font-bold">{live.companionName}</p>
@@ -358,7 +361,7 @@ export default function FavorMode() {
           <button
             onClick={async () => {
               if (safeSignalSent) return;
-              try { await postCheckIn('ok'); } catch {}
+              try { await postCheckIn('midpoint'); } catch {}
               setSafeSignalSent(true);
             }}
             className={`rounded-[20px] p-5 text-left transition-all ${
@@ -373,10 +376,10 @@ export default function FavorMode() {
               : <HeartHandshake className="h-6 w-6 text-[#9d557e]" />
             }
             <p className="mt-8 text-sm font-bold text-[#f9efe5]">
-              {safeSignalSent ? 'Signal sent ✓' : "I'm safe"}
+              {safeSignalSent ? 'Midpoint recorded ✓' : 'Midpoint check-in'}
             </p>
             <p className="mt-0.5 text-[10px] text-[#d9c4cf]">
-              {safeSignalSent ? 'Check-in saved' : 'Record an all-clear'}
+              {safeSignalSent ? 'Saved on this booking' : 'Quiet all-clear during the favor'}
             </p>
           </button>
         </div>
@@ -466,7 +469,7 @@ export default function FavorMode() {
           >
             <CheckCircle2 className="h-5 w-5 text-[#9d557e]" />
             <p className="mt-7 text-sm font-bold text-[#f9efe5]">End booking</p>
-            <p className="mt-0.5 text-[10px] text-[#d9c4cf]">Mutual checkout</p>
+            <p className="mt-0.5 text-[10px] text-[#d9c4cf]">Departure check-in</p>
           </button>
         </div>
 

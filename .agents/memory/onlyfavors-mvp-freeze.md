@@ -25,11 +25,13 @@ Stack stays Vite + React 19 + wouter + Express. Do not rewrite to Next.js.
 | Companion identity | Application + **admin-reviewed ID** (status: `unsubmitted` / `pending` / `verified` / `rejected`). Third-party background check is **not** in the pilot. `approved` is what puts them in Explore. |
 | Prohibited | Dating, sexual/escort services, minors, private residences as the meeting start, off-platform payment or contact, harassment, discrimination, coercion. First meeting starts at an approved **SafeSpot**. |
 
-Pricing stays server-only: **5% customer fee**, **15% companion commission**, **$10 deposit** credited to the final total.
+Pricing stays server-only in `pricing.ts`: **5% customer fee**, **15% companion commission** (20% gross of subtotal), **$10 deposit** credited to the final total. Signup, browse, companion apply, Trust Circle, Boundary Receipt, and emergency tools are **free**. Chat unlocks after the **$10 deposit** on a real booking — never a $99 membership. Optional Plus ($99/year) is deferred and must not gate privacy or safety. The 20% is **gross** before Stripe (~2.9% + 30¢ and Connect payout fees).
 
 ## In scope — customer
 
-- Guest browse by **city or neighborhood** (New Orleans).
+- Guest browse by **city or neighborhood** (New Orleans). Homepage intent form shows **up to three** approved companions with real availability windows and a server quote. Empty stays empty — never invent three matches.
+- Preserve the guest plan after email OTP (`sessionStorage` + `/book` and `/explore` query). Signup is required to send a request, not to see the preview.
+- Save companions in the browser without an account (localStorage). Server save after sign-in.
 - Nearby **available** approved companions (availability windows, not invented “available today”).
 - Filters: **date, time, activity, price, vibe** (vibe = activities + interview answers already on the profile).
 - **Approved** companion profiles (human review). Do not claim government-ID product copy until identity status is real.
@@ -72,9 +74,11 @@ Pricing stays server-only: **5% customer fee**, **15% companion commission**, **
 - Double-booking prevention (overlap of confirmed/authorized bookings for the same companion).
 - Time zones: store booking start as **city-local New Orleans (`America/Chicago`)** and display in that zone.
 - Booking-state history (append-only status events, not just overwrite `status`).
-- Neutral, privacy-safe notifications (no addresses, no exact pins, no “she’s here”).
+- Neutral, privacy-safe notifications. In-app copy is **“You have a booking update”** — no addresses, no exact pins, no “she’s here.”
+- Public profiles: **first name + approximate area only.** Phone, email, and exact address never appear on Explore.
 - Data download (bookings + prefs; not messages/Trust Circle unless those tables are included honestly).
-- Account deletion (real server path, not mailto-only theater).
+- Account deletion (real server path, not mailto-only theater). Settings label: **Delete my account and data**.
+- Open safety report on a booking **holds payout** automatically. The reported person is **not** notified.
 - Rate limiting + bot protection (OTP already limited; extend to booking/report).
 - Session management (existing sessions). Device list can wait if sessions can be revoked.
 - Location expiry + deletion (24h).
@@ -83,7 +87,7 @@ Pricing stays server-only: **5% customer fee**, **15% companion commission**, **
 
 ## Deferred until after the first working pilot
 
-AI matching, paid memberships/subscriptions (Plus), gift cards, loyalty, referrals-with-credits, recurring bookings, venue partnership programs (staff training, discounts, emergency desks), social/community feeds, kudos, tips, compare-companions, city waitlists, careers ATS, press kits, newsletters, 14-day trials, invented SLAs, voice intros, Duo Favors, reliability scores, disappearing media, photo watermarks, concierge matching, selling “best match.”
+AI matching, paid memberships/subscriptions (Plus), gift cards, loyalty, referrals-with-credits, recurring bookings, venue partnership programs (staff training, discounts, emergency desks), social/community feeds, kudos, tips, compare-companions, city waitlists, careers ATS, press kits, newsletters, 14-day trials, invented SLAs, voice intros, Duo Favors, reliability scores, disappearing media, photo watermarks, concierge matching, selling “best match,” passkeys/2FA, invisible browsing / private-profile modes, new-device confirmation emails, compatibility AI blurbs, Trust Passport metrics (repeat-booking %, safety training), Apple/Google signup, “First Favor Guarantee” as a replacement companion (refunds follow the cancel table).
 
 SafeSpot in the pilot is a **listed public venue + QR/app check-in**. Do not claim venue staff awareness or partnerships until those exist.
 
