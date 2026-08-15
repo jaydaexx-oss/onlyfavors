@@ -62,7 +62,24 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// Restrict CORS to the app's own domain(s); fall back to open only in dev
+app.use(cors({
+  origin: (origin, callback) => {
+    if (process.env.NODE_ENV === "development" || !origin) {
+      callback(null, true); return;
+    }
+    const allowed = (process.env["REPLIT_DOMAINS"] ?? "")
+      .split(",")
+      .map((d) => `https://${d.trim()}`)
+      .filter(Boolean);
+    if (allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

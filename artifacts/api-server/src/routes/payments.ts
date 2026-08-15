@@ -128,6 +128,17 @@ router.post("/connect/onboard", async (req, res) => {
 router.get("/connect/status/:companionId", async (req, res) => {
   const { companionId } = req.params;
 
+  // Auth + ownership: only the companion themselves may check their payout status
+  const sessionUserId = (req as any).user?.id as string | undefined;
+  if (!sessionUserId) {
+    res.status(401).json({ error: "Authentication required to view payout status" });
+    return;
+  }
+  if (sessionUserId !== companionId) {
+    res.status(403).json({ error: "You may only check your own payout status" });
+    return;
+  }
+
   const [record] = await db
     .select()
     .from(companionStripeAccountsTable)

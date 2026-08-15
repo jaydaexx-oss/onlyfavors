@@ -57,7 +57,9 @@ const devCompanionStripeAccounts = new Map<string, string>(); // companionId →
 // ---------------------------------------------------------------------------
 
 router.get("/companions", async (req, res) => {
-  const query = ListCompanionsQueryParams.parse(req.query);
+  let query: ReturnType<typeof ListCompanionsQueryParams.parse>;
+  try { query = ListCompanionsQueryParams.parse(req.query); }
+  catch { res.status(400).json({ error: "Invalid query parameters" }); return; }
   try {
     const rows = await getApprovedCompanions();
     const companions = rows
@@ -407,7 +409,9 @@ const DEV_COMPANIONS: Record<string, object> = {
 };
 
 router.get("/companions/:id", async (req, res) => {
-  const { id } = GetCompanionParams.parse(req.params);
+  let id: string;
+  try { ({ id } = GetCompanionParams.parse(req.params)); }
+  catch { res.status(400).json({ error: "Invalid companion ID" }); return; }
   try {
     const [row] = await getApprovedCompanion(id);
     if (!row) {
@@ -434,8 +438,9 @@ router.get("/companions/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.get("/bookings/quote", async (req, res) => {
-  const { companionId, durationHours } =
-    GetBookingQuoteQueryParams.parse(req.query);
+  let companionId: string, durationHours: number;
+  try { ({ companionId, durationHours } = GetBookingQuoteQueryParams.parse(req.query)); }
+  catch { res.status(400).json({ error: "Invalid quote parameters" }); return; }
   try {
     const [row] = await getApprovedCompanion(companionId);
     if (!row) {
@@ -463,7 +468,9 @@ router.get("/bookings/quote", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/bookings", async (req, res) => {
-  const body = CreateBookingIntentBody.parse(req.body);
+  let body: ReturnType<typeof CreateBookingIntentBody.parse>;
+  try { body = CreateBookingIntentBody.parse(req.body); }
+  catch (e: any) { res.status(400).json({ error: "Invalid booking request", details: e?.flatten?.() }); return; }
 
   // Auth — falls back to a preview ID in development so the flow can be tested
   // before Task #1 (auth) lands. Never permitted in production.
@@ -1019,6 +1026,11 @@ const checkedInBookings = new Set<string>();
 
 router.post("/bookings/:id/extend", async (req, res) => {
   const { id } = req.params;
+  // Auth — caller must own this booking
+  const callerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!callerId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { extraMinutes } = req.body ?? {};
   if (!extraMinutes || typeof extraMinutes !== "number" || extraMinutes < 15) {
     res.status(400).json({ error: "extraMinutes must be at least 15" }); return;
@@ -1105,6 +1117,11 @@ router.post("/bookings/:id/complete", async (req, res) => {
 
 router.post("/bookings/:id/checkin", async (req, res) => {
   const { id } = req.params;
+  // Auth — customer or companion on the booking must initiate check-in
+  const callerId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!callerId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { venue } = req.body ?? {};
 
   // Dev fallback: accept any booking ID — just record the check-in time
@@ -1986,7 +2003,15 @@ const DEV_COMPANION_APPLICATIONS = [
   { id: "app-003", displayName: "Sam T.", city: "Chicago", activities: ["Board games", "Book clubs", "City tours"], languages: ["English"], hourlyRate: 55, applicationDate: "2026-08-12", bio: "Professional librarian who knows every good spot in the city. Quiet energy, great listener.", status: "pending" },
 ];
 
-router.get("/admin/overview", async (req, res) => {
+// ─── Admin middleware — dev only until Task #1 (auth) lands ─────────────────
+// In production this MUST be replaced with a real admin role check. Until then
+// the guard prevents any production caller from reaching these routes.
+function requireAdmin(req: any, res: any, next: () => void) {
+  if (process.env.NODE_ENV === "development") { next(); return; }
+  res.status(401).json({ error: "Admin access requires authentication" });
+}
+
+router.get("/admin/overview", requireAdmin, async (req, res) => {
   try {
     let activeBookings = 0;
     try {
@@ -2029,7 +2054,7 @@ router.post("/companion/applications", (req, res) => {
   res.status(201).json({ id: newApp.id, status: "pending" });
 });
 
-router.get("/admin/companions/pending", (_req, res) => {
+router.get("/admin/companions/pending", requireAdmin, (_req, res) => {
   if (process.env.NODE_ENV === "development") {
     res.json(DEV_COMPANION_APPLICATIONS);
     return;
@@ -2037,19 +2062,19 @@ router.get("/admin/companions/pending", (_req, res) => {
   res.json([]);
 });
 
-router.post("/admin/companions/:id/approve", (req, res) => {
+router.post("/admin/companions/:id/approve", requireAdmin, (req, res) => {
   const { id } = req.params;
   req.log.info({ id }, "Companion approved");
   res.json({ id, status: "approved" });
 });
 
-router.post("/admin/companions/:id/reject", (req, res) => {
+router.post("/admin/companions/:id/reject", requireAdmin, (req, res) => {
   const { id } = req.params;
   req.log.info({ id }, "Companion rejected");
   res.json({ id, status: "rejected" });
 });
 
-router.get("/admin/bookings/recent", async (req, res) => {
+router.get("/admin/bookings/recent", requireAdmin, async (req, res) => {
   try {
     const rows = await db
       .select()
@@ -2511,7 +2536,7 @@ router.get('/announcement', (_req, res) => {
   res.json(devAnnouncement);
 });
 
-router.post('/admin/announcement', (req, res) => {
+router.post('/admin/announcement', requireAdmin, (req, res) => {
   const { message, kind, active } = req.body ?? {};
   devAnnouncement = {
     message: String(message ?? '').slice(0, 200),
