@@ -1,9 +1,11 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./lib/webhookHandlers";
+import { authMiddleware } from "./middlewares/authMiddleware";
 
 const app: Express = express();
 
@@ -62,26 +64,12 @@ app.use(
     },
   }),
 );
-// Restrict CORS to the app's own domain(s); fall back to open only in dev
-app.use(cors({
-  origin: (origin, callback) => {
-    if (process.env.NODE_ENV === "development" || !origin) {
-      callback(null, true); return;
-    }
-    const allowed = (process.env["REPLIT_DOMAINS"] ?? "")
-      .split(",")
-      .map((d) => `https://${d.trim()}`)
-      .filter(Boolean);
-    if (allowed.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-}));
+// Auth requires credentials: true so session cookies cross the Replit proxy
+app.use(cors({ credentials: true, origin: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(authMiddleware);
 
 app.use("/api", router);
 

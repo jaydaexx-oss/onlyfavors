@@ -1,3 +1,4 @@
+import { useAuth } from '@workspace/replit-auth-web';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadStripe, type Stripe as StripeType } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
@@ -41,6 +42,10 @@ function Brand({ dark = false }: { dark?: boolean }) {
 
 function Header() {
   const [open, setOpen] = useState(false);
+  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+
+  const dashboardHref = isAuthenticated ? '/dashboard/customer' : '/login';
+
   return <header className="sticky top-0 z-40 border-b border-[#ddcfc6] bg-[#f8f1e9]/90 backdrop-blur-md">
     <div className="mx-auto flex h-[74px] max-w-7xl items-center justify-between px-5 lg:px-8">
       <Brand />
@@ -59,7 +64,23 @@ function Header() {
         </button>
         <NotificationBell role="customer" />
         <SavedNavIcon />
-        <Link href="/login" className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-login"><LogIn className="h-4 w-4" />Sign in</Link>
+        {isLoading ? (
+          <div className="h-8 w-20 animate-pulse rounded-full bg-[#eee2d9]" />
+        ) : isAuthenticated ? (
+          <>
+            <Link href={dashboardHref} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="link-dashboard">
+              <div className="grid h-6 w-6 place-items-center rounded-full bg-[#ead0dd] font-serif text-xs text-[#7f2e62]">
+                {user?.name?.[0]?.toUpperCase() ?? <User className="h-3.5 w-3.5" />}
+              </div>
+              {user?.name?.split(' ')[0] ?? 'Account'}
+            </Link>
+            <button type="button" onClick={logout} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#9b858e] transition hover:bg-[#eee2d9] hover:text-[#7f2e62]" data-testid="button-logout">Sign out</button>
+          </>
+        ) : (
+          <button type="button" onClick={login} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-semibold text-[#654c5f] transition hover:bg-[#eee2d9]" data-testid="button-login">
+            <LogIn className="h-4 w-4" />Sign in
+          </button>
+        )}
         <Link href="/messages" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-[#654c5f] transition hover:bg-[#eee2d9] hover:text-[#7f2e62]" data-testid="link-nav-messages" aria-label="Messages">
           <MessageCircle className="h-5 w-5" />
         </Link>
@@ -78,7 +99,14 @@ function Header() {
         <Link href="/safespots" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-safespots">SafeSpot Network</Link>
         <Link href="/companion/apply" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-apply">Become a companion</Link>
         <div className="my-1 h-px bg-[#ddcfc6]" />
-        <Link href="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-login">Sign in</Link>
+        {isAuthenticated ? (
+          <>
+            <Link href={dashboardHref} onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-link-dashboard">My account</Link>
+            <button type="button" onClick={logout} className="rounded-xl px-3 py-3 text-left text-sm font-semibold text-[#9b858e] hover:bg-[#eee2d9]" data-testid="mobile-button-logout">Sign out</button>
+          </>
+        ) : (
+          <button type="button" onClick={login} className="rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-[#eee2d9]" data-testid="mobile-button-login">Sign in</button>
+        )}
       </div>
     </div>}
   </header>;
@@ -11256,9 +11284,47 @@ function Apply() {
 }
 
 function Login() {
-  const [email, setEmail] = useState(''); const [sent, setSent] = useState(false); const [code, setCode] = useState('');
+  const { isAuthenticated, isLoading, login } = useAuth();
   const [, navigate] = useLocation();
-  return <Shell bare><main className="grid min-h-[100dvh] lg:grid-cols-[.8fr_1.2fr]"><div className="hidden bg-[#3d2038] p-10 text-[#f9efe5] lg:flex lg:flex-col lg:justify-between"><Brand dark /><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your private front door</p><h1 className="mt-5 max-w-md font-serif text-6xl leading-[.92]">Good company<br /><em>starts here.</em></h1><p className="mt-6 max-w-sm text-sm leading-7 text-[#d9c4cf]">Sign in with an email code. No passwords to remember, no social profile to connect.</p></div><p className="text-xs text-[#b795a7]">OnlyFavors · Private by design.</p></div><div className="flex flex-col p-5 md:p-10"><div className="flex justify-between lg:justify-end"><div className="lg:hidden"><Brand /></div><Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-login-home"><ArrowLeft className="h-4 w-4" />Back home</Link></div><div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center"><div className="mb-8 lg:hidden"><h1 className="font-serif text-5xl leading-none text-[#48213d]">Welcome back.</h1><p className="mt-3 text-sm text-[#725e69]">Your private front door to good company.</p></div>{!sent ? <form onSubmit={(e) => { e.preventDefault(); setSent(true); }}><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Email sign in</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">A code, not a password.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We will send a one-time code to your email. It expires shortly and is never used for marketing.</p><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#654c5f]">Email address</span><input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-sm outline-none focus:border-[#7f2e62]" data-testid="input-login-email" /></label><Button type="submit" className="mt-5 w-full" testId="button-send-login-code">Send secure code <ArrowRight className="h-4 w-4" /></Button></form> : <form onSubmit={(e) => { e.preventDefault(); if (code.length >= 6) navigate('/dashboard/customer'); }}><button type="button" onClick={() => setSent(false)} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="button-change-login-email"><ArrowLeft className="h-4 w-4" />Change email</button><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#9d557e]">Check your inbox</p><h2 className="mt-3 font-serif text-4xl text-[#48213d]">Enter your code.</h2><p className="mt-3 text-sm leading-6 text-[#725e69]">We sent a six-character code to <strong>{email}</strong>.</p><input required inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} className="mt-8 h-14 w-full rounded-xl border border-[#cbbab5] bg-[#fbf7f1] px-4 text-center font-mono text-xl tracking-[.5em] outline-none focus:border-[#7f2e62]" placeholder="000000" data-testid="input-login-code" /><Button type="submit" disabled={code.length < 6} className="mt-5 w-full" testId="button-verify-login-code">Verify and continue <Check className="h-4 w-4" /></Button></form>}<p className="mt-8 text-center text-[11px] leading-5 text-[#9b858e]">By continuing, you agree to our <Link href="/terms" className="font-bold text-[#7f2e62]" data-testid="link-login-terms">community guidelines</Link> and <Link href="/privacy" className="font-bold text-[#7f2e62]" data-testid="link-login-privacy">privacy policy</Link>.</p></div></div></main></Shell>;
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate('/dashboard/customer');
+    } else if (!isLoading) {
+      login();
+    }
+  }, [isLoading, isAuthenticated]);
+
+  return (
+    <Shell bare>
+      <main className="grid min-h-[100dvh] lg:grid-cols-[.8fr_1.2fr]">
+        <div className="hidden bg-[#3d2038] p-10 text-[#f9efe5] lg:flex lg:flex-col lg:justify-between">
+          <Brand dark />
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Your private front door</p>
+            <h1 className="mt-5 max-w-md font-serif text-6xl leading-[.92]">Good company<br /><em>starts here.</em></h1>
+            <p className="mt-6 max-w-sm text-sm leading-7 text-[#d9c4cf]">Sign in securely. No passwords to remember.</p>
+          </div>
+          <p className="text-xs text-[#b795a7]">OnlyFavors · Private by design.</p>
+        </div>
+        <div className="flex flex-col items-center justify-center p-5 md:p-10">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+            <div className="grid h-14 w-14 place-items-center rounded-[18px] bg-[#ead0dd] text-[#7f2e62]">
+              <LockKeyhole className="h-7 w-7" />
+            </div>
+            <h1 className="font-serif text-3xl text-[#48213d]">Taking you to sign in…</h1>
+            <p className="text-sm text-[#725e69]">You'll be redirected in a moment.</p>
+            <div className="mt-2 h-1.5 w-40 overflow-hidden rounded-full bg-[#ead0dd]">
+              <div className="h-full animate-pulse rounded-full bg-[#7f2e62]" style={{ width: '60%' }} />
+            </div>
+            <Link href="/" className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#806076]" data-testid="link-login-home">
+              <ArrowLeft className="h-3.5 w-3.5" />Back home
+            </Link>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
 }
 
 // ---------------------------------------------------------------------------
