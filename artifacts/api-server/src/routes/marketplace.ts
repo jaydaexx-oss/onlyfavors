@@ -2678,6 +2678,36 @@ router.get('/bookings/search', async (req, res) => {
   }
 });
 
+// ─── Trust Circle contacts ───────────────────────────────────────────────────
+// In-memory store keyed by userId; replace with DB rows when auth lands.
+const trustCircleStore = new Map<string, Array<{ id: string; name: string; phone: string; relation: string }>>();
+
+router.get("/trust-circle", (req, res) => {
+  const userId = (req as any).user?.id ?? (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  res.json({ contacts: trustCircleStore.get(userId) ?? [] });
+});
+
+router.post("/trust-circle", (req, res) => {
+  const userId = (req as any).user?.id ?? (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const { name, phone, relation } = req.body as { name: string; phone: string; relation: string };
+  if (!name || !phone || !relation) { res.status(400).json({ error: "name, phone and relation are required" }); return; }
+  const current = trustCircleStore.get(userId) ?? [];
+  if (current.length >= 3) { res.status(409).json({ error: "Trust Circle is limited to 3 contacts" }); return; }
+  const contact = { id: crypto.randomUUID(), name: String(name).slice(0, 60), phone: String(phone).slice(0, 20), relation: String(relation).slice(0, 40) };
+  trustCircleStore.set(userId, [...current, contact]);
+  res.status(201).json({ contact });
+});
+
+router.delete("/trust-circle/:id", (req, res) => {
+  const userId = (req as any).user?.id ?? (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const current = trustCircleStore.get(userId) ?? [];
+  trustCircleStore.set(userId, current.filter((c) => c.id !== req.params.id));
+  res.json({ ok: true });
+});
+
 // ─── Customer preferences ────────────────────────────────────────────────────
 const customerPrefsStore = new Map<string, Record<string, unknown>>();
 

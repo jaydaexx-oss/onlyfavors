@@ -3024,33 +3024,70 @@ function CompanionInbox() {
 type TrustContact = { id: string; name: string; phone: string; relation: string };
 
 function useTrustCircle() {
-  const [contacts, setContacts] = useState<TrustContact[]>(() => {
-    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
-    catch { return []; }
+  const qc = useQueryClient();
+  const KEY = ['trust-circle'];
+
+  const { data } = useQuery<TrustContact[]>({
+    queryKey: KEY,
+    queryFn: async () => {
+      const r = await fetch('/api/trust-circle');
+      if (!r.ok) throw new Error('failed');
+      const json = await r.json();
+      // Keep localStorage in sync so TrustCircleBookingPanel can read it offline
+      try { localStorage.setItem('of_trust_circle', JSON.stringify(json.contacts)); } catch {}
+      return json.contacts as TrustContact[];
+    },
+    initialData: () => {
+      try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); } catch { return []; }
+    },
+    staleTime: 0,
   });
-  const add = useCallback((c: Omit<TrustContact, 'id'>) => {
-    setContacts((prev) => {
-      const next = [...prev, { ...c, id: crypto.randomUUID() }].slice(0, 3);
-      try { localStorage.setItem('of_trust_circle', JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, []);
-  const remove = useCallback((id: string) => {
-    setContacts((prev) => {
-      const next = prev.filter((c) => c.id !== id);
-      try { localStorage.setItem('of_trust_circle', JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, []);
-  return { contacts, add, remove };
+
+  const contacts: TrustContact[] = data ?? [];
+
+  const addMutation = useMutation({
+    mutationFn: async (c: Omit<TrustContact, 'id'>) => {
+      const r = await fetch('/api/trust-circle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(c),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? 'Failed to add contact');
+      return (await r.json()).contact as TrustContact;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/trust-circle/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('Failed to remove contact');
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); },
+  });
+
+  const add = useCallback((c: Omit<TrustContact, 'id'>) => { addMutation.mutate(c); }, [addMutation]);
+  const remove = useCallback((id: string) => { removeMutation.mutate(id); }, [removeMutation]);
+
+  return { contacts, add, remove, addError: addMutation.error as Error | null };
 }
 
 /** Inline panel shown on the booking confirmation screen. */
 function TrustCircleBookingPanel() {
-  const [contacts] = useState<TrustContact[]>(() => {
-    try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); }
-    catch { return []; }
+  // Use live query so the panel reflects API state; falls back to localStorage cache while loading.
+  const { data } = useQuery<TrustContact[]>({
+    queryKey: ['trust-circle'],
+    queryFn: async () => {
+      const r = await fetch('/api/trust-circle');
+      if (!r.ok) throw new Error('failed');
+      return (await r.json()).contacts as TrustContact[];
+    },
+    initialData: () => {
+      try { return JSON.parse(localStorage.getItem('of_trust_circle') ?? '[]'); } catch { return []; }
+    },
+    staleTime: 0,
   });
+  const contacts: TrustContact[] = data ?? [];
   const hasContacts = contacts.length > 0;
   return (
     <div className={`rounded-[16px] p-4 ${hasContacts ? 'bg-[#e8f0e8]' : 'bg-[#f3ead7]'}`}>
