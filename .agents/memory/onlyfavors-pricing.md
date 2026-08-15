@@ -26,4 +26,4 @@ All price calculation happens in `artifacts/api-server/src/lib/pricing.ts`. The 
 - Any endpoint that touches money must import `calculatePrice` from `pricing.ts`.
 - The `GET /bookings/quote` endpoint is public and calls this before auth; booking creation and payment endpoints require auth.
 - The $10 deposit Stripe PaymentIntent is separate from the full payment intent. Both use server-calculated amounts.
-- Companion Stripe Connect payout (transfer_data.destination) is pending until companion onboarding is live (Task #1/auth).
+- Companion Stripe Connect payout (transfer_data.destination) requires a completed onboarding flow; the booking route already looks up the Connect account and routes accordingly.

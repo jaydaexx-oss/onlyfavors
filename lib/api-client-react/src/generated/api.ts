@@ -25,6 +25,9 @@ import type {
   BookingInput,
   Companion,
   CompanionDashboard,
+  ConnectOnboardRequest,
+  ConnectOnboardResponse,
+  ConnectStatus,
   CustomerDashboard,
   DepositResult,
   FavorRequest,
@@ -1064,4 +1067,152 @@ export const useCreateFavorRequest = <TError = ErrorType<void>,
       > => {
       return useMutation(getCreateFavorRequestMutationOptions(options));
     }
+
+export const getCreateConnectOnboardingLinkUrl = () => {
+
+
+
+
+  return `/api/connect/onboard`
+}
+
+/**
+ * @summary Create or resume Stripe Connect onboarding for an approved companion
+ */
+export const createConnectOnboardingLink = async (connectOnboardRequest: ConnectOnboardRequest, options?: Parameters<typeof customFetch>[1]): Promise<ConnectOnboardResponse> => {
+
+  return customFetch<ConnectOnboardResponse>(getCreateConnectOnboardingLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(connectOnboardRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateConnectOnboardingLinkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConnectOnboardingLink>>, TError,{data: BodyType<ConnectOnboardRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createConnectOnboardingLink>>, TError,{data: BodyType<ConnectOnboardRequest>}, TContext> => {
+
+const mutationKey = ['createConnectOnboardingLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createConnectOnboardingLink>>, {data: BodyType<ConnectOnboardRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createConnectOnboardingLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateConnectOnboardingLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createConnectOnboardingLink>>>
+    export type CreateConnectOnboardingLinkMutationBody = BodyType<ConnectOnboardRequest>
+    export type CreateConnectOnboardingLinkMutationError = ErrorType<void>
+
+    /**
+ * @summary Create or resume Stripe Connect onboarding for an approved companion
+ */
+export const useCreateConnectOnboardingLink = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConnectOnboardingLink>>, TError,{data: BodyType<ConnectOnboardRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createConnectOnboardingLink>>,
+        TError,
+        {data: BodyType<ConnectOnboardRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateConnectOnboardingLinkMutationOptions(options));
+    }
+
+export const getGetConnectStatusUrl = (companionId: string,) => {
+
+
+
+
+  return `/api/connect/status/${companionId}`
+}
+
+/**
+ * @summary Check a companion's Stripe Connect onboarding status
+ */
+export const getConnectStatus = async (companionId: string, options?: Parameters<typeof customFetch>[1]): Promise<ConnectStatus> => {
+
+  return customFetch<ConnectStatus>(getGetConnectStatusUrl(companionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConnectStatusQueryKey = (companionId: string,) => {
+    return [
+    `/api/connect/status/${companionId}`
+    ] as const;
+    }
+
+
+export const getGetConnectStatusQueryOptions = <TData = Awaited<ReturnType<typeof getConnectStatus>>, TError = ErrorType<unknown>>(companionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConnectStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConnectStatusQueryKey(companionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConnectStatus>>> = ({ signal }) => getConnectStatus(companionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: companionId !== null && companionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getConnectStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetConnectStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getConnectStatus>>>
+export type GetConnectStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check a companion's Stripe Connect onboarding status
+ */
+
+export function useGetConnectStatus<TData = Awaited<ReturnType<typeof getConnectStatus>>, TError = ErrorType<unknown>>(
+ companionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConnectStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetConnectStatusQueryOptions(companionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

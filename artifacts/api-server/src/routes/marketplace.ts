@@ -10,7 +10,14 @@ import {
   ListCompanionsQueryParams,
   ListSafeSpotsQueryParams,
 } from "@workspace/api-zod";
-import { db, bookings, favorRequests, messages } from "@workspace/db";
+import { db } from "@workspace/db";
+import {
+  bookings,
+  bookingsTable,
+  companionStripeAccountsTable,
+  favorRequests,
+  messages,
+} from "@workspace/db/schema";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getApprovedCompanion,
@@ -614,6 +621,15 @@ router.post("/bookings/:id/deposit", async (req, res) => {
       return;
     }
 
+    // Guard: if full payment was already authorized without a deposit, paying
+    // the deposit separately would cause a $10 overcharge. Block it here.
+    if (booking.fullPaymentIntentId && booking.depositPaidAt === null) {
+      res.status(409).json({
+        error: "Full payment was already authorized. Deposit cannot be charged separately.",
+      });
+      return;
+    }
+
     const stripe = await getUncachableStripeClient();
 
     // $10 refundable deposit — idempotent: reuse existing PI if already created
@@ -630,16 +646,19 @@ router.post("/bookings/:id/deposit", async (req, res) => {
       return;
     }
 
-    const pi = await stripe.paymentIntents.create({
-      amount: booking.depositCents,
-      currency: "usd",
-      metadata: {
-        bookingId: booking.id,
-        customerId,
-        type: "deposit",
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: booking.depositCents ?? 1000,
+        currency: "usd",
+        metadata: {
+          bookingId: booking.id,
+          customerId,
+          type: "deposit",
+        },
       },
-      // Deposit is refundable and credited to the final booking
-    });
+      // Idempotency key: prevents duplicate PIs if the client retries the request
+      { idempotencyKey: `deposit-${booking.id}` },
+    );
 
     await db
       .update(bookings)
@@ -662,7 +681,7 @@ router.post("/bookings/:id/deposit", async (req, res) => {
     if (process.env.NODE_ENV === "development") {
       try {
         await db.update(bookings)
-          .set({ status: "deposit_paid", depositPaidAt: new Date().toISOString() })
+          .set({ status: "deposit_paid", depositPaidAt: new Date() })
           .where(eq(bookings.id, id));
         req.log.info({ bookingId: id }, "Dev: deposit simulated — booking advanced to deposit_paid");
         res.json({ bookingId: id, amountCents: 1000, devSimulated: true }); return;
@@ -700,65 +719,112 @@ router.post("/bookings/:id/authorize", async (req, res) => {
 
     const stripe = await getUncachableStripeClient();
 
-    // Idempotent — reuse existing PI if already created
+    // Idempotent — return existing PI if already created (prevents duplicate charges)
     if (booking.fullPaymentIntentId) {
       const existing = await stripe.paymentIntents.retrieve(
         booking.fullPaymentIntentId,
       );
+      const wasCredited = booking.depositPaidAt !== null;
       res.json({
         bookingId: booking.id,
-        amountCents: booking.totalCents,
+        amountCents: existing.amount,
         clientSecret: existing.client_secret,
-        creditedToFinal: false,
+        creditedToFinal: wasCredited,
       });
       return;
     }
 
-    // Full payment: customer pays totalCents.
-    // When companion has a Stripe Connect account, platform keeps application_fee_amount
-    // and the rest is transferred to the companion's account automatically.
-    const companionAccountId = devCompanionStripeAccounts.get(booking.companionId);
-    const pi = await stripe.paymentIntents.create({
-      amount: booking.totalCents,
+    // If a deposit PI exists but is NOT yet paid, cancel it so the customer
+    // cannot pay both deposit and full amount (overcharge guard).
+    if (booking.depositPaymentIntentId && booking.depositPaidAt === null) {
+      try {
+        await stripe.paymentIntents.cancel(booking.depositPaymentIntentId);
+        req.log.info(
+          { bookingId: id, depositPiId: booking.depositPaymentIntentId },
+          "Cancelled unpaid deposit PI before authorizing full payment",
+        );
+      } catch (cancelErr) {
+        // Non-fatal: Stripe will expire it if uncaptured
+        req.log.warn({ cancelErr }, "Could not cancel deposit PI; proceeding");
+      }
+    }
+
+    // Apply deposit credit: if the $10 deposit was already collected, deduct it.
+    const depositCredited = booking.depositPaidAt !== null;
+    const depositCents = booking.depositCents ?? 1000;
+    const chargeAmountCents = depositCredited
+      ? booking.totalCents - depositCents
+      : booking.totalCents;
+
+    // Platform fee adjusted for any deposit already collected.
+    const platformRevenue =
+      booking.platformRevenueCents ?? Math.round(booking.totalCents * 0.2);
+    const applicationFeeAmount = depositCredited
+      ? Math.max(0, platformRevenue - depositCents)
+      : platformRevenue;
+
+    // Look up companion's Connect account via DB (not in-memory map).
+    let stripeConnectAccountId: string | null = null;
+    try {
+      const [connectRecord] = await db
+        .select()
+        .from(companionStripeAccountsTable)
+        .where(eq(companionStripeAccountsTable.companionId, booking.companionId));
+      if (connectRecord?.onboardingComplete) {
+        stripeConnectAccountId = connectRecord.stripeAccountId;
+      }
+    } catch {
+      req.log.warn({ bookingId: id }, "Could not look up companion Stripe account");
+    }
+
+    const intentParams: Parameters<typeof stripe.paymentIntents.create>[0] = {
+      amount: chargeAmountCents,
       currency: "usd",
-      ...(companionAccountId
-        ? {
-            application_fee_amount: booking.platformRevenueCents,
-            transfer_data: { destination: companionAccountId },
-          }
-        : {}),
+      capture_method: "manual", // Companion confirms → server captures → payout released
       metadata: {
         bookingId: booking.id,
         customerId,
         companionId: booking.companionId,
-        companionPayoutCents: String(booking.companionPayoutCents),
-        platformRevenueCents: String(booking.platformRevenueCents),
         type: "full_payment",
+        depositCredited: String(depositCredited),
       },
-    });
+    };
 
+    // Route the payout to the companion's Connect account and keep platform fee.
+    if (stripeConnectAccountId && applicationFeeAmount > 0) {
+      intentParams.application_fee_amount = applicationFeeAmount;
+      intentParams.transfer_data = { destination: stripeConnectAccountId };
+    }
+
+    const pi = await stripe.paymentIntents.create(
+      intentParams,
+      // Idempotency key: prevents duplicate charges if the client retries
+      { idempotencyKey: `authorize-${booking.id}` },
+    );
+
+    // Status advances to "authorized" via payment_intent.amount_capturable_updated webhook.
     await db
       .update(bookings)
-      .set({ fullPaymentIntentId: pi.id, status: "authorized" })
+      .set({ fullPaymentIntentId: pi.id, updatedAt: new Date() })
       .where(eq(bookings.id, id));
 
     req.log.info(
-      { bookingId: id, piId: pi.id, totalCents: booking.totalCents },
+      { bookingId: id, piId: pi.id, chargeAmountCents, depositCredited },
       "Full payment intent created",
     );
 
     res.json({
       bookingId: booking.id,
-      amountCents: booking.totalCents,
+      amountCents: chargeAmountCents,
       clientSecret: pi.client_secret,
-      creditedToFinal: false,
+      creditedToFinal: depositCredited,
     });
   } catch (err) {
     // Dev fallback: Stripe not connected — simulate full payment instantly
     if (process.env.NODE_ENV === "development") {
       try {
         await db.update(bookings)
-          .set({ status: "authorized", authorizedAt: new Date().toISOString() })
+          .set({ status: "authorized", authorizedAt: new Date() })
           .where(eq(bookings.id, id));
         req.log.info({ bookingId: id }, "Dev: full payment simulated — booking advanced to authorized");
         res.json({ bookingId: id, amountCents: 0, devSimulated: true }); return;
@@ -769,6 +835,55 @@ router.post("/bookings/:id/authorize", async (req, res) => {
     }
     req.log.error({ err }, "Unable to create full payment intent");
     res.status(500).json({ error: "Unable to initiate payment" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Capture — companion-owned; calls Stripe capture → completed via webhook
+// ---------------------------------------------------------------------------
+
+router.post("/bookings/:id/capture", async (req, res) => {
+  const { id } = AuthorizeFullPaymentParams.parse(req.params);
+  const companionId =
+    (req as any).user?.id ??
+    (process.env.NODE_ENV === "development" ? "dev-preview-companion" : null);
+  if (!companionId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+
+    if (!booking || booking.companionId !== companionId) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+
+    // Allow capture from authorized OR confirmed:
+    // companions may accept (→ confirmed) before the customer pays in full,
+    // or capture may arrive before the acceptance webhook in some orderings.
+    if (!["authorized", "confirmed"].includes(booking.status)) {
+      res.status(409).json({
+        error: `Booking cannot be captured in status '${booking.status}'. Must be 'authorized' or 'confirmed'.`,
+      });
+      return;
+    }
+
+    if (!booking.fullPaymentIntentId) {
+      res.status(409).json({ error: "No payment intent to capture" });
+      return;
+    }
+
+    const stripe = await getUncachableStripeClient();
+    await stripe.paymentIntents.capture(booking.fullPaymentIntentId);
+    // Status transitions to "completed" via payment_intent.succeeded webhook
+
+    req.log.info({ bookingId: id }, "Capture initiated — status will update via webhook");
+    res.json({ bookingId: id, message: "Capture initiated. Booking will complete shortly." });
+  } catch (err) {
+    req.log.error({ err }, "Unable to capture payment");
+    res.status(500).json({ error: "Unable to confirm booking" });
   }
 });
 
@@ -1030,25 +1145,66 @@ router.post("/bookings/:id/checkin", async (req, res) => {
 
 router.post("/bookings/:id/cancel", async (req, res) => {
   const { id } = req.params;
-  const customerId =
+  const callerId =
     (req as any).user?.id ??
     (process.env.NODE_ENV === "development" ? "dev-preview-customer" : null);
-  if (!customerId) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (!callerId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { reason } = req.body ?? {};
   try {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
-    if (!booking || booking.customerId !== customerId) {
+    // Customer or companion may cancel
+    if (!booking || (booking.customerId !== callerId && booking.companionId !== callerId)) {
       res.status(404).json({ error: "Booking not found" }); return;
     }
     if (["completed", "cancelled"].includes(booking.status)) {
       res.status(409).json({ error: "Booking cannot be cancelled" }); return;
     }
+
+    // Void any open Stripe PIs so no funds are captured.
+    // For capturable intents (requires_capture) we MUST void them; if we
+    // cannot, we refuse to mark the booking cancelled — leaving a capturable
+    // charge behind would violate the money-safety guarantee.
+    try {
+      const stripe = await getUncachableStripeClient();
+
+      const voidPi = async (piId: string | null, isFull: boolean) => {
+        if (!piId) return;
+        const pi = await stripe.paymentIntents.retrieve(piId);
+        if (["canceled", "succeeded"].includes(pi.status)) return;
+
+        if (pi.status === "requires_capture") {
+          // This PI holds real money — hard-fail if we cannot void it.
+          await stripe.paymentIntents.cancel(piId); // throws on failure
+          req.log.info({ piId, isFull }, "Capturable PI voided before booking cancellation");
+        } else {
+          // Non-capturable PI — soft void; log but do not block cancellation.
+          try {
+            await stripe.paymentIntents.cancel(piId);
+          } catch (e) {
+            req.log.warn({ e, piId }, "Could not void non-capturable PI; proceeding");
+          }
+        }
+      };
+
+      await Promise.all([
+        voidPi(booking.depositPaymentIntentId, false),
+        voidPi(booking.fullPaymentIntentId, true),
+      ]);
+    } catch (stripeErr: any) {
+      // A hard failure means we could not void a capturable intent — refuse to cancel.
+      req.log.error({ stripeErr }, "Cannot void capturable PI; refusing booking cancellation");
+      res.status(502).json({
+        error: "Could not void the payment authorization. Cancellation refused to prevent a stray charge.",
+      });
+      return;
+    }
+
     const [updated] = await db
       .update(bookings)
-      .set({ status: "cancelled", updatedAt: new Date() })
+      .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
       .where(eq(bookings.id, id))
       .returning();
-    req.log.info({ bookingId: id, reason }, "Booking cancelled by customer");
+    req.log.info({ bookingId: id, cancelledBy: callerId, reason }, "Booking cancelled");
     res.json(formatBookingFull(updated));
   } catch (err: any) {
     if (isMissingTableError(err)) { res.json({ id, status: "cancelled" }); return; }
@@ -1180,7 +1336,7 @@ router.get("/dashboard/companion", async (req, res) => {
     ).length;
     const earningsCents = companionBookings
       .filter((b) => b.status === "confirmed")
-      .reduce((sum, b) => sum + b.companionPayoutCents, 0);
+      .reduce((sum, b) => sum + (b.companionPayoutCents ?? 0), 0);
 
     res.json({ pendingRequests: pendingReqs, upcomingBookings: upcomingCount, earningsCents, profileViews: 0 });
   } catch (err: any) {
@@ -2077,6 +2233,11 @@ router.get("/safespots/:id", async (req, res) => {
 // Companion payout setup — Stripe Connect Express onboarding
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Companion payout setup — DB-backed Stripe Connect Express onboarding
+// (replaces the previous in-memory devCompanionStripeAccounts version)
+// ---------------------------------------------------------------------------
+
 router.post("/companion/stripe/onboard", async (req, res) => {
   const companionId =
     (req as any).user?.id ??
@@ -2086,29 +2247,41 @@ router.post("/companion/stripe/onboard", async (req, res) => {
     return;
   }
 
+  // Build return/refresh URLs from the server's authoritative domain.
+  // SECURITY: Use REPLIT_DOMAINS (set by the platform) not client-supplied
+  // forwarded-host headers, which are attacker-controlled.
+  const appDomain = process.env["REPLIT_DOMAINS"]?.split(",")[0] ?? "";
+  const appOrigin = appDomain
+    ? `https://${appDomain}`
+    : `http://localhost:${process.env.PORT ?? 3000}`;
+  const base = `${appOrigin}${process.env.FRONTEND_BASE_PATH ?? "/onlyfavors"}`;
+  const returnUrl = `${base}/dashboard/companion?stripe=return`;
+  const refreshUrl = `${base}/dashboard/companion?stripe=refresh`;
+
   try {
     const stripe = await getUncachableStripeClient();
 
-    // Reuse existing account if already created (idempotent)
-    let accountId = devCompanionStripeAccounts.get(companionId);
-    if (!accountId) {
+    // Look up or create a DB-backed Connect account record
+    const [existing] = await db
+      .select()
+      .from(companionStripeAccountsTable)
+      .where(eq(companionStripeAccountsTable.companionId, companionId));
+
+    let accountId: string;
+    if (existing) {
+      accountId = existing.stripeAccountId;
+    } else {
       const account = await stripe.accounts.create({
         type: "express",
         metadata: { companionId },
-        capabilities: { transfers: { requested: true } },
       });
       accountId = account.id;
-      devCompanionStripeAccounts.set(companionId, accountId);
+      await db.insert(companionStripeAccountsTable).values({
+        companionId,
+        stripeAccountId: accountId,
+        onboardingComplete: false,
+      });
     }
-
-    // Build return/refresh URLs from the incoming request origin
-    const origin =
-      (req.headers["x-forwarded-proto"] ?? "https") +
-      "://" +
-      (req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost");
-    const base = `${origin}${process.env.FRONTEND_BASE_PATH ?? "/onlyfavors"}`;
-    const returnUrl = `${base}/dashboard/companion?stripe=return`;
-    const refreshUrl = `${base}/dashboard/companion?stripe=refresh`;
 
     const link = await stripe.accountLinks.create({
       account: accountId,
@@ -2120,14 +2293,24 @@ router.post("/companion/stripe/onboard", async (req, res) => {
     req.log.info({ companionId, accountId }, "Stripe Connect onboarding link created");
     res.json({ url: link.url });
   } catch (err) {
-    // Dev fallback: Stripe not connected — simulate onboarding by returning a dev URL
+    // Dev fallback: Stripe not connected — write a dev record to DB so routing works
     if (process.env.NODE_ENV === "development") {
-      devCompanionStripeAccounts.set(companionId, `dev-acct-${companionId}`);
-      req.log.info({ companionId }, "Dev: Stripe Connect simulated — account created in-memory");
-      // Return the dashboard back URL — companion returns "onboarded" immediately
-      const origin = (req.headers["x-forwarded-proto"] ?? "https") + "://" + (req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost");
-      const base = `${origin}${process.env.FRONTEND_BASE_PATH ?? "/onlyfavors"}`;
-      res.json({ url: `${base}/dashboard/companion?stripe=return`, devSimulated: true }); return;
+      const devAccountId = `dev-acct-${companionId}`;
+      try {
+        await db
+          .insert(companionStripeAccountsTable)
+          .values({ companionId, stripeAccountId: devAccountId, onboardingComplete: true })
+          .onConflictDoUpdate({
+            target: companionStripeAccountsTable.companionId,
+            set: { stripeAccountId: devAccountId, onboardingComplete: true },
+          });
+      } catch {
+        // DB also unavailable — log and fall through
+        req.log.warn({ companionId }, "Dev: DB insert failed during simulated onboarding");
+      }
+      req.log.info({ companionId }, "Dev: Stripe Connect simulated — DB record written");
+      res.json({ url: `${returnUrl}`, devSimulated: true });
+      return;
     }
     req.log.error({ err }, "Unable to create Stripe Connect onboarding link");
     res.status(500).json({ error: "Unable to start payout setup" });
@@ -2144,34 +2327,52 @@ router.get("/companion/stripe/status", async (req, res) => {
   }
 
   try {
-    const accountId = devCompanionStripeAccounts.get(companionId);
-    if (!accountId) {
+    const [record] = await db
+      .select()
+      .from(companionStripeAccountsTable)
+      .where(eq(companionStripeAccountsTable.companionId, companionId));
+
+    if (!record) {
       res.json({ status: "not_started" });
       return;
     }
 
+    if (record.onboardingComplete) {
+      res.json({ status: "active", detailsSubmitted: true, payoutsEnabled: true });
+      return;
+    }
+
+    // Refresh status from Stripe
     const stripe = await getUncachableStripeClient();
-    const account = await stripe.accounts.retrieve(accountId);
+    const account = await stripe.accounts.retrieve(record.stripeAccountId);
+    const complete = Boolean(account.charges_enabled && account.payouts_enabled);
 
-    const active =
-      account.details_submitted &&
-      (account.charges_enabled || account.payouts_enabled);
+    if (complete) {
+      await db
+        .update(companionStripeAccountsTable)
+        .set({ onboardingComplete: true, updatedAt: new Date() })
+        .where(eq(companionStripeAccountsTable.companionId, companionId));
+    }
 
-    req.log.info({ companionId, accountId, active }, "Stripe Connect status checked");
+    req.log.info({ companionId, complete }, "Stripe Connect status checked");
     res.json({
-      status: active ? "active" : "pending",
-      accountId,
+      status: complete ? "active" : "pending",
       detailsSubmitted: account.details_submitted,
       payoutsEnabled: account.payouts_enabled ?? false,
     });
   } catch (err) {
-    // Dev fallback: Stripe not connected — infer status from in-memory account map
+    // Dev fallback: return simulated active status if DB record exists
     if (process.env.NODE_ENV === "development") {
-      const devAccountId = devCompanionStripeAccounts.get(companionId);
-      if (devAccountId) {
-        res.json({ status: "active", accountId: devAccountId, detailsSubmitted: true, payoutsEnabled: true, devSimulated: true }); return;
-      }
-      res.json({ status: "not_started" }); return;
+      try {
+        const [record] = await db.select().from(companionStripeAccountsTable)
+          .where(eq(companionStripeAccountsTable.companionId, companionId));
+        if (record) {
+          res.json({ status: "active", detailsSubmitted: true, payoutsEnabled: true, devSimulated: true });
+          return;
+        }
+      } catch { /* fall through */ }
+      res.json({ status: "not_started" });
+      return;
     }
     req.log.error({ err }, "Unable to retrieve Stripe Connect account status");
     res.status(500).json({ error: "Unable to check payout status" });
@@ -2221,7 +2422,7 @@ function mapCompanionRow(row: {
 function formatBookingFull(b: {
   id: string;
   status: string;
-  customerId: string;
+  customerId: string | null;
   companionId: string;
   activity: string;
   date: string;
@@ -2229,10 +2430,10 @@ function formatBookingFull(b: {
   durationHours: string;
   safeSpotId: string | null;
   subtotalCents: number;
-  customerFeeCents: number;
+  customerFeeCents: number | null;
   totalCents: number;
-  companionPayoutCents: number;
-  platformRevenueCents: number;
+  companionPayoutCents: number | null;
+  platformRevenueCents: number | null;
   depositCents: number;
   depositPaidAt: Date | null;
   confirmedAt: Date | null;
@@ -2275,22 +2476,23 @@ function formatBooking(b: {
   id: string;
   status: string;
   subtotalCents: number;
-  customerFeeCents: number;
+  customerFeeCents: number | null;
   totalCents: number;
-  companionPayoutCents: number;
-  platformRevenueCents: number;
+  companionPayoutCents: number | null;
+  platformRevenueCents: number | null;
   depositCents: number;
   depositPaymentIntentId: string | null;
   fullPaymentIntentId: string | null;
+  [key: string]: unknown;
 }) {
   return {
     id: b.id,
     status: b.status,
     subtotalCents: b.subtotalCents,
-    customerFeeCents: b.customerFeeCents,
+    customerFeeCents: b.customerFeeCents ?? 0,
     totalCents: b.totalCents,
-    companionPayoutCents: b.companionPayoutCents,
-    platformRevenueCents: b.platformRevenueCents,
+    companionPayoutCents: b.companionPayoutCents ?? 0,
+    platformRevenueCents: b.platformRevenueCents ?? 0,
     depositCents: b.depositCents,
     depositCreditedToFinal: true,
     // Never expose PI IDs to the response — return them only from deposit/authorize routes
@@ -2370,8 +2572,8 @@ router.get('/platform/analytics', async (_req, res) => {
     for (const b of rows) {
       statusCounts[b.status] = (statusCounts[b.status] ?? 0) + 1;
       if (b.status === 'completed') {
-        revenueCents += b.platformRevenueCents;
-        companionPayoutCents += b.companionPayoutCents;
+        revenueCents += b.platformRevenueCents ?? 0;
+        companionPayoutCents += b.companionPayoutCents ?? 0;
       }
       const day = b.createdAt.toISOString().slice(0, 10);
       dailyCounts[day] = (dailyCounts[day] ?? 0) + 1;
@@ -2426,7 +2628,7 @@ router.get('/bookings/search', async (req, res) => {
     if (q) {
       const term = q.toLowerCase();
       filtered = filtered.filter(
-        (b) => b.id.includes(term) || b.customerId.includes(term) || b.companionId.includes(term)
+        (b) => b.id.includes(term) || (b.customerId ?? "").includes(term) || b.companionId.includes(term)
       );
     }
     if (status) {

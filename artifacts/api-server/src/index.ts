@@ -1,3 +1,6 @@
+import { runMigrations } from "stripe-replit-sync";
+import { getStripeSync } from "./lib/stripeClient";
+import { runAppMigrations } from "@workspace/db/migrate";
 import app from "./app";
 import { logger } from "./lib/logger";
 
@@ -7,45 +10,51 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0)
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 
-// ─── Stripe initialisation (non-blocking) ────────────────────────────────────
-// Runs after the server is listening so a Stripe credential failure does not
-// prevent the public endpoints (discovery, safety) from responding.
+/**
+ * Initialize the Stripe schema, managed webhook, and background data backfill.
+ * Non-fatal: payment routes return 503 when Stripe isn't reachable, but all
+ * other marketplace routes (discovery, safety, etc.) remain fully available.
+ */
 async function initStripe(): Promise<void> {
-  try {
-    const { runMigrations } = await import("stripe-replit-sync");
-    const { getStripeSync } = await import("./lib/stripeClient");
-
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-      logger.warn(
-        "DATABASE_URL not set — skipping Stripe schema migrations and sync",
-      );
-      return;
-    }
-
-    logger.info("Initialising Stripe schema…");
-    await runMigrations({ databaseUrl });
-    logger.info("Stripe schema ready");
-
-    const stripeSync = await getStripeSync();
-
-    const webhookBase = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
-    await stripeSync.findOrCreateManagedWebhook(
-      `${webhookBase}/api/stripe/webhook`,
-    );
-    logger.info({ webhookBase }, "Stripe managed webhook configured");
-
-    // Backfill in the background — don't await so startup stays fast
-    stripeSync.syncBackfill().catch((err) => {
-      logger.error({ err }, "Stripe backfill error");
-    });
-  } catch (err) {
-    // Stripe init failure is logged but never fatal — public routes still work
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) {
     logger.warn(
-      { err },
-      "Stripe initialisation failed (payments unavailable until resolved)",
+      "DATABASE_URL not set — skipping Stripe schema migrations and sync",
     );
+    return;
   }
+
+  // 1. Apply application schema migrations (bookings, companion_stripe_accounts, favor_requests).
+  //    Idempotent — drizzle tracks applied migrations and skips them on re-runs.
+  logger.info("Applying application schema migrations...");
+  await runAppMigrations(databaseUrl);
+  logger.info("Application schema ready");
+
+  logger.info("Initializing Stripe schema...");
+  // stripe-replit-sync is kept external in build.mjs so its SQL migration
+  // files are accessible at runtime via their original disk path.
+  // MigrationConfig only accepts { databaseUrl } — no schema option.
+  await runMigrations({ databaseUrl });
+  logger.info("Stripe schema ready");
+
+  const stripeSync = await getStripeSync();
+
+  // Register or find the managed webhook endpoint
+  const webhookBaseUrl = `https://${process.env["REPLIT_DOMAINS"]?.split(",")[0]}`;
+  const webhookEndpoint = await stripeSync.findOrCreateManagedWebhook(
+    `${webhookBaseUrl}/api/stripe/webhook`,
+  );
+  logger.info({ webhookUrl: webhookEndpoint?.url }, "Stripe webhook configured");
+
+  // Backfill existing Stripe data — fire-and-forget so startup stays fast
+  stripeSync
+    .syncBackfill()
+    .then(() => {
+      logger.info("Stripe data backfill complete");
+    })
+    .catch((err) => {
+      logger.error({ err }, "Stripe data backfill error");
+    });
 }
 
 app.listen(port, (err) => {
@@ -55,8 +64,11 @@ app.listen(port, (err) => {
   }
   logger.info({ port }, "Server listening");
 
-  // Fire-and-forget — public endpoints respond immediately
+  // Non-blocking: start Stripe init after the server is accepting requests
   initStripe().catch((err) => {
-    logger.error({ err }, "Unhandled error in initStripe");
+    logger.warn(
+      { err },
+      "Stripe initialization failed — payment routes will be degraded",
+    );
   });
 });

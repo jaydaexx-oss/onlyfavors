@@ -183,13 +183,13 @@ export const CreateBookingIntentResponse = zod.object({
   "id": zod.string(),
   "status": zod.enum(['draft', 'requested', 'deposit_paid', 'authorized', 'confirmed', 'completed', 'cancelled']),
   "subtotalCents": zod.number(),
-  "customerFeeCents": zod.number(),
+  "customerFeeCents": zod.number().optional(),
+  "platformFeeCents": zod.number().optional(),
   "totalCents": zod.number(),
-  "companionPayoutCents": zod.number(),
-  "platformRevenueCents": zod.number(),
-  "depositCents": zod.number(),
-  "depositCreditedToFinal": zod.boolean(),
-  "stripePaymentIntentId": zod.string().nullish()
+  "companionPayoutCents": zod.number().optional(),
+  "platformRevenueCents": zod.number().optional(),
+  "depositCents": zod.number().optional(),
+  "depositCreditedToFinal": zod.boolean().optional()
 })
 
 
@@ -245,6 +245,33 @@ export const CreateFavorRequestResponse = zod.object({
   "preferredDate": zod.string(),
   "preferredDurationHours": zod.number(),
   "createdAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Create or resume Stripe Connect onboarding for an approved companion
+ */
+export const CreateConnectOnboardingLinkBody = zod.object({
+  "companionId": zod.string(),
+  "returnUrl": zod.string().describe('URL Stripe redirects to after onboarding is complete'),
+  "refreshUrl": zod.string().describe('URL Stripe redirects to when the link has expired')
+})
+
+export const CreateConnectOnboardingLinkResponse = zod.object({
+  "url": zod.string().describe('Short-lived Stripe Connect account-link URL')
+})
+
+
+/**
+ * @summary Check a companion's Stripe Connect onboarding status
+ */
+export const GetConnectStatusParams = zod.object({
+  "companionId": zod.coerce.string()
+})
+
+export const GetConnectStatusResponse = zod.object({
+  "connected": zod.boolean(),
+  "onboardingComplete": zod.boolean()
 })
 
 

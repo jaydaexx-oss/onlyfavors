@@ -20,6 +20,8 @@ tags:
     description: Booking lifecycle and server-calculated pricing
   - name: requests
     description: Structured Favor Requests (pre-payment)
+  - name: payments
+    description: Stripe Connect onboarding and payout management
 paths:
   /healthz:
     get:
@@ -202,6 +204,8 @@ paths:
                 $ref: "#/components/schemas/Booking"
         "401":
           description: Authentication required
+        "404":
+          description: Companion not found
   /bookings/{id}/deposit:
     post:
       operationId: authorizeDeposit
@@ -266,6 +270,48 @@ paths:
                 $ref: "#/components/schemas/FavorRequest"
         "401":
           description: Authentication required
+  /connect/onboard:
+    post:
+      operationId: createConnectOnboardingLink
+      tags: [payments]
+      summary: Create or resume Stripe Connect onboarding for an approved companion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectOnboardRequest"
+      responses:
+        "201":
+          description: Short-lived Connect account-link URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectOnboardResponse"
+        "400":
+          description: Invalid request
+        "403":
+          description: Companion not approved
+        "503":
+          description: Payout service temporarily unavailable
+  /connect/status/{companionId}:
+    get:
+      operationId: getConnectStatus
+      tags: [payments]
+      summary: Check a companion's Stripe Connect onboarding status
+      parameters:
+        - in: path
+          name: companionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connect status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectStatus"
 components:
   schemas:
     HealthStatus:
@@ -476,7 +522,7 @@ components:
           type: string
     Booking:
       type: object
-      required: [id, status, subtotalCents, customerFeeCents, totalCents, companionPayoutCents, platformRevenueCents, depositCents, depositCreditedToFinal]
+      required: [id, status, subtotalCents, totalCents]
       properties:
         id:
           type: string
@@ -486,6 +532,8 @@ components:
         subtotalCents:
           type: number
         customerFeeCents:
+          type: number
+        platformFeeCents:
           type: number
         totalCents:
           type: number
@@ -497,8 +545,6 @@ components:
           type: number
         depositCreditedToFinal:
           type: boolean
-        stripePaymentIntentId:
-          type: ["string", "null"]
     DepositResult:
       type: object
       required: [bookingId, amountCents, clientSecret, creditedToFinal]
@@ -554,3 +600,30 @@ components:
           type: number
         createdAt:
           type: string
+    ConnectOnboardRequest:
+      type: object
+      required: [companionId, returnUrl, refreshUrl]
+      properties:
+        companionId:
+          type: string
+        returnUrl:
+          type: string
+          description: URL Stripe redirects to after onboarding is complete
+        refreshUrl:
+          type: string
+          description: URL Stripe redirects to when the link has expired
+    ConnectOnboardResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Short-lived Stripe Connect account-link URL
+    ConnectStatus:
+      type: object
+      required: [connected, onboardingComplete]
+      properties:
+        connected:
+          type: boolean
+        onboardingComplete:
+          type: boolean

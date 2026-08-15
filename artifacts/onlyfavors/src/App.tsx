@@ -3441,13 +3441,13 @@ function Book() {
           {/* Price breakdown */}
           <div className="mt-8 space-y-2 border-t border-[#c7d9cb] pt-5">
             <div className="flex items-center justify-between text-sm text-[#53725d]"><span>Activity total</span><span>{money(created.subtotalCents)}</span></div>
-            <div className="flex items-center justify-between text-sm text-[#53725d]"><span>Safety &amp; service fee (5%)</span><span>+{money(created.customerFeeCents)}</span></div>
+            <div className="flex items-center justify-between text-sm text-[#53725d]"><span>Safety &amp; service fee (5%)</span><span>+{money(created.customerFeeCents ?? 0)}</span></div>
             <div className="my-2 border-t border-[#c7d9cb]" />
             <div className="flex items-center justify-between">
               <span className="font-mono text-[10px] uppercase tracking-wider text-[#688370]">You pay</span>
               <span className="font-serif text-3xl text-[#31533f]">{money(created.totalCents)}</span>
             </div>
-            <div className="flex items-center justify-between text-xs text-[#688370]"><span>Companion receives</span><span>{money(created.companionPayoutCents)}</span></div>
+            <div className="flex items-center justify-between text-xs text-[#688370]"><span>Companion receives</span><span>{money(created.companionPayoutCents ?? 0)}</span></div>
           </div>
           {/* Trust Circle */}
           <div className="mt-6">

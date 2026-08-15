@@ -2,4 +2,5 @@
 - [OnlyFavors pricing model](onlyfavors-pricing.md) — 5% customer fee + 15% companion commission = 20% gross, server-enforced, never from browser; $10 refundable deposit unlocks chat.
 - [Zod format:date coercion](zod-date-coercion.md) — Orval generates zod.coerce.date() for format:date fields; parsed values are Date objects, not strings; must serialize before Drizzle inserts.
 - [TS project reference build order](ts-project-refs.md) — api-server's tsconfig references lib/db; run tsc -p tsconfig.json inside lib/db first or api-server typecheck can't find db exports.
+- [Stripe credentials shape](stripe-credentials-shape.md) — connector returns `settings.secret` not `settings.secret_key`; stripe-replit-sync must be esbuild-external or migrations break.
 - [OnlyFavors dev fallbacks](onlyfavors-dev-fallbacks.md) — all three major list endpoints (companions, safespots, bookings) need explicit dev fallback blocks or Supabase 503s surface to the browser.

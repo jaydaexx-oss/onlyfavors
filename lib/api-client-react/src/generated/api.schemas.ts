@@ -129,14 +129,13 @@ export interface Booking {
   id: string;
   status: BookingStatus;
   subtotalCents: number;
-  customerFeeCents: number;
+  customerFeeCents?: number;
+  platformFeeCents?: number;
   totalCents: number;
-  companionPayoutCents: number;
-  platformRevenueCents: number;
-  depositCents: number;
-  depositCreditedToFinal: boolean;
-  /** @nullable */
-  stripePaymentIntentId?: string | null;
+  companionPayoutCents?: number;
+  platformRevenueCents?: number;
+  depositCents?: number;
+  depositCreditedToFinal?: boolean;
 }
 
 export interface DepositResult {
@@ -186,6 +185,24 @@ export interface FavorRequest {
   preferredDate: string;
   preferredDurationHours: number;
   createdAt?: string;
+}
+
+export interface ConnectOnboardRequest {
+  companionId: string;
+  /** URL Stripe redirects to after onboarding is complete */
+  returnUrl: string;
+  /** URL Stripe redirects to when the link has expired */
+  refreshUrl: string;
+}
+
+export interface ConnectOnboardResponse {
+  /** Short-lived Stripe Connect account-link URL */
+  url: string;
+}
+
+export interface ConnectStatus {
+  connected: boolean;
+  onboardingComplete: boolean;
 }
 
 export type ListCompanionsParams = {

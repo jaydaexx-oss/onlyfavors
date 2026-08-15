@@ -7,9 +7,8 @@ import { WebhookHandlers } from "./lib/webhookHandlers";
 
 const app: Express = express();
 
-// ─── Stripe webhook — MUST be registered before express.json() ───────────────
-// Stripe requires the raw Buffer body for signature verification.
-// If express.json() runs first the body is already parsed and verification fails.
+// ─── Stripe webhook — must be registered BEFORE express.json() ───────────────
+// Stripe requires the raw request body as a Buffer for signature verification.
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
@@ -19,28 +18,46 @@ app.post(
       res.status(400).json({ error: "Missing stripe-signature header" });
       return;
     }
+
+    if (!Buffer.isBuffer(req.body)) {
+      logger.error(
+        "Webhook body is not a Buffer — express.json() may have run first",
+      );
+      res.status(500).json({ error: "Webhook processing error" });
+      return;
+    }
+
     const sig = Array.isArray(signature) ? signature[0] : signature;
+
     try {
       await WebhookHandlers.processWebhook(req.body as Buffer, sig);
       res.status(200).json({ received: true });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error({ err }, "Stripe webhook processing error");
-      res.status(400).json({ error: "Webhook processing error", detail: msg });
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err }, "Stripe webhook processing failed");
+      // Return 400 so Stripe knows not to retry an unrecoverable error;
+      // return 200 for transient failures that should be retried.
+      res.status(400).json({ error: message });
     }
   },
 );
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─── General middleware (after webhook route) ─────────────────────────────────
 app.use(
   pinoHttp({
     logger,
     serializers: {
       req(req) {
-        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
+        return {
+          id: req.id,
+          method: req.method,
+          url: req.url?.split("?")[0],
+        };
       },
       res(res) {
-        return { statusCode: res.statusCode };
+        return {
+          statusCode: res.statusCode,
+        };
       },
     },
   }),
