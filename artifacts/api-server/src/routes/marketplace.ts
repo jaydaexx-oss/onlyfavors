@@ -2003,13 +2003,34 @@ const DEV_COMPANION_APPLICATIONS = [
   { id: "app-003", displayName: "Sam T.", city: "Chicago", activities: ["Board games", "Book clubs", "City tours"], languages: ["English"], hourlyRate: 55, applicationDate: "2026-08-12", bio: "Professional librarian who knows every good spot in the city. Quiet energy, great listener.", status: "pending" },
 ];
 
-// ─── Admin middleware — dev only until Task #1 (auth) lands ─────────────────
-// In production this MUST be replaced with a real admin role check. Until then
-// the guard prevents any production caller from reaching these routes.
+// ─── Admin middleware ─────────────────────────────────────────────────────────
+// Checks Authorization: Bearer <ADMIN_SECRET> on every admin route.
+// Falls back to allowing all requests in development when ADMIN_SECRET is unset.
 function requireAdmin(req: any, res: any, next: () => void) {
-  if (process.env.NODE_ENV === "development") { next(); return; }
-  res.status(401).json({ error: "Admin access requires authentication" });
+  const secret = process.env.ADMIN_SECRET;
+  // Dev with no secret set → open (same as before)
+  if (process.env.NODE_ENV === "development" && !secret) { next(); return; }
+  const auth = req.headers["authorization"] as string | undefined;
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : undefined;
+  if (!token || token !== secret) {
+    res.status(401).json({ error: "Admin access requires a valid operations token" });
+    return;
+  }
+  next();
 }
+
+// Admin token verification endpoint — used by the login form to validate
+router.post("/admin/verify", (req, res) => {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    // No secret configured — only allow in dev
+    if (process.env.NODE_ENV === "development") { res.json({ ok: true }); return; }
+    res.status(503).json({ error: "Admin access is not configured" }); return;
+  }
+  const { token } = req.body as { token?: string };
+  if (token && token === secret) { res.json({ ok: true }); return; }
+  res.status(401).json({ error: "Invalid operations token" });
+});
 
 router.get("/admin/overview", requireAdmin, async (req, res) => {
   try {

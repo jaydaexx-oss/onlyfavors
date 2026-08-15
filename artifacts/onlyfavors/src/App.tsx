@@ -11779,9 +11779,85 @@ function SafeSpotDetail() {
   );
 }
 
+// Reads the stored admin token from sessionStorage
+function getAdminToken(): string | null {
+  try { return sessionStorage.getItem('of_admin_token'); } catch { return null; }
+}
+// Returns headers object with Authorization if a token is stored
+function adminHeaders(): HeadersInit {
+  const t = getAdminToken();
+  return t ? { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
 function AdminLogin() {
-  const [sent, setSent] = useState(false);
-  return <Shell bare><main className="grid min-h-[100dvh] place-items-center bg-[#3d2038] px-5"><div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#48243f] p-8 text-[#f9efe5] md:p-10"><div className="flex items-center justify-between"><Brand dark /><span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span></div>{sent ? <div className="mt-12"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c45b8f] text-[#281223]"><Check /></div><h1 className="mt-7 font-serif text-4xl">Check your inbox.</h1><p className="mt-3 text-sm leading-6 text-[#d9c4cf]">A secure operations code is on its way. This workspace is restricted to approved trust staff.</p><Link href="/admin/operations" className="mt-8 inline-flex h-11 items-center gap-2 rounded-full bg-[#f7e9de] px-5 text-sm font-bold text-[#48213d]" data-testid="link-admin-operations">Continue to operations <ArrowRight className="h-4 w-4" /></Link></div> : <form onSubmit={(e) => { e.preventDefault(); setSent(true); }} className="mt-12"><p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p><h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1><label className="mt-8 block"><span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations email</span><input required type="email" className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3d2038] px-4 text-sm text-[#f9efe5] outline-none focus:border-[#d897b6]" data-testid="input-admin-email" /></label><Button type="submit" variant="primary" className="mt-5 w-full" testId="button-admin-login">Send secure code <KeyRound className="h-4 w-4" /></Button></form>}<Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home"><ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors</Link></div></main></Shell>;
+  const [token, setToken] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [, nav] = useLocation();
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token.trim() }),
+      });
+      if (res.ok) {
+        try { sessionStorage.setItem('of_admin_token', token.trim()); } catch {}
+        nav('/admin/operations');
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? 'Invalid token — check your operations passphrase.');
+      }
+    } catch {
+      setError('Connection error — is the API server running?');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Shell bare>
+      <main className="grid min-h-[100dvh] place-items-center bg-[#3d2038] px-5">
+        <div className="w-full max-w-md rounded-[26px] border border-[#65445d] bg-[#48243f] p-8 text-[#f9efe5] md:p-10">
+          <div className="flex items-center justify-between">
+            <Brand dark />
+            <span className="rounded-full border border-[#79556d] px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-[#d3b6c4]">Operations</span>
+          </div>
+          <form onSubmit={handleSubmit} className="mt-12">
+            <p className="font-mono text-[10px] uppercase tracking-[.2em] text-[#c695ae]">Trust team access</p>
+            <h1 className="mt-3 font-serif text-4xl">Keep the room safe.</h1>
+            <label className="mt-8 block">
+              <span className="mb-2 block text-xs font-bold text-[#dbc3cf]">Operations passphrase</span>
+              <input
+                required
+                type="password"
+                value={token}
+                onChange={(e) => { setToken(e.target.value); setError(null); }}
+                placeholder="Enter your operations passphrase"
+                className="h-12 w-full rounded-xl border border-[#79556d] bg-[#3d2038] px-4 text-sm text-[#f9efe5] placeholder:text-[#79556d] outline-none focus:border-[#d897b6]"
+                data-testid="input-admin-token"
+              />
+            </label>
+            {error && (
+              <p className="mt-3 flex items-center gap-2 rounded-xl bg-[#6b2040] px-4 py-3 text-xs text-[#f9efe5]">
+                <CircleAlert className="h-3.5 w-3.5 shrink-0 text-[#e8a0b8]" />{error}
+              </p>
+            )}
+            <Button type="submit" variant="primary" className="mt-5 w-full" testId="button-admin-login" disabled={loading || !token.trim()}>
+              {loading ? 'Verifying…' : <><KeyRound className="h-4 w-4" />Access operations</>}
+            </Button>
+          </form>
+          <Link href="/" className="mt-8 inline-flex items-center gap-2 text-xs text-[#c695ae] hover:text-[#f9efe5]" data-testid="link-admin-home">
+            <ArrowLeft className="h-3.5 w-3.5" />Return to OnlyFavors
+          </Link>
+        </div>
+      </main>
+    </Shell>
+  );
 }
 
 function AdminAnnouncementControl() {
@@ -11804,7 +11880,7 @@ function AdminAnnouncementControl() {
   const post = async (active: boolean) => {
     setSaving(true);
     await fetch('/api/admin/announcement', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: adminHeaders(),
       body: JSON.stringify({ message: msg.trim(), kind, active }),
     });
     qc.invalidateQueries({ queryKey: ['platform-announcement'] });
@@ -11866,7 +11942,23 @@ function AdminAnnouncementControl() {
 }
 
 function AdminOperations() {
-  const overview = useGetAdminOverview({ query: { queryKey: getGetAdminOverviewQueryKey(), retry: false } });
+  const [, nav] = useLocation();
+
+  // Guard: redirect to login if no token in sessionStorage
+  useEffect(() => {
+    if (!getAdminToken()) nav('/admin/login');
+  }, []);
+
+  const overview = useQuery<{ verificationQueue: number; openReports: number; activeBookings: number; checkInsDue: number }>({
+    queryKey: getGetAdminOverviewQueryKey(),
+    queryFn: async () => {
+      const res = await fetch('/api/admin/overview', { headers: adminHeaders() });
+      if (res.status === 401) { nav('/admin/login'); throw new Error('Unauthorized'); }
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    retry: false,
+  });
   const companions = useAdminCompanions();
   const bookings_ = useAdminBookings();
   const data = overview.data;
@@ -12120,7 +12212,7 @@ function useSafeSpotApplications() {
   return useQuery<{ id: string; name: string; address: string; city: string; type: string; contactEmail: string; contactName: string; submittedAt: string; status: string }[]>({
     queryKey: ['admin-safespots-pending'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/safespots/pending');
+      const res = await fetch('/api/admin/safespots/pending', { headers: adminHeaders() });
       if (!res.ok) return [];
       return res.json();
     },
@@ -12137,7 +12229,7 @@ function SafeSpotApplicationsSection() {
   const handle = async (id: string, action: 'approve' | 'reject') => {
     setActing(id);
     try {
-      await fetch(`/api/admin/safespots/${id}/${action}`, { method: 'POST' });
+      await fetch(`/api/admin/safespots/${id}/${action}`, { method: 'POST', headers: adminHeaders() });
       setDecided((d) => ({ ...d, [id]: action === 'approve' ? 'approved' : 'rejected' }));
       qc.invalidateQueries({ queryKey: ['admin-safespots-pending'] });
     } catch {}
@@ -12232,7 +12324,7 @@ function useAdminCompanions() {
   return useQuery<CompanionApplication[]>({
     queryKey: ['admin-companions-pending'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/companions/pending');
+      const res = await fetch('/api/admin/companions/pending', { headers: adminHeaders() });
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
@@ -12244,7 +12336,7 @@ function useAdminBookings() {
   return useQuery<BookingDetail[]>({
     queryKey: ['admin-bookings-recent'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/bookings/recent');
+      const res = await fetch('/api/admin/bookings/recent', { headers: adminHeaders() });
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
@@ -12256,7 +12348,7 @@ function useCompanionDecision() {
   const qc = useQueryClient();
   return useMutation<{ id: string; status: string }, Error, { id: string; action: 'approve' | 'reject' }>({
     mutationFn: async ({ id, action }) => {
-      const res = await fetch(`/api/admin/companions/${id}/${action}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/companions/${id}/${action}`, { method: 'POST', headers: adminHeaders() });
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
