@@ -1,4 +1,4 @@
-CREATE TABLE "bookings" (
+CREATE TABLE IF NOT EXISTS "bookings" (
 	"id" text PRIMARY KEY NOT NULL,
 	"customer_id" text,
 	"companion_id" text NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE "bookings" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "companion_stripe_accounts" (
+CREATE TABLE IF NOT EXISTS "companion_stripe_accounts" (
 	"companion_id" text PRIMARY KEY NOT NULL,
 	"stripe_account_id" text NOT NULL,
 	"onboarding_complete" boolean DEFAULT false NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE "companion_stripe_accounts" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "favor_requests" (
+CREATE TABLE IF NOT EXISTS "favor_requests" (
 	"id" text PRIMARY KEY NOT NULL,
 	"customer_id" text NOT NULL,
 	"companion_id" text NOT NULL,
@@ -48,5 +48,14 @@ CREATE TABLE "favor_requests" (
 	"dress_code" text,
 	"additional_questions" text,
 	"status" text DEFAULT 'pending' NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "messages" (
+	"id" text PRIMARY KEY NOT NULL,
+	"booking_id" text NOT NULL,
+	"sender_id" text NOT NULL,
+	"sender_role" text NOT NULL,
+	"body" text NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
