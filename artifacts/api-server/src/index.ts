@@ -3,6 +3,17 @@ import { getStripeSync } from "./lib/stripeClient";
 import { runAppMigrations } from "@workspace/db/migrate";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { fileURLToPath } from "node:url";
+import { join, dirname } from "node:path";
+
+// Resolve the drizzle migrations folder relative to THIS bundle entry point.
+// esbuild bundles @workspace/db into this file, so import.meta.url here
+// points to artifacts/api-server/dist/index.mjs — three levels up brings us
+// to the workspace root, then we descend into lib/db/drizzle.
+const APP_MIGRATIONS_FOLDER = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../lib/db/drizzle",
+);
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required");
@@ -27,7 +38,7 @@ async function initStripe(): Promise<void> {
   // 1. Apply application schema migrations (bookings, companion_stripe_accounts, favor_requests).
   //    Idempotent — drizzle tracks applied migrations and skips them on re-runs.
   logger.info("Applying application schema migrations...");
-  await runAppMigrations(databaseUrl);
+  await runAppMigrations(databaseUrl, APP_MIGRATIONS_FOLDER);
   logger.info("Application schema ready");
 
   logger.info("Initializing Stripe schema...");

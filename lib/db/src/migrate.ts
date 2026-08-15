@@ -6,24 +6,23 @@
  * a __drizzle_migrations table and skips already-applied ones.
  *
  * Call this at server startup BEFORE the first DB operation.
+ *
+ * IMPORTANT — migrationsFolder must be supplied by the call-site.
+ * When @workspace/db is bundled by esbuild into the api-server, import.meta.url
+ * resolves to the bundle's entry point, NOT this source file.  A hard-coded
+ * relative path would therefore look in the wrong directory at runtime.
+ * Callers must pass the absolute path to lib/db/drizzle/ explicitly.
  */
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
 const { Pool } = pg;
 
-// Resolve the migrations folder relative to this file so it works regardless
-// of the working directory the server is launched from.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-// In the dist build, this file is at dist/migrate.js; migrations are at dist/../drizzle/
-// In source (ts-node / tsx), this file is at src/migrate.ts; migrations are at ../drizzle/
-const migrationsFolder = join(__dirname, "..", "drizzle");
-
-export async function runAppMigrations(databaseUrl: string): Promise<void> {
+export async function runAppMigrations(
+  databaseUrl: string,
+  migrationsFolder: string,
+): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
   try {
     const db = drizzle(pool);
